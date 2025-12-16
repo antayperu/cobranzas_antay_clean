@@ -2,6 +2,7 @@
 
 **Fecha de Inicio**: 2025-12-16
 **Estado General**: 🟢 Completado
+**Repositorio**: [antayperu/cobranzas_antay](https://github.com/antayperu/cobranzas_antay)
 
 ## 🎯 Objetivo
 Construir una aplicación web en Streamlit para consolidar reportes de cobranza, calcular detracciones y generar enlaces de WhatsApp masivos.
@@ -37,7 +38,8 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
 ## 🔄 Contexto para Próxima Sesión
 - **Estado Actual**: 
     - **v1.0**: Terminada y funcional.
-    - **v1.1 (Actual)**: Se implementó lógica de "Saldo Real" (Descuento de detracción pendiente) y Multiselección en WhatsApp. Validado por usuario.
+    - **v1.1**: Se implementó lógica de "Saldo Real" y Multiselección.
+    - **v1.2 (Actual)**: Optimización de Fuente de Datos ("Importe Referencial" directo de ERP) para eliminar manipulación manual de Excel.
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.

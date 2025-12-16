@@ -156,9 +156,13 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         
     # 5. Cálculos Finales en Merged
     
-    # Calculado (S/)
-    if "Calculado (S/)" not in df_merged.columns:
-        df_merged["Calculado (S/)"] = 0.0
+    # Importe Referencial (S/) - antes mondoc
+    # Se asume que mondoc viene del excel CtasxCobrar
+    if 'mondoc' in df_merged.columns:
+        df_merged['Importe Referencial (S/)'] = df_merged['mondoc']
+    else:
+        # Fallback si no existe, aunque debería
+        df_merged['Importe Referencial (S/)'] = 0.0
     
     # Helper detracción
     def calc_detraccion(monto):
@@ -170,17 +174,12 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         except:
             return 0.0
 
-    df_merged['DETRACCIÓN'] = df_merged["Calculado (S/)"].apply(calc_detraccion)
+    df_merged['DETRACCIÓN'] = df_merged["Importe Referencial (S/)"].apply(calc_detraccion)
     
     # Estado Detracción
     def get_estado_dt(row):
         if row['DETRACCIÓN'] == 0:
-            return "No Aplica" # Opcional, o dejar en Pendiente/Pagado logic?
-            # Prompt dice: Si CALCULADO > 700 -> detracción.
-            # Regla Estado: Para cada comprobante... 
-            # Prompt no dice "solo si aplica detracción". 
-            # Pero implícitamente solo importa si hay detracción.
-            # Asumiremos: Si detracción > 0, evaluamos. Si no, "-"
+            return "No Aplica" 
         
         if row['DETRACCIÓN'] <= 0:
             return "-"
@@ -203,7 +202,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     # MONEDA (de codmnd)
     # TIPO CAMBIO (de tipcam)
     # MONT EMIT (de mododo)
-    # CALCULADO (S/)
+    # Importe Referencial (S/) (de mondoc)
     # DETRACCIÓN
     # ESTADO DETRACCION
     # SALDO (de sldacl)
@@ -260,7 +259,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     final_cols = [
         'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 'FECH EMIS', 'FECH VENC',
         'COMPROBANTE', 'MONEDA', 'TIPO CAMBIO', 'MONT EMIT',
-        'Calculado (S/)', 'DETRACCIÓN', 'ESTADO DETRACCION', 'SALDO', 'SALDO REAL'
+        'Importe Referencial (S/)', 'DETRACCIÓN', 'ESTADO DETRACCION', 'SALDO', 'SALDO REAL'
     ]
     
     # Filtrar solo columnas existentes (por seguridad, aunque deberian estar todas)
