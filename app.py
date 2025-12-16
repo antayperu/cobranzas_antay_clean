@@ -131,15 +131,41 @@ if file_ctas and file_cobranza and file_cartera:
             mask = df_filtered.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
             df_filtered = df_filtered[mask]
         
-        # Métricas Resumen
-        m1, m2, m3 = st.columns(3)
+        # --- FILTROS AVANZADOS ("Lo que ves es lo que es") ---
+        with st.expander("🔍 Filtros Avanzados (Saldo Real)", expanded=False):
+            c_fil1, c_fil2 = st.columns(2)
+            with c_fil1:
+                opcion_saldo = st.selectbox(
+                    "Condición Saldo Real", 
+                    ["Todos", "Mayor que", "Mayor o igual que", "Menor que", "Menor o igual que", "Igual a"],
+                    index=1 # Default: Mayor que
+                )
+            with c_fil2:
+                monto_ref = st.number_input("Monto Referencia", value=0.0, step=10.0)
+            
+            # Aplicar filtro
+            if opcion_saldo == "Mayor que":
+                df_filtered = df_filtered[df_filtered['SALDO REAL'] > monto_ref]
+            elif opcion_saldo == "Mayor o igual que":
+                df_filtered = df_filtered[df_filtered['SALDO REAL'] >= monto_ref]
+            elif opcion_saldo == "Menor que":
+                df_filtered = df_filtered[df_filtered['SALDO REAL'] < monto_ref]
+            elif opcion_saldo == "Menor o igual que":
+                df_filtered = df_filtered[df_filtered['SALDO REAL'] <= monto_ref]
+            elif opcion_saldo == "Igual a":
+                df_filtered = df_filtered[df_filtered['SALDO REAL'] == monto_ref]
+        
+        # Métricas Resumen (KPIs Actualizados)
+        m1, m2, m3, m4 = st.columns(4)
         total_saldo = df_filtered['SALDO'].sum()
         total_detra = df_filtered['DETRACCIÓN'].sum()
+        total_real = df_filtered['SALDO REAL'].sum()
         count_docs = len(df_filtered)
         
-        m1.markdown(f'<div class="metric-card"><h4>Total Saldo</h4><h3>S/ {total_saldo:,.2f}</h3></div>', unsafe_allow_html=True)
-        m2.markdown(f'<div class="metric-card"><h4>Total Detracción</h4><h3>S/ {total_detra:,.2f}</h3></div>', unsafe_allow_html=True)
-        m3.markdown(f'<div class="metric-card"><h4>Documentos</h4><h3>{count_docs}</h3></div>', unsafe_allow_html=True)
+        m1.metric("Total Saldo", f"S/ {total_saldo:,.2f}")
+        m2.metric("Total Detracción", f"S/ {total_detra:,.2f}")
+        m3.metric("Total Saldo Real", f"S/ {total_real:,.2f}")
+        m4.metric("Documentos", f"{count_docs}")
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.dataframe(df_filtered, use_container_width=True)
@@ -159,63 +185,59 @@ if file_ctas and file_cobranza and file_cartera:
         st.subheader("4. Notificaciones WhatsApp 📨")
 
         # 1. Selector de Clientes
-        st.markdown("##### 👥 Selección de Clientes")
-        
         if not df_filtered.empty:
-            # Agrupar datos por cliente para la lista de selección
-            # Calculamos el Total Saldo Real por cliente
-            client_group = df_filtered.groupby(['COD CLIENTE', 'EMPRESA', 'TELÉFONO'])['SALDO REAL'].sum().reset_index()
-            # Filtrar solo clientes con deuda positiva (opcional, pero lógico para cobrar)
-            client_group = client_group[client_group['SALDO REAL'] > 0]
+            c1, c2 = st.columns([1, 1])
             
-            # Crear lista de opciones formateada
-            # Opción: "EMPRESA (S/ X,XXX.XX)"
-            
-            client_options = []
-            client_map = {}
-            for idx, row in client_group.iterrows():
-                label = f"{row['EMPRESA']} (Deuda: S/ {row['SALDO REAL']:,.2f})"
-                client_options.append(label)
-                client_map[label] = row['COD CLIENTE']
-            
-            # Checkbox para seleccionar todos
-            col_sel1, col_sel2 = st.columns([3, 1])
-            selected_labels = col_sel1.multiselect(
-                "Seleccione Clientes a Notificar:",
-                options=client_options,
-                default=[] # Por defecto ninguno seleccionado para evitar spam accidental
-            )
-            
-            if col_sel2.button("Seleccionar Todos"):
-                selected_labels = client_options
-            
-            # 2. Configurar Mensaje (Visible si hay seleccionados)
-            if selected_labels:
-                st.markdown("---")
-                c1, c2 = st.columns([1, 1])
-                
-                with c1:
-                    st.markdown("##### 📝 Configurar Plantilla")
-                    default_template = (
-                        "Hola *{EMPRESA}*,\n\n"
-                        "Le saludamos de DACTA SAC. Le recordamos que tiene documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"
-                        "Detalle:\n{DETALLE_DOCS}\n\n"
-                        "Favor de gestionar el pago a la brevedad.\n\n"
-                        "_Este número es solo para notificaciones. Para comunicarse favor llamar al +51 998 080 797 - Nayda Camacho Quinteros_"
-                    )
-                    template = st.text_area("Plantilla del Mensaje", value=default_template, height=350)
-                    st.caption("Variables: `{EMPRESA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
+            with c1:
+                st.markdown("##### 📝 Configurar Plantilla")
+                default_template = (
+                    "Hola *{EMPRESA}*,\n\n"
+                    "Le saludamos de DACTA SAC. Le recordamos que tiene documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"
+                    "Detalle:\n{DETALLE_DOCS}\n\n"
+                    "Favor de gestionar el pago a la brevedad.\n\n"
+                    "_Este número es solo para notificaciones. Para comunicarse favor llamar al +51 998 080 797 - Nayda Camacho Quinteros_"
+                )
+                template = st.text_area("Plantilla del Mensaje", value=default_template, height=350)
+                st.caption("Variables: `{EMPRESA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
 
-                with c2:
-                    st.markdown("##### 🚀 Enviar Mensajes")
-                    st.info(f"Se generarán enlaces para **{len(selected_labels)}** clientes seleccionados.")
-                    
+            with c2:
+                st.markdown("##### 🚀 Enviar Mensajes")
+                
+                # Selección de Clientes (Basado en lo filtrado)
+                # Agrupar datos por cliente para la lista de selección
+                client_group = df_filtered.groupby(['COD CLIENTE', 'EMPRESA', 'TELÉFONO'])['SALDO REAL'].sum().reset_index()
+                # Filtrar solo clientes con deuda positiva (opcional, pero lógico para cobrar)
+                client_group = client_group[client_group['SALDO REAL'] > 0]
+
+                # Crear lista de opciones formateada
+                client_options = []
+                client_map = {}
+                for idx, row in client_group.iterrows():
+                    label = f"{row['EMPRESA']} (Deuda: S/ {row['SALDO REAL']:,.2f})"
+                    client_options.append(label)
+                    client_map[label] = row['COD CLIENTE']
+                
+                # Checkbox para seleccionar todos
+                col_sel1, col_sel2 = st.columns([3, 1])
+                selected_labels = col_sel1.multiselect(
+                    "Seleccione Clientes a Notificar:",
+                    options=client_options,
+                    default=[] # Por defecto ninguno seleccionado para evitar spam accidental
+                )
+                
+                if col_sel2.button("Seleccionar Todos"):
+                    selected_labels = client_options
+
+                st.info(f"Se generarán enlaces para **{len(selected_labels)}** clientes seleccionados.")
+                
+                # BOTON PROCESAR
+                if st.button("🔄 Procesar y Generar Mensajes", type="primary"):
                     # Generar lista de mensajes
                     msgs_output = []
                     
                     for label in selected_labels:
                         cod_cli = client_map[label]
-                        # Filtrar documentos de este cliente
+                        # Filtrar documentos de este cliente (Usando df_filtered para respetar el filtro global)
                         docs_cli = df_filtered[df_filtered['COD CLIENTE'] == cod_cli]
                         
                         if docs_cli.empty: continue
@@ -310,17 +332,17 @@ if file_ctas and file_cobranza and file_cartera:
                             "Mensaje": msg
                         })
                     
-                    # Mostrar links generados
-                    for item in msgs_output:
-                        with st.expander(f"📨 {item['Cliente']}"):
-                            st.text(item['Mensaje'])
-                            if item['Link']:
-                                st.markdown(f'<a href="{item["Link"]}" target="_blank" style="background-color:#25D366;color:white;padding:10px;text-decoration:none;border-radius:5px;">📲 Enviar WhatsApp</a>', unsafe_allow_html=True)
-                            else:
-                                st.error("Sin número de teléfono válido.")
-            else:
-                st.warning("Seleccione al menos un cliente para generar mensajes.")
-                
+                    # Mostrar resultados si hay
+                    if msgs_output:
+                        for item in msgs_output:
+                            with st.expander(f"📨 {item['Cliente']}", expanded=True):
+                                st.text_area("Mensaje Generado", value=item['Mensaje'], height=250, key=f"txt_{item['Cliente']}")
+                                if item['Link']:
+                                    st.markdown(f'<a href="{item["Link"]}" target="_blank" style="background-color:#25D366;color:white;padding:10px;text-decoration:none;border-radius:5px;">📲 Enviar WhatsApp</a>', unsafe_allow_html=True)
+                                else:
+                                    st.warning("Número de teléfono no válido o faltante.")
+                    else:
+                        st.warning("No se generaron mensajes (revise la selección o filtros).")
         else:
              st.info("No hay datos para mostrar notificaciones.")
     else:
