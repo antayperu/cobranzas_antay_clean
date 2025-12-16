@@ -134,23 +134,49 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         # Asegurar formato de clave en Cobranza
         df_dt['numsun_key'] = df_dt['numsun'].astype(str).str.strip()
         
-        # Crear texto formateado
-        # Código de banco: {codbco} | Banco: {nombco} | Fecha de pago: {fecpro} | Doc: {mondoc} | Pag: {monpag}
+        # Crear texto formateado detallado con saltos de línea (para Excel con ajuste de texto)
+        # Campos: codbco, nombco, fecpro, mondoc, monpag, forpag, nudopa
         def format_dt_info(row):
             fec = pd.to_datetime(row.get('fecpro', '')).strftime('%d/%m/%Y') if pd.notna(row.get('fecpro')) else ''
-            return (f"Código de banco: {row.get('codbco', '')} | "
-                    f"Banco: {row.get('nombco', '')} | "
-                    f"Fecha de pago: {fec} | "
-                    f"Doc: {row.get('mondoc', '')} | "
-                    f"Pag: {row.get('monpag', '')}")
+            
+            # Formatear montos con coma y 2 decimales para el texto (ojo: esto es texto para leer, no numero para sumar)
+            try:
+                m_doc = f"{float(row.get('mondoc', 0)):,.2f}"
+                m_pag = f"{float(row.get('monpag', 0)):,.2f}"
+            except:
+                m_doc = str(row.get('mondoc', ''))
+                m_pag = str(row.get('monpag', ''))
+
+            return (f"Banco: {row.get('nombco', '')} ({row.get('codbco', '')})\n"
+                    f"Fecha: {fec}\n"
+                    f"Doc: {m_doc}\n"
+                    f"Pag: {m_pag}\n"
+                    f"Forma: {row.get('forpag', '')}\n"
+                    f"Oper: {row.get('nudopa', '')}")
 
         df_dt['info_dt'] = df_dt.apply(format_dt_info, axis=1)
         
         # Deduplicar por numsun (tomar el más reciente si hay varios? O concatenar?)
         # Asumiremos uno por documento para simplificar, o el último.
-        dt_lookup = df_dt.groupby('numsun_key')['info_dt'].first()
+        dt_lookup = df_dt.groupby('numsun_key')['info_dt'].apply(lambda x: "\n---\n".join(x))
     else:
         dt_lookup = pd.Series(dtype='object')
+
+    # --- NUEVA LÓGICA: AMORTIZACIONES (todo lo que NO sea DT) ---
+    if not df_cobranza.empty:
+        # Filtrar NO DT y NO DET
+        df_amort = df_cobranza[~df_cobranza['forpag'].isin(['DT', 'DET'])].copy()
+    else:
+        df_amort = pd.DataFrame()
+        
+    if not df_amort.empty and 'numsun' in df_amort.columns:
+        df_amort['numsun_key'] = df_amort['numsun'].astype(str).str.strip()
+        # Usar la misma función de formato
+        df_amort['info_amort'] = df_amort.apply(format_dt_info, axis=1)
+        # Agrupar concatenando (puede haber varios pagos parciales)
+        amort_lookup = df_amort.groupby('numsun_key')['info_amort'].apply(lambda x: "\n---\n".join(x))
+    else:
+        amort_lookup = pd.Series(dtype='object')
         
     # 5. Cálculos Finales en Merged
     
@@ -189,6 +215,16 @@ def process_data(df_ctas, df_cartera, df_cobranza):
             return "Pendiente"
 
     df_merged['ESTADO DETRACCION'] = df_merged.apply(get_estado_dt, axis=1)
+
+    # Columna AMORTIZACIONES
+    def get_amortizaciones(row):
+        comprobante = row['COMPROBANTE']
+        # Buscar en amort_lookup
+        if comprobante in amort_lookup.index:
+            return amort_lookup[comprobante]
+        return "-" # O vacío
+    
+    df_merged['AMORTIZACIONES'] = df_merged.apply(get_amortizaciones, axis=1)
 
     # 6. Selección y Ordenamiento de Columnas Finales
     # COD CLIENTE (6 dígitos, texto)
@@ -257,7 +293,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     final_cols = [
         'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 'FECH EMIS', 'FECH VENC',
         'COMPROBANTE', 'MONEDA', 'TIPO CAMBIO', 'MONT EMIT',
-        'Importe Referencial (S/)', 'DETRACCIÓN', 'ESTADO DETRACCION', 'SALDO', 'SALDO REAL'
+        'Importe Referencial (S/)', 'DETRACCIÓN', 'ESTADO DETRACCION', 'AMORTIZACIONES', 'SALDO', 'SALDO REAL'
     ]
     
     # Filtrar solo columnas existentes (por seguridad, aunque deberian estar todas)

@@ -26,8 +26,8 @@ def generate_excel(df: pd.DataFrame) -> bytes:
     estado_dt_fill_pendiente = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid") # Rojo suave
     estado_dt_fill_pagado = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid") # Verde suave
 
-    # Escribir encabezados
-    headers = list(df.columns)
+    # Escribir encabezados en MAYÚSCULAS
+    headers = [str(h).upper() for h in df.columns]
     ws.append(headers)
     
     # Formato encabezados
@@ -47,7 +47,7 @@ def generate_excel(df: pd.DataFrame) -> bytes:
         for c_idx, value in enumerate(row, 1):
             cell = ws.cell(row=r_idx, column=c_idx, value=value)
             
-            # Columnas clave
+            # Columnas clave (Upper para coincidir con headers)
             col_name = headers[c_idx - 1]
             
             # Formato de Fechas
@@ -55,8 +55,17 @@ def generate_excel(df: pd.DataFrame) -> bytes:
                 cell.number_format = 'DD/MM/YYYY'
                 
             # Formato de Moneda y Números
-            if col_name in ["MONT EMIT", "Calculado (S/)", "DETRACCIÓN", "SALDO"]:
+            # Incluir nuevas columnas: SALDO REAL, IMPORTE REFERENCIAL (S/)
+            monetary_cols = [
+                "MONT EMIT", "CALCULADO (S/)", "DETRACCIÓN", "SALDO", 
+                "SALDO REAL", "IMPORTE REFERENCIAL (S/)"
+            ]
+            if col_name in monetary_cols:
                 cell.number_format = '#,##0.00'
+            
+            # Ajuste de Texto para columnas con saltos de línea
+            if col_name in ["ESTADO DETRACCION", "AMORTIZACIONES"]:
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
             
             # Resaltar Columnas Detracción
             if col_name == "DETRACCIÓN":
