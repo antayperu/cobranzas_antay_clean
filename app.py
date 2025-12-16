@@ -242,9 +242,12 @@ if file_ctas and file_cobranza and file_cartera:
                         # Total original (referencial)
                         total_orig_val = docs_cli['SALDO'].sum() 
 
-                        # --- DETALLE DE DOCUMENTOS ---
-                        # Formato deseado:
-                        # Emisión | Venc | Comp | Monto | Detrac (Estado) | Saldo Real
+                        # --- DETALLE DE DOCUMENTOS (UX MEJORADA - TIPO TARJETA) ---
+                        # Propuesta Diseño:
+                        # 📄 *F201-00003200*
+                        # 📅 Venc: 13/11/25   💰 *S/ -0.36*
+                        # ℹ️ Imp: S/ 2,478.00 | Detr: S/ 297.36 (Pendiente)
+                        # ────────────────
                         docs_lines = []
                         for _, doc in docs_cli.iterrows():
                             saldo_doc_real = doc['SALDO REAL']
@@ -253,7 +256,7 @@ if file_ctas and file_cobranza and file_cartera:
                             
                             # Preparar valores
                             comprobante = doc['COMPROBANTE']
-                            emis = pd.to_datetime(doc['FECH EMIS']).strftime('%d/%m/%Y')
+                            # emis = pd.to_datetime(doc['FECH EMIS']).strftime('%d/%m/%y') # Opcional si carga mucho
                             venc = pd.to_datetime(doc['FECH VENC']).strftime('%d/%m/%Y')
                             
                             # Moneda Símbolo
@@ -267,32 +270,25 @@ if file_ctas and file_cobranza and file_cartera:
                             det_val = doc['DETRACCIÓN']
                             det_estado = doc['ESTADO DETRACCION']
                             
-                            # Lógica Estado Detracción
                             if det_estado == "Pendiente":
-                                estado_str = "Pendiente"
+                                estado_str = "Pend"
                             elif det_estado in ["-", "No Aplica"]:
                                 estado_str = "-"
                             else:
-                                estado_str = "Aplicado" # Cualquier otra cosa es que ya se pagó o aplicó logicamente
+                                estado_str = "Aplic" 
                             
+                            det_info = ""
                             if det_val > 0:
-                                det_txt = f"Det: S/{det_val:,.2f} ({estado_str})"
-                            else:
-                                det_txt = ""
+                                det_info = f" | Detr: S/{det_val:,.2f} ({estado_str})"
                             
-                            # Construir línea
-                            # Emis: {emis} | Venc: {venc} | {comprobante} | Imp: {monto_emit} | {det_txt} | Saldo: {saldo_fmt}
-                            components = [
-                                f"• {comprobante}",
-                                f"Emis: {emis}",
-                                f"Venc: {venc}",
-                                f"Imp: {monto_emit}",
-                                f"{det_txt}",
-                                f"Saldo: *{saldo_fmt}*"
-                            ]
-                            # Filtrar vacios 
-                            line = " | ".join([c for c in components if c])
-                            docs_lines.append(line)
+                            # Construir Bloque
+                            block = (
+                                f"📄 *{comprobante}*\n"
+                                f"📅 Venc: {venc}   💰 *{saldo_fmt}*\n"
+                                f"ℹ️ Imp: {monto_emit}{det_info}\n"
+                                "────────────────"
+                            )
+                            docs_lines.append(block)
                         
                         txt_detalle = "\n".join(docs_lines)
                         

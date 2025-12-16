@@ -43,7 +43,8 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     - **v1.3**: Automatización de "Documento Referencia".
     - **v1.4**: Mejoras de diseño y columna Amortizaciones.
     - **v1.5**: Módulo WhatsApp actualizado (Marca "DACTA SAC", Totales Multimoneda).
-    - **v1.6 (Actual)**: Mensaje WhatsApp Detallado (Listado de todos los documentos, estado de detracción explícito y nota de pie de página).
+    - **v1.6**: Mensaje WhatsApp Detallado (Listado completo y pie de página).
+    - **v1.7 (Actual)**: UX WhatsApp Rediseñado (Estilo "Tarjeta" con iconos y mejor legibilidad en móviles).
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.
