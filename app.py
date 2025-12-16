@@ -198,7 +198,7 @@ if file_ctas and file_cobranza and file_cartera:
                     st.markdown("##### 📝 Configurar Plantilla")
                     default_template = (
                         "Hola *{EMPRESA}*,\n\n"
-                        "Le saludamos de Antay Perú. Le recordamos que tiene documentos pendientes por un *Saldo Real de {TOTAL_SALDO_REAL}*.\n\n"
+                        "Le saludamos de DACTA SAC. Le recordamos que tiene documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"
                         "Detalle:\n{DETALLE_DOCS}\n\n"
                         "Favor de gestionar el pago a la brevedad."
                     )
@@ -217,20 +217,78 @@ if file_ctas and file_cobranza and file_cartera:
                         # Filtrar documentos de este cliente
                         docs_cli = df_filtered[df_filtered['COD CLIENTE'] == cod_cli]
                         
+                        if docs_cli.empty: continue
+
                         # Datos del cliente (tomar del primer registro del grupo)
                         empresa = docs_cli['EMPRESA'].iloc[0]
                         telefono = docs_cli['TELÉFONO'].iloc[0]
                         
-                        total_real = docs_cli['SALDO REAL'].sum()
-                        total_orig = docs_cli['SALDO'].sum()
+                        # --- CÁLCULO DE TOTALES POR MONEDA ---
+                        # Agrupar saldos reales por moneda
+                        # Asumimos que la columna MONEDA tiene valores tipo 'SOL', 'US$', etc.
+                        sums_by_currency = docs_cli.groupby('MONEDA')['SALDO REAL'].sum()
                         
-                        # Detalle de documentos
+                        total_parts = []
+                        for curr, amount in sums_by_currency.items():
+                            if amount > 0:
+                                symbol = "S/" if str(curr).upper().startswith("S") else "$"
+                                total_parts.append(f"{symbol} {amount:,.2f}")
+                                
+                        if total_parts:
+                            total_real_str = " y ".join(total_parts)
+                        else:
+                            total_real_str = "0.00"
+                            
+                        # Total original (referencial)
+                        total_orig_val = docs_cli['SALDO'].sum() 
+                        # Nota: Sumar saldo original mezclando monedas no es correcto semanticamente, 
+                        # pero por simplicidad de la variable legacy se deja o se ajusta igual.
+                        # Para este caso, solo usaremos el Real que es el importante.
+
+                        # --- DETALLE DE DOCUMENTOS ---
+                        # Formato deseado:
+                        # • [COMPROBANTE] | Venc: [FECHA] | Importe: [MON][MONTO] | Detrac: S/[VAL] ([ESTADO]) | Saldo: [MON][SALDO_REAL]
                         docs_lines = []
                         for _, doc in docs_cli.iterrows():
-                            # Mostrar detalle: Doc - Venc - Saldo Real
                             saldo_doc_real = doc['SALDO REAL']
+                            
+                            # Solo listar si hay deuda o si es relevante
                             if saldo_doc_real > 0:
-                                line = f"• {doc['COMPROBANTE']} (Vence: {doc['FECH VENC']} | Saldo Real: {saldo_doc_real:,.2f})"
+                                # Preparar valores
+                                comprobante = doc['COMPROBANTE']
+                                venc = pd.to_datetime(doc['FECH VENC']).strftime('%d/%m/%Y')
+                                
+                                # Moneda Símbolo
+                                mon_code = str(doc['MONEDA'])
+                                mon_sym = "S/" if mon_code.upper().startswith("S") else "$"
+                                
+                                importe = f"{mon_sym}{doc['MONT EMIT']:,.2f}"
+                                saldo_fmt = f"{mon_sym}{saldo_doc_real:,.2f}"
+                                
+                                # Detracción info
+                                det_val = doc['DETRACCIÓN']
+                                det_estado = doc['ESTADO DETRACCION']
+                                
+                                # Formatear estado corto para que entre en linea
+                                estado_corto = "Pend" if det_estado == "Pendiente" else "Pag"
+                                if det_estado in ["-", "No Aplica"]: estado_corto = "-"
+                                
+                                if det_val > 0:
+                                    det_str = f"Det: S/{det_val:,.2f} ({estado_corto})"
+                                else:
+                                    det_str = ""
+                                
+                                # Construir línea
+                                # Usar pipes | para separar como columnas
+                                components = [
+                                    f"• {comprobante}",
+                                    f"Venc: {venc}",
+                                    f"Imp: {importe}",
+                                    f"{det_str}",
+                                    f"Saldo: *{saldo_fmt}*"
+                                ]
+                                # Filtrar vacios (ej. sin detraccion)
+                                line = " | ".join([c for c in components if c])
                                 docs_lines.append(line)
                         
                         txt_detalle = "\n".join(docs_lines)
@@ -238,8 +296,8 @@ if file_ctas and file_cobranza and file_cartera:
                         # Reemplazo variables
                         msg = template.replace("{EMPRESA}", str(empresa))
                         msg = msg.replace("{DETALLE_DOCS}", txt_detalle)
-                        msg = msg.replace("{TOTAL_SALDO_REAL}", f"S/ {total_real:,.2f}")
-                        msg = msg.replace("{TOTAL_SALDO_ORIGINAL}", f"S/ {total_orig:,.2f}")
+                        msg = msg.replace("{TOTAL_SALDO_REAL}", total_real_str)
+                        msg = msg.replace("{TOTAL_SALDO_ORIGINAL}", f"{total_orig_val:,.2f}") # Referencial
                         
                         # Link
                         link_wa = None
