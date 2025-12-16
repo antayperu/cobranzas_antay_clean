@@ -79,23 +79,36 @@ file_ctas = col1.file_uploader("CtasxCobrar.xlsx", type=["xlsx"])
 file_cobranza = col2.file_uploader("Cobranza.xlsx", type=["xlsx"])
 file_cartera = col3.file_uploader("cartera_clientes.xlsx", type=["xlsx"])
 
-if file_ctas and file_cobranza and file_cartera:
-    # Cargar y Procesar
-    with st.spinner("Procesando archivos..."):
-        df_ctas_raw, df_cartera_raw, df_cobranza_raw, error = load_data(file_ctas, file_cartera, file_cobranza)
-        
-        if error:
-            st.error(f"Error al cargar archivos: {error}")
-            st.stop()
-            
-        try:
-            df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
-            st.success("✅ Procesamiento completado exitosamente.")
-        except Exception as e:
-            st.error(f"Error en lógica de negocio: {str(e)}")
-            st.stop()
+# Inicializar Estado de Sesión
+if 'data_ready' not in st.session_state:
+    st.session_state['data_ready'] = False
+if 'df_final' not in st.session_state:
+    st.session_state['df_final'] = pd.DataFrame()
 
-    # --- PASO 2: VISUALIZACIÓN Y FILTROS ---
+# Botón Global de Procesamiento
+if file_ctas and file_cobranza and file_cartera:
+    if st.button("🚀 Procesar Archivos", type="primary"):
+        with st.spinner("Procesando y consolidando información..."):
+            df_ctas_raw, df_cartera_raw, df_cobranza_raw, error = load_data(file_ctas, file_cartera, file_cobranza)
+            
+            if error:
+                st.error(f"Error al cargar archivos: {error}")
+                st.session_state['data_ready'] = False
+            else:
+                try:
+                    df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
+                    st.session_state['df_final'] = df_final
+                    st.session_state['data_ready'] = True
+                    st.success("✅ Procesamiento completado exitosamente.")
+                except Exception as e:
+                    st.error(f"Error en lógica de negocio: {str(e)}")
+                    st.session_state['data_ready'] = False
+
+# --- PASO 2: VISUALIZACIÓN Y FILTROS ---
+if st.session_state['data_ready']:
+    df_final = st.session_state['df_final']
+    
+    st.markdown("---")
     st.subheader("2. Reporte General 📋")
     
     # Filtros
@@ -168,7 +181,12 @@ if file_ctas and file_cobranza and file_cartera:
         m4.metric("Documentos", f"{count_docs}")
         
         st.markdown("<br>", unsafe_allow_html=True)
-        st.dataframe(df_filtered, use_container_width=True)
+        
+        # --- FIX INDICE DINAMICO (Empieza en 1) ---
+        df_display = df_filtered.copy()
+        df_display.reset_index(drop=True, inplace=True)
+        df_display.index = df_display.index + 1
+        st.dataframe(df_display, use_container_width=True)
         
         # --- PASO 3: EXPORTAR ---
         st.subheader("3. Exportar Reporte 📥")
@@ -346,7 +364,6 @@ if file_ctas and file_cobranza and file_cartera:
         else:
              st.info("No hay datos para mostrar notificaciones.")
     else:
-        st.info("Sube los archivos para ver el reporte.")
-
+         st.info("Sube los archivos para ver el reporte.")
 else:
     st.info("👆 Por favor sube los 3 archivos Excel para comenzar.")

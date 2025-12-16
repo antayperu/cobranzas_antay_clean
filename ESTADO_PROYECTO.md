@@ -46,7 +46,8 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     - **v1.6**: Mensaje WhatsApp Detallado (Listado completo y pie de página).
     - **v1.7**: UX WhatsApp Rediseñado (Estilo "Tarjeta" con iconos).
     - **v1.8**: Ajuste Fino de UX (Orden específico de campos).
-    - **v2.0 (Actual)**: Lógica Flexible y Rendimiento (Filtros de Saldo, Totales Estrictos según vista, Botón Procesar).
+    - **v2.0**: Lógica Flexible (Filtros, Totales Estrictos).
+    - **v2.1 (Actual)**: Rendimiento y UI (Procesamiento Manual con Memoria, Corrección de Índice de Tabla).
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.
