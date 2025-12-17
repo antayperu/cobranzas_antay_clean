@@ -55,23 +55,16 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     - **v3.4**: Refinamiento Lógico de Datos (Filtro 'PAV' y Match Key robusto para Detracciones).
     - **v3.5**: Mejoras Finales (Columna 'TIPO PEDIDO' y nombre de archivo personalizado).
     - **v4.0 (Experto)**: Tablero de Gerencia (Semaforización de Deuda, Antigüedad, Moneda Integrada y Orden Lógico).
+    - **v4.1 (Polish UI/UX & Mobile)**: 
+        - Refactorización Visual (Eliminación de emojis, diseño corporativo serio).
+        - **Sidebar Profesional**: Logo y carga compacta.
+        - **Configuración Persistente**: Ajustes de color, toggles de funcionalidad y templates.
+        - **Email Premium**: Vista previa individual y **Responsividad Móvil (Cartas)**.
+        - Corrección de bugs (Iconos fantasma, validación de encabezados).
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.
 - **Pendientes Futuros**:
 
-- [x] **Módulo de Notificaciones Email (Premium)**
-    - Soporte para envío masivo SMTP (Gmail/Outlook).
-    - Plantillas HTML con diseño corporativo (Branding DACTA).
-    - Incrustación de logo (CID) para evitar bloqueos.
-    - Manejo de errores de autenticación (Error 535).
-- [x] **Sistema de Configuración Global (White-label)**
-    - Persistencia de configuración (`config.json`).
-    - Personalización de Identidad (Nombre, RUC, Teléfono, Logo).
-    - Personalización Visual (Colores Primario/Secundario).
-    - Edición de Plantillas de Correo (Intro/Footer).
-    - Panel de administración integrado en la App.
-
-### 🕒 Pendientes (To-Do)
 - [ ] Validación masiva de correos (rebotados).
 - [ ] Dashboards de métricas de envío.

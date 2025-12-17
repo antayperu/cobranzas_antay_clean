@@ -19,6 +19,11 @@ DEFAULT_SETTINGS = {
         "port": "587",
         "user": "",
         "password": ""
+    },
+    "text_color": "#262730",
+    "features": {
+        "show_analysis": False,
+        "show_sales": False
     }
 }
 

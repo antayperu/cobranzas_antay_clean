@@ -75,13 +75,34 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
 
         table_rows += f"""
         <tr>
-            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{row.get('COMPROBANTE', '')}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{f_emis}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{f_venc}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">{moneda}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right;">{m_total}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right; color: {COLOR_PRIMARY}; font-weight: bold;">{m_saldo}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right; {style_det} font-size: 0.9em;">{m_detr}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd;">
+                <span class="mobile-label">Documento:</span>
+                {row.get('COMPROBANTE', '')}
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd;">
+                <span class="mobile-label">Emisión:</span>
+                {f_emis}
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd;">
+                <span class="mobile-label">Vencimiento:</span>
+                {f_venc}
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">
+                <span class="mobile-label">Moneda:</span>
+                {moneda}
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right;">
+                <span class="mobile-label">Importe:</span>
+                {m_total}
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right; color: {COLOR_PRIMARY}; font-weight: bold;">
+                <span class="mobile-label">Saldo:</span>
+                {m_saldo}
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right; {style_det} font-size: 0.9em;">
+                <span class="mobile-label">Detracción:</span>
+                {m_detr}
+            </td>
         </tr>
         """
 
@@ -107,6 +128,67 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         .footer {{ background-color: #333; color: #ccc; padding: 20px; text-align: center; font-size: 12px; line-height: 1.5; }}
         .btn {{ display: inline-block; background-color: {COLOR_SECONDARY}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px; }}
         .header-msg {{ text-align:center; font-weight:bold; color:{COLOR_PRIMARY}; margin-bottom:20px; }}
+        
+        /* Default: Hide mobile labels on desktop */
+        .mobile-label {{ display: none; }}
+
+        /* Mobile Responsiveness: Stacked Cards */
+        @media only screen and (max-width: 600px) {{
+            /* Block layout for structural elements */
+            table, thead, tbody, th, td, tr {{ 
+                display: block; 
+                width: 100% !important; /* Force full width */
+                box-sizing: border-box;
+            }}
+            
+            /* Hide Desktop Headers - Aggressive approach for email clients */
+            thead, thead tr, th {{ 
+                display: none !important;
+                width: 0 !important;
+                height: 0 !important;
+                opacity: 0 !important;
+                overflow: hidden !important;
+                visibility: hidden !important;
+                mso-hide: all !important; /* Outlook specific */
+            }}
+            
+            /* Card Style for Rows */
+            tr {{ 
+                border: 1px solid #e0e0e0; 
+                margin-bottom: 15px; 
+                border-radius: 8px; 
+                background-color: #ffffff;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+                overflow: hidden;
+            }}
+            
+            /* Stacked Cells */
+            td {{ 
+                border: none;
+                border-bottom: 1px solid #f0f0f0; 
+                position: relative;
+                padding: 12px 15px !important; 
+                text-align: right !important; /* Values align right */
+                white-space: normal;
+                display: block; /* Ensure clean block model */
+                min-height: 25px; /* Visual height stability */
+            }}
+            
+            td:last-child {{
+                border-bottom: none;
+            }}
+            
+            /* Reveal Mobile Labels */
+            .mobile-label {{ 
+                display: inline-block;
+                float: left;
+                width: 40%;
+                font-weight: bold;
+                text-align: left;
+                color: {COLOR_SECONDARY};
+                white-space: nowrap;
+            }}
+        }}
     </style>
     </head>
     <body>
@@ -133,7 +215,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                 <div class="table-container">
                     <table>
                         <thead>
-                            <tr>
+                            <tr class="header-row">
                                 <th>Documento</th>
                                 <th>Emisión</th>
                                 <th>Vencimiento</th>

@@ -13,8 +13,8 @@ import utils.settings_manager as sm
 CONFIG = sm.load_settings()
 
 st.set_page_config(
-    page_title=f"Reporte de Cobranzas - {CONFIG['company_name']}",
-    page_icon="📊",
+    page_title=f"{CONFIG['company_name']} | Gestión de Cobranzas",
+    page_icon="🏢",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -28,14 +28,14 @@ custom_css = f"""
         padding: 1.5rem;
         border-radius: 10px;
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1rem;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }}
     .stApp {{
         --primary-color: {CONFIG['primary_color']};
     }}
-    h1, h2, h3 {{
-        color: {CONFIG['primary_color']} !important;
+    h1, h2, h3, h4, h5, h6 {{
+        color: {CONFIG.get('text_color', '#262730')} !important;
     }}
     .stButton>button {{
         background-color: {CONFIG['primary_color']};
@@ -56,66 +56,65 @@ custom_css = f"""
         border-left: 5px solid {CONFIG['primary_color']};
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }}
+    /* Compact Sidebar Helpers */
+    .sidebar-logo {{
+        text-align: center;
+        margin-bottom: 20px;
+    }}
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
 # Encabezado
-st.markdown('<div class="main-header"><h1>📊 Reporte de Cobranzas y WhatsApp</h1></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>Gestión Centralizada de Cobranzas</h1></div>', unsafe_allow_html=True)
 
-# Sidebar - Instrucciones
-st.sidebar.title("📖 Cómo usar")
-st.sidebar.info("""
-1. **Sube los archivos**:
-    - `CtasxCobrar.xlsx`
-    - `Cobranza.xlsx`
-    - `cartera_clientes.xlsx`
-2. **Revisa la Tabla**:
-    - Usa los filtros en la parte superior.
-    - Verifica el cálculo de detracción.
-3. **Exporta**:
-    - Descarga el Excel consolidado.
-4. **WhatsApp**:
-    - Ve a la sección inferior.
-    - Personaliza el mensaje.
-    - Genera enlaces de cobro.
-""")
+# Sidebar - Logo y Carga
+with st.sidebar:
+    # Logo
+    import os
+    logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
+    if os.path.exists(logo_path):
+        st.image(logo_path, use_container_width=True)
+    else:
+        st.markdown(f"## {CONFIG['company_name']}")
 
-st.sidebar.markdown("---")
-st.sidebar.caption("Desarrollado para **Antay Perú**")
+    st.markdown("---")
+    
+    # Uploaders en Expander para limpieza visual
+    st.subheader("📂 Cargar Datos")
+    
+    file_ctas = st.file_uploader("CtasxCobrar.xlsx", type=["xlsx"])
+    file_cobranza = st.file_uploader("Cobranza.xlsx", type=["xlsx"])
+    file_cartera = st.file_uploader("cartera_clientes.xlsx", type=["xlsx"])
+    
+    st.markdown("---")
 
-# --- PASO 1: CARGA DE ARCHIVOS ---
-st.subheader("1. Carga de Archivos 📂")
-col1, col2, col3 = st.columns(3)
+    # Inicializar Estado de Sesión
+    if 'data_ready' not in st.session_state:
+        st.session_state['data_ready'] = False
+    if 'df_final' not in st.session_state:
+        st.session_state['df_final'] = pd.DataFrame()
 
-file_ctas = col1.file_uploader("CtasxCobrar.xlsx", type=["xlsx"])
-file_cobranza = col2.file_uploader("Cobranza.xlsx", type=["xlsx"])
-file_cartera = col3.file_uploader("cartera_clientes.xlsx", type=["xlsx"])
-
-# Inicializar Estado de Sesión
-if 'data_ready' not in st.session_state:
-    st.session_state['data_ready'] = False
-if 'df_final' not in st.session_state:
-    st.session_state['df_final'] = pd.DataFrame()
-
-# Botón Global de Procesamiento
-if file_ctas and file_cobranza and file_cartera:
-    if st.button("🚀 Procesar Archivos", type="primary"):
-        with st.spinner("Procesando y consolidando información..."):
-            df_ctas_raw, df_cartera_raw, df_cobranza_raw, error = load_data(file_ctas, file_cartera, file_cobranza)
-            
-            if error:
-                st.error(f"Error al cargar archivos: {error}")
-                st.session_state['data_ready'] = False
-            else:
-                try:
-                    df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
-                    st.session_state['df_final'] = df_final
-                    st.session_state['data_ready'] = True
-                    st.success("✅ Procesamiento completado exitosamente.")
-                except Exception as e:
-                    st.error(f"Error en lógica de negocio: {str(e)}")
+    # Botón Global de Procesamiento
+    if file_ctas and file_cobranza and file_cartera:
+        if st.button("Procesar Archivos", type="primary"):
+            with st.spinner("Procesando..."):
+                df_ctas_raw, df_cartera_raw, df_cobranza_raw, error = load_data(file_ctas, file_cartera, file_cobranza)
+                
+                if error:
+                    st.error(f"Error: {error}")
                     st.session_state['data_ready'] = False
+                else:
+                    try:
+                        df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
+                        st.session_state['df_final'] = df_final
+                        st.session_state['data_ready'] = True
+                        st.success("Actualizado")
+                    except Exception as e:
+                        st.error(f"Error Lógico: {str(e)}")
+                        st.session_state['data_ready'] = False
+    else:
+        st.info("Sube los 3 archivos para comenzar.")
 
 # --- PASO 2: VISUALIZACIÓN Y FILTROS ---
 if st.session_state['data_ready']:
@@ -123,12 +122,26 @@ if st.session_state['data_ready']:
     
     st.markdown("---")
     
-    # DEFINIR TABS PRINCIPALES (Global)
-    tabs = st.tabs(["1. Reporte General", "2. Análisis", "3. Ventas", "4. Marketing WhatsApp", "5. Notificaciones Email", "6. Configuración"])
+    # DEFINIR TABS DINÁMICAMENTE
+    tab_list = ["Reporte General"]
+    
+    # Feature Flags
+    show_analysis = CONFIG.get("features", {}).get("show_analysis", False)
+    show_sales = CONFIG.get("features", {}).get("show_sales", False)
+    
+    if show_analysis: tab_list.append("2. Análisis")
+    if show_sales: tab_list.append("3. Ventas")
+    
+    tab_list.extend(["4. Marketing WhatsApp", "5. Notificaciones Email", "6. Configuración"])
+    
+    tabs = st.tabs(tab_list)
+    
+    # Mapper de tabs para acceso seguro
+    tab_map = {name: tab for name, tab in zip(tab_list, tabs)}
     
     # --- TAB 1: REPORTE GENERAL ---
-    with tabs[0]:
-        st.subheader("2. Reporte General 📋")
+    with tab_map["Reporte General"]:
+        st.subheader("Reporte General")
     
         # Filtros
         if not df_final.empty:
@@ -147,7 +160,7 @@ if st.session_state['data_ready']:
             sel_moneda = col_f3.selectbox("Moneda", monedas)
             
             # Buscador Global
-            search_term = col_f4.text_input("🔍 Buscar (Cliente, Comp...)")
+            search_term = col_f4.text_input("Buscar")
             
             # Aplicar filtros
             df_filtered = df_final.copy()
@@ -164,7 +177,7 @@ if st.session_state['data_ready']:
                 df_filtered = df_filtered[mask]
             
             # --- FILTROS AVANZADOS ("Lo que ves es lo que es") ---
-            with st.expander("🔍 Filtros Avanzados (Saldo Real)", expanded=False):
+            with st.expander("Filtros Avanzados (Saldo Real)", expanded=False):
                 c_fil1, c_fil2 = st.columns(2)
                 with c_fil1:
                     opcion_saldo = st.selectbox(
@@ -257,7 +270,7 @@ if st.session_state['data_ready']:
             )
             
             # --- PASO 3: EXPORTAR ---
-            st.subheader("3. Exportar Reporte 📥")
+            st.subheader("Exportar Reporte")
             # Generar Excel usando la vista limpia (Strings formateados)
             excel_data = generate_excel(df_display)
             st.download_button(
@@ -270,21 +283,24 @@ if st.session_state['data_ready']:
         else:
              st.info("No hay datos cargados en el Reporte.")
 
-    # --- TAB 2 y 3 VACIOS POR AHORA ---
-    with tabs[1]:
-        st.info("Próximamente: Análisis en Profundidad")
-    with tabs[2]:
-        st.info("Próximamente: Reporte de Ventas")
+    # --- TABS CONDICIONALES ---
+    if show_analysis and "2. Análisis" in tab_map:
+        with tab_map["2. Análisis"]:
+            st.info("Próximamente: Análisis en Profundidad")
+            
+    if show_sales and "3. Ventas" in tab_map:
+        with tab_map["3. Ventas"]:
+            st.info("Próximamente: Reporte de Ventas")
 
     # --- TAB 4: WHATSAPP ---
-    with tabs[3]:
-        st.subheader("4. Notificaciones WhatsApp 📨")
+    with tab_map["4. Marketing WhatsApp"]:
+        st.subheader("Gestión de WhatsApp")
 
         if not df_filtered.empty:
             c1, c2 = st.columns([1, 1])
             
             with c1:
-                st.markdown("##### 📝 Configurar Plantilla")
+                st.markdown("##### Configurar Plantilla")
                 default_template = (
                     "Estimados *{EMPRESA}*,\n\n"
                     "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"
@@ -297,7 +313,7 @@ if st.session_state['data_ready']:
                 st.caption("Variables: `{EMPRESA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
 
             with c2:
-                st.markdown("##### 🚀 Enviar Mensajes")
+                st.markdown("##### Enviar Mensajes")
                 
                 # Selección de Clientes (Basado en lo filtrado)
                 # Agrupar datos por cliente para la lista de selección
@@ -331,7 +347,7 @@ if st.session_state['data_ready']:
                 contacts_to_send = []
                 
                 if selected_labels:
-                    st.markdown("##### 👁️ Vista Previa")
+                    st.markdown("##### Vista Previa")
                     
                     for label in selected_labels:
                         cod_cli = client_map[label]
@@ -430,7 +446,7 @@ if st.session_state['data_ready']:
                             st.text_area("Mensaje", value=msg_preview, height=200, key=f"preview_{cod_cli}")
 
                 # BOTON NUEVO: ENVIAR WHATSAPP (Selenium)
-                if st.button("🚀 Enviar Mensajes por WhatsApp", type="primary"):
+                if st.button("Enviar Mensajes por WhatsApp", type="primary"):
                     if not contacts_to_send:
                         st.warning("⚠️ No hay mensajes generados para enviar. Selecciona clientes.")
                     else:
@@ -467,10 +483,10 @@ if st.session_state['data_ready']:
              st.info("No hay datos para mostrar notificaciones.")
     
     # --- TAB 5: EMAIL ---
-    with tabs[4]:
-        st.subheader("5. Notificaciones Email 📧")
+    with tab_map["5. Notificaciones Email"]:
+        st.subheader("Gestión de Correos")
         
-        with st.expander("⚙️ Configuración del Servidor de Correo (SMTP)", expanded=True):
+        with st.expander("Configuración del Servidor de Correo (SMTP)", expanded=True):
             st.info("ℹ️ **Nota para Gmail**: Debes usar una **Contraseña de Aplicación**, no tu clave normal. [Ver Guía Google](https://support.google.com/accounts/answer/185833)")
             cols_smtp = st.columns(4)
             smtp_server = cols_smtp[0].text_input("Servidor SMTP", value=CONFIG['smtp_config']['server'])
@@ -482,7 +498,7 @@ if st.session_state['data_ready']:
             c_mail1, c_mail2 = st.columns([1, 1])
             
             with c_mail1:
-                st.markdown("##### 📨 Destinatarios")
+                st.markdown("##### Destinatarios")
                 
                 if 'EMAIL_FINAL' in df_filtered.columns:
                     client_group_email = df_filtered[df_filtered['EMAIL_FINAL'] != ""].groupby(
@@ -518,46 +534,49 @@ if st.session_state['data_ready']:
                     sel_emails = []
 
             with c_mail2:
-                st.markdown("##### 👁️ Vista Previa (HTML)")
+                st.markdown("##### Vista Previa (HTML)")
                 
                 if sel_emails:
                     import utils.email_sender as es
                     import streamlit.components.v1 as components
-                    
-                    first_sel = email_map[sel_emails[0]]
-                    docs_cli_mail = df_filtered[df_filtered['COD CLIENTE'] == first_sel['cod']]
-                    
-                    totales_s = docs_cli_mail[docs_cli_mail['MONEDA'].str.contains('S', na=False, case=False)]['SALDO REAL'].sum()
-                    totales_d = docs_cli_mail[docs_cli_mail['MONEDA'].str.contains('US', na=False, case=False)]['SALDO REAL'].sum()
-                    
-                    txt_s = f"S/ {totales_s:,.2f}" if totales_s > 0 else ""
-                    txt_d = f"$ {totales_d:,.2f}" if totales_d > 0 else ""
-                    
-                    # Generar HTML (cid)
-                    preview_html_cid = es.generate_premium_email_body_cid(
-                        first_sel['empresa'],
-                        docs_cli_mail,
-                        txt_s,
-                        txt_d,
-                        CONFIG
-                    )
-                    
-                    # Convertir imagen a base64 para el preview en iframe
                     import os
-                    logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
-                    try:
-                        import base64
-                        with open(logo_path, "rb") as image_file:
-                             encoded_string = base64.b64encode(image_file.read()).decode()
-                        src_base64 = f"data:image/png;base64,{encoded_string}"
-                        preview_html_view = preview_html_cid.replace("cid:logo_dacta", src_base64)
-                    except:
-                        preview_html_view = preview_html_cid # Fallback sin logo visual
+                    import base64
                     
-                    components.html(preview_html_view, height=600, scrolling=True)
+                    logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
+                    
+                    for selected_label in sel_emails:
+                        info_sel = email_map[selected_label]
+                        docs_cli_mail = df_filtered[df_filtered['COD CLIENTE'] == info_sel['cod']]
+                        
+                        totales_s = docs_cli_mail[docs_cli_mail['MONEDA'].str.contains('S', na=False, case=False)]['SALDO REAL'].sum()
+                        totales_d = docs_cli_mail[docs_cli_mail['MONEDA'].str.contains('US', na=False, case=False)]['SALDO REAL'].sum()
+                        
+                        txt_s = f"S/ {totales_s:,.2f}" if totales_s > 0 else ""
+                        txt_d = f"$ {totales_d:,.2f}" if totales_d > 0 else ""
+                        
+                        # Generar HTML (cid)
+                        preview_html_cid = es.generate_premium_email_body_cid(
+                            info_sel['empresa'],
+                            docs_cli_mail,
+                            txt_s,
+                            txt_d,
+                            CONFIG
+                        )
+                        
+                        # Convertir imagen a base64 para el preview en iframe
+                        try:
+                            with open(logo_path, "rb") as image_file:
+                                    encoded_string = base64.b64encode(image_file.read()).decode()
+                            src_base64 = f"data:image/png;base64,{encoded_string}"
+                            preview_html_view = preview_html_cid.replace("cid:logo_dacta", src_base64)
+                        except:
+                            preview_html_view = preview_html_cid # Fallback sin logo visual
+                        
+                        with st.expander(f"✉️ {info_sel['empresa']}", expanded=False):
+                            components.html(preview_html_view, height=500, scrolling=True)
                     
                     st.markdown("---")
-                    if st.button("🚀 Enviar Correos Masivos", type="primary"):
+                    if st.button("Enviar Correos Masivos", type="primary"):
                         if not email_user or not email_pass:
                             st.error("❌ Faltan credenciales SMTP.")
                         else:
@@ -626,24 +645,32 @@ if st.session_state['data_ready']:
              st.info("Sube los archivos y filtra para ver las notificaciones.")
 
     # --- TAB 6: CONFIGURACIÓN GLOBAL ---
-    with tabs[5]:
-        st.header("⚙️ Configuración del Sistema")
+    with tab_map["6. Configuración"]:
+        st.header("Configuración del Sistema")
         
         with st.form("config_form"):
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader("🏢 Identidad Corporativa")
+                st.subheader("Identidad Corporativa")
                 new_company = st.text_input("Nombre de la Empresa", value=CONFIG['company_name'])
                 new_ruc = st.text_input("RUC", value=CONFIG['company_ruc'])
                 new_phone = st.text_input("Teléfono de Contacto", value=CONFIG['phone_contact'])
                 
-                st.subheader("🎨 Branding (Colores)")
+                st.subheader("Branding (Colores)")
                 new_primary = st.color_picker("Color Primario (Encabezados/Botones)", value=CONFIG['primary_color'])
                 new_secondary = st.color_picker("Color Secundario (Acentos)", value=CONFIG['secondary_color'])
+                # Nuevo: Color de Texto
+                curr_text_col = CONFIG.get('text_color', '#262730')
+                new_text_color = st.color_picker("Color de Texto (Títulos)", value=curr_text_col, help="Color para títulos y encabezados. El cuerpo se mantiene legible.")
 
             with col2:
-                st.subheader("📧 Configuración de Correo (SMTP)")
+                st.subheader("Funcionalidades (Tabs)")
+                f_analysis = st.checkbox("Mostrar Tab Análisis", value=CONFIG.get('features', {}).get('show_analysis', False))
+                f_sales = st.checkbox("Mostrar Tab Ventas", value=CONFIG.get('features', {}).get('show_sales', False))
+                
+                st.markdown("---")
+                st.subheader("Configuración de Correo (SMTP)")
                 st.info("Credenciales para el envío de correos masivos.")
                 new_smtp_server = st.text_input("Servidor SMTP", value=CONFIG['smtp_config']['server'])
                 new_smtp_port = st.text_input("Puerto SMTP", value=CONFIG['smtp_config']['port'])
@@ -651,13 +678,13 @@ if st.session_state['data_ready']:
                 new_smtp_pass = st.text_input("Contraseña App", value=CONFIG['smtp_config']['password'], type="password")
 
             st.markdown("---")
-            st.subheader("📝 Plantilla de Correo")
+            st.subheader("Plantilla de Correo")
             col_t1, col_t2 = st.columns(2)
             new_intro = col_t1.text_area("Texto Introductorio", value=CONFIG['email_template']['intro_text'], height=150, help="Texto antes de la tabla de deuda.")
             new_footer = col_t2.text_area("Texto Pie de Página", value=CONFIG['email_template']['footer_text'], height=150, help="Texto después de los totales.")
             new_alert = st.text_area("Texto Alerta Detracción", value=CONFIG['email_template']['alert_text'], help="Mensaje resaltado sobre cuentas de detracción.")
 
-            submitted = st.form_submit_button("💾 Guardar Configuración")
+            submitted = st.form_submit_button("Guardar Configuración")
             
             if submitted:
                 new_settings = {
@@ -666,6 +693,11 @@ if st.session_state['data_ready']:
                     "phone_contact": new_phone,
                     "primary_color": new_primary,
                     "secondary_color": new_secondary,
+                    "text_color": new_text_color,
+                    "features": {
+                        "show_analysis": f_analysis,
+                        "show_sales": f_sales
+                    },
                     "email_template": {
                         "intro_text": new_intro,
                         "footer_text": new_footer,
@@ -684,7 +716,7 @@ if st.session_state['data_ready']:
                 else:
                     st.error("❌ Error al guardar la configuración.")
 
-        st.subheader("🖼️ Logo de la Empresa")
+        st.subheader("Logo de la Empresa")
         uploaded_logo = st.file_uploader("Subir Logo (PNG/JPG)", type=['png', 'jpg', 'jpeg'])
         if uploaded_logo:
             import os
@@ -699,4 +731,11 @@ if st.session_state['data_ready']:
             st.image(logo_path, width=200)
 
 else:
-    st.info("👆 Por favor sube los 3 archivos Excel para comenzar.")
+    # Mensaje de bienvenida inicial cuando no hay datos
+    st.markdown("""
+    <div style='text-align: center; padding: 50px;'>
+        <h3>Bienvenido</h3>
+        <p>Por favor utiliza el menú lateral para cargar tus archivos de <strong>CtasxCobrar, Cobranza y Cartera</strong>.</p>
+        <p style='color: gray; font-size: 0.9em;'>El sistema procesará automáticamente la información.</p>
+    </div>
+    """, unsafe_allow_html=True)
