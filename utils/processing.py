@@ -69,6 +69,14 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         df_ctas['codcli_key'] = df_ctas['codcli'].apply(format_client_code)
     else:
         raise ValueError("Columna 'codcli' no encontrada en CtasxCobrar")
+    
+    # --- FILTRO 1: Remover 'tipped' == 'PAV' ---
+    if 'tipped' in df_ctas.columns:
+        # Normalizar para asegurar consistencia
+        df_ctas = df_ctas[df_ctas['tipped'].astype(str).str.strip().str.upper() != 'PAV'].copy()
+    else:
+        # Si no existe la columna, ¿advertir? Asumimos que continua sin filtrar para no romper.
+        pass
 
     # Buscar columna en Cartera (codigo_cliente o codcli)
     col_cartera_key = 'codigo_cliente'
@@ -111,9 +119,40 @@ def process_data(df_ctas, df_cartera, df_cobranza):
 
     df_merged['COMPROBANTE'] = df_merged.apply(build_comprobante, axis=1)
     
+    # --- PROCESAMIENTO CLAVE DE CRUCE (MATCH_KEY) ---
+    # Usuario solicita: 
+    # Ctas: coddoc + sersun + numsun
+    # Cobranza: coddoc + numsun
+    # Objetivo: Match perfecto
+    
+    def clean_key_part(val):
+        # Normalización robusta: Quitar espacios y guiones para evitar desfases
+        return str(val).strip().replace("-", "").replace(" ", "")
+
+    def pad_numsun(val):
+        # Asegurar 8 dígitos para el número
+        try:
+            return str(int(float(val))).zfill(8)
+        except:
+            # Si no es numérico, intentamos limpiar y rellenar si es corto, o dejar tal cual
+            s = str(val).strip()
+            if len(s) < 8 and s.isdigit():
+                return s.zfill(8)
+            return s
+    
+    def build_match_key_ctas(row):
+        # Concatenación robusta con padding en el número
+        # Cod + Serie + Num(8)
+        return clean_key_part(row.get('coddoc', '')) + clean_key_part(row.get('sersun', '')) + pad_numsun(row.get('numsun', ''))
+        
+    df_merged['MATCH_KEY'] = df_merged.apply(build_match_key_ctas, axis=1)
+
     # 4. Calcular Detracción y Estado (Cruce con Cobranza)
-    # En Cobranza, clave es 'numsun' (formato Fxxx-xxxxxxxx)
-    # Y filtrar solo pagos DT
+    # En Cobranza, clave ahora será MATCH_KEY (coddoc + numsun)
+    
+    def build_match_key_cobranza(row):
+        # Concatenación robusta
+        return clean_key_part(row.get('coddoc', '')) + clean_key_part(row.get('numsun', ''))
     
     if 'numsun' not in df_cobranza.columns:
          # Intentar normalizar si se llama diferente, pero prompt dice numsun
@@ -132,7 +171,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     
     if not df_dt.empty:
         # Asegurar formato de clave en Cobranza
-        df_dt['numsun_key'] = df_dt['numsun'].astype(str).str.strip()
+        df_dt['MATCH_KEY'] = df_dt.apply(build_match_key_cobranza, axis=1)
         
         # Crear texto formateado detallado con saltos de línea (para Excel con ajuste de texto)
         # Campos: codbco, nombco, fecpro, mondoc, monpag, forpag, nudopa
@@ -156,9 +195,8 @@ def process_data(df_ctas, df_cartera, df_cobranza):
 
         df_dt['info_dt'] = df_dt.apply(format_dt_info, axis=1)
         
-        # Deduplicar por numsun (tomar el más reciente si hay varios? O concatenar?)
-        # Asumiremos uno por documento para simplificar, o el último.
-        dt_lookup = df_dt.groupby('numsun_key')['info_dt'].apply(lambda x: "\n---\n".join(x))
+        # Deduplicar por MATCH_KEY
+        dt_lookup = df_dt.groupby('MATCH_KEY')['info_dt'].apply(lambda x: "\n---\n".join(x))
     else:
         dt_lookup = pd.Series(dtype='object')
 
@@ -169,12 +207,13 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     else:
         df_amort = pd.DataFrame()
         
-    if not df_amort.empty and 'numsun' in df_amort.columns:
-        df_amort['numsun_key'] = df_amort['numsun'].astype(str).str.strip()
+    if not df_amort.empty:
+        # Usar MATCH_KEY también para amortizaciones
+        df_amort['MATCH_KEY'] = df_amort.apply(build_match_key_cobranza, axis=1)
         # Usar la misma función de formato
         df_amort['info_amort'] = df_amort.apply(format_dt_info, axis=1)
-        # Agrupar concatenando (puede haber varios pagos parciales)
-        amort_lookup = df_amort.groupby('numsun_key')['info_amort'].apply(lambda x: "\n---\n".join(x))
+        # Agrupar concatenando
+        amort_lookup = df_amort.groupby('MATCH_KEY')['info_amort'].apply(lambda x: "\n---\n".join(x))
     else:
         amort_lookup = pd.Series(dtype='object')
         
@@ -208,9 +247,11 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         if row['DETRACCIÓN'] <= 0:
             return "-"
 
-        comprobante = row['COMPROBANTE']
-        if comprobante in dt_lookup.index:
-            return dt_lookup[comprobante]
+        comprobante = row['COMPROBANTE'] # Visual
+        match_key = row['MATCH_KEY'] # Internal key
+        
+        if match_key in dt_lookup.index:
+            return dt_lookup[match_key]
         else:
             return "Pendiente"
 
@@ -218,10 +259,10 @@ def process_data(df_ctas, df_cartera, df_cobranza):
 
     # Columna AMORTIZACIONES
     def get_amortizaciones(row):
-        comprobante = row['COMPROBANTE']
+        match_key = row['MATCH_KEY']
         # Buscar en amort_lookup
-        if comprobante in amort_lookup.index:
-            return amort_lookup[comprobante]
+        if match_key in amort_lookup.index:
+            return amort_lookup[match_key]
         return "-" # O vacío
     
     df_merged['AMORTIZACIONES'] = df_merged.apply(get_amortizaciones, axis=1)
@@ -248,7 +289,14 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     df_merged['MONEDA'] = df_merged['codmnd']
     df_merged['TIPO CAMBIO'] = df_merged['tipcam']
     df_merged['MONT EMIT'] = df_merged['mododo']
+    df_merged['MONT EMIT'] = df_merged['mododo']
     df_merged['SALDO'] = df_merged['sldacl']
+    
+    # Campo Nuevo v3.5
+    if 'tipped' in df_merged.columns:
+        df_merged['TIPO PEDIDO'] = df_merged['tipped']
+    else:
+        df_merged['TIPO PEDIDO'] = ""
     
     # Calculo de SALDO REAL
     # Regla:
@@ -293,7 +341,9 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     final_cols = [
         'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 'FECH EMIS', 'FECH VENC',
         'COMPROBANTE', 'MONEDA', 'TIPO CAMBIO', 'MONT EMIT',
-        'Importe Referencial (S/)', 'DETRACCIÓN', 'ESTADO DETRACCION', 'AMORTIZACIONES', 'SALDO', 'SALDO REAL'
+        'Importe Referencial (S/)', 'DETRACCIÓN', 'ESTADO DETRACCION', 'AMORTIZACIONES', 'SALDO', 'SALDO REAL',
+        'TIPO PEDIDO', # v3.5
+        'MATCH_KEY' # Exposed for debugging
     ]
     
     # Filtrar solo columnas existentes (por seguridad, aunque deberian estar todas)

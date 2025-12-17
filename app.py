@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import urllib.parse
-from datetime import date
+from datetime import date, datetime
 from utils.processing import load_data, process_data
 from utils.excel_export import generate_excel
 
@@ -194,7 +194,7 @@ if st.session_state['data_ready']:
         st.download_button(
             label="Descargar Excel Estilizado",
             data=excel_data,
-            file_name="Reporte_Cobranzas_Antay.xlsx",
+            file_name=f"Reporte_Cobranzas_DACTA_SAC_{datetime.now().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
@@ -209,10 +209,11 @@ if st.session_state['data_ready']:
             with c1:
                 st.markdown("##### 📝 Configurar Plantilla")
                 default_template = (
-                    "Hola *{EMPRESA}*,\n\n"
-                    "Le saludamos de DACTA SAC. Le recordamos que tiene documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"
-                    "Detalle:\n{DETALLE_DOCS}\n\n"
-                    "Favor de gestionar el pago a la brevedad.\n\n"
+                    "Estimados *{EMPRESA}*,\n\n"
+                    "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"
+                    "**Detalle de Documentos:**\n"
+                    "{DETALLE_DOCS}\n\n"
+                    "Agradeceremos gestionar el pago a la brevedad.\n\n"
                     "_Este número es solo para notificaciones. Para comunicarse favor llamar al +51 998 080 797 - Nayda Camacho Quinteros_"
                 )
                 template = st.text_area("Plantilla del Mensaje", value=default_template, height=350)
@@ -268,7 +269,6 @@ if st.session_state['data_ready']:
                         # 1. Totales por Moneda
                         currency_stats = docs_cli.groupby('MONEDA')['SALDO REAL'].agg(['count', 'sum'])
                         
-                        resumen_parts = []
                         total_parts = []
                         
                         for curr, stats in currency_stats.iterrows():
@@ -276,11 +276,17 @@ if st.session_state['data_ready']:
                             amount = stats['sum']
                             symbol = "S/" if str(curr).upper().startswith("S") else "$"
                             
-                            resumen_parts.append(f"{count} doc(s) en {symbol}")
-                            total_parts.append(f"{symbol} {amount:,.2f}")
+                            # Formato solicitado: S/ 138.08 (03 documentos)
+                            # Usamos :02d para que salga 03 en lugar de 3
+                            total_parts.append(f"{symbol} {amount:,.2f} ({count:02d} documentos)")
                         
-                        resumen_docs_str = "(" + ", ".join(resumen_parts) + ")" if resumen_parts else ""
-                        total_real_str = " y ".join(total_parts) if total_parts else "0.00"
+                        # Unir con " y "
+                        if total_parts:
+                            total_real_str = " y ".join(total_parts)
+                        else:
+                            total_real_str = "0.00"
+                        
+                        # No necesitamos variable separada para count string ya que está integrada
                         total_orig_val = docs_cli['SALDO'].sum()
 
                         # 2. Detalle de Documentos
@@ -299,21 +305,36 @@ if st.session_state['data_ready']:
                             det_val = doc['DETRACCIÓN']
                             det_estado = doc['ESTADO DETRACCION']
                             
-                            if det_estado == "Pendiente": estado_str = "Pend"
+                            if det_estado == "Pendiente": estado_str = "Pendiente"
                             elif det_estado in ["-", "No Aplica"]: estado_str = "-"
-                            else: estado_str = "Aplic" 
+                            else: estado_str = "Aplicada" 
                             
                             det_info = ""
                             if det_val > 0:
                                 det_info = f" | Detr: S/{det_val:,.2f} ({estado_str})"
                             
-                            block = (
-                                f"📄 *{comprobante}*\n"
-                                f"📅 Emis: {emis} | Venc: {venc}\n"
-                                f"ℹ️ Imp: {monto_emit}{det_info}\n"
-                                f"📉 Saldo: *{saldo_fmt}*\n"
-                                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            )
+                            # --- DISEÑO SMART (UX v3.2) ---
+                            # Línea 1: 📄 *F201-3227* (Venc: 20/11)
+                            # Línea 2: 💰 Imp: $206.50  »  Saldo: *$31.65*
+                            # Línea 3 (Condicional): ⚠️ Detr: S/ 20.00 (Pendiente)
+                            # ────────────────
+                            
+                            venc_short = pd.to_datetime(doc['FECH VENC']).strftime('%d/%m')
+                            
+                            # Línea 1
+                            line1 = f"📄 *{comprobante}* (Venc: {venc_short})"
+                            
+                            # Línea 2
+                            line2 = f"💰 Imp: {monto_emit}  »  Saldo: *{saldo_fmt}*"
+                            
+                            # Línea 3 (Solo si hay detracción)
+                            line3 = ""
+                            if det_val > 0:
+                                # Icono de alerta si es pendiente
+                                icon_det = "⚠️" if det_estado == "Pendiente" else "ℹ️"
+                                line3 = f"\n{icon_det} Detr: S/ {det_val:,.2f} ({estado_str})"
+
+                            block = f"{line1}\n{line2}{line3}\n────────────────"
                             docs_lines.append(block)
                         
                         txt_detalle = "\n".join(docs_lines)
@@ -324,7 +345,7 @@ if st.session_state['data_ready']:
                             'telefono': telefono,
                             'EMPRESA': empresa,
                             'DETALLE_DOCS': txt_detalle,
-                            'TOTAL_SALDO_REAL': f"{total_real_str} {resumen_docs_str}",
+                            'TOTAL_SALDO_REAL': total_real_str,
                             'TOTAL_SALDO_ORIGINAL': f"{total_orig_val:,.2f}",
                             'venta_neta': total_orig_val, 
                             'numero_transacciones': len(docs_cli)

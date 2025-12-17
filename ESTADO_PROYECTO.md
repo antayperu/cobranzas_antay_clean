@@ -48,11 +48,15 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     - **v1.8**: Ajuste Fino de UX (Orden específico de campos).
     - **v2.0**: Lógica Flexible (Filtros, Totales Estrictos).
     - **v2.1**: Rendimiento y UI (Procesamiento Manual con Memoria, Corrección de Índice de Tabla).
-    - **v3.0 (Actual)**: Integración WhatsApp Selenium, UI Defaults (Saldo Real: Todos), y Totales por Moneda en plantilla.
+    - **v3.0**: Integración de Selenium para WhatsApp, refactor UI y lógica de conteo por moneda.
+    - **v3.1**: UX Refinement (Plantilla profesional + Diseño compacto de documentos).
+    - **v3.2**: Detracciones Inteligentes (3ra línea condicional) + Footer específico de contacto.
+    - **v3.3**: Ajustes de Copy (Totales explicados "S/ X (Y docs)", estados con palabras completas).
+    - **v3.4**: Refinamiento Lógico de Datos (Filtro 'PAV' y Match Key robusto para Detracciones).
+    - **v3.5**: Mejoras Finales (Columna 'TIPO PEDIDO' y nombre de archivo personalizado).
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.
 - **Pendientes Futuros**:
     - Validar con archivos reales de producción.
-    - Ajustes finos de UI si el cliente pide cambios en los colores exactos.
 
