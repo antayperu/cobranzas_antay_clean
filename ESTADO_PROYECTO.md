@@ -59,5 +59,19 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.
 - **Pendientes Futuros**:
-    - Validar con archivos reales de producción.
 
+- [x] **Módulo de Notificaciones Email (Premium)**
+    - Soporte para envío masivo SMTP (Gmail/Outlook).
+    - Plantillas HTML con diseño corporativo (Branding DACTA).
+    - Incrustación de logo (CID) para evitar bloqueos.
+    - Manejo de errores de autenticación (Error 535).
+- [x] **Sistema de Configuración Global (White-label)**
+    - Persistencia de configuración (`config.json`).
+    - Personalización de Identidad (Nombre, RUC, Teléfono, Logo).
+    - Personalización Visual (Colores Primario/Secundario).
+    - Edición de Plantillas de Correo (Intro/Footer).
+    - Panel de administración integrado en la App.
+
+### 🕒 Pendientes (To-Do)
+- [ ] Validación masiva de correos (rebotados).
+- [ ] Dashboards de métricas de envío.

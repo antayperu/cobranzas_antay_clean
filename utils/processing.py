@@ -92,10 +92,24 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     # Traer telefono
     if 'telefono' not in df_cartera.columns:
         df_cartera['telefono'] = ""
-        
+    
+    # Validar Columna EMAIL (Flexible)
+    col_email = None
+    for c in df_cartera.columns:
+        if str(c).upper().strip() in ['EMAIL', 'CORREO', 'E-MAIL', 'CORREO_ELECTRONICO', 'MAIL']:
+            col_email = c
+            break
+            
+    if col_email:
+        df_cartera['EMAIL_FINAL'] = df_cartera[col_email].astype(str).str.strip().str.lower()
+        # Limpiar 'nan' strings
+        df_cartera['EMAIL_FINAL'] = df_cartera['EMAIL_FINAL'].replace({'nan': '', 'nat': '', 'none': ''})
+    else:
+        df_cartera['EMAIL_FINAL'] = ""
+
     df_merged = pd.merge(
         df_ctas, 
-        df_cartera[['codcli_key', 'telefono']], 
+        df_cartera[['codcli_key', 'telefono', 'EMAIL_FINAL']], 
         on='codcli_key', 
         how='left'
     )
@@ -198,8 +212,11 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         
         # Deduplicar por MATCH_KEY
         dt_lookup = df_dt.groupby('MATCH_KEY')['info_dt'].apply(lambda x: "\n---\n".join(x))
+        # Lookup de Monto pagado (Suma por si acaso, aunque debería ser único)
+        dt_amount_lookup = df_dt.groupby('MATCH_KEY')['monpag'].sum()
     else:
         dt_lookup = pd.Series(dtype='object')
+        dt_amount_lookup = pd.Series(dtype='float')
 
     # --- NUEVA LÓGICA: AMORTIZACIONES (todo lo que NO sea DT) ---
     if not df_cobranza.empty:
@@ -228,17 +245,29 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         # Fallback si no existe, aunque debería
         df_merged['Importe Referencial (S/)'] = 0.0
     
-    # Helper detracción
-    def calc_detraccion(monto):
+    # Helper detracción (Nueva Lógica con Prioridad Lookup)
+    def calc_detraccion_final(row):
+        match_key = row['MATCH_KEY']
+        
+        # 1. Prioridad: Si existe en Cobranza (DT), usar ese monto exacto
+        if match_key in dt_amount_lookup.index:
+            try:
+                # Usar el valor encontrado
+                val_dt = float(dt_amount_lookup[match_key])
+                return round(val_dt, 0)
+            except:
+                pass # Fallback a cálculo si falla conversión
+        
+        # 2. Respaldo: Regla de Negocio (> 700 -> 12%)
         try:
-            val = float(monto)
-            if val > 700.00:
-                return val * 0.12
-            return 0.0
+            monto = float(row.get("Importe Referencial (S/)", 0))
+            if monto > 700.00:
+                return round(monto * 0.12, 0)
+            return 0.00
         except:
-            return 0.0
+            return 0.00
 
-    df_merged['DETRACCIÓN'] = df_merged["Importe Referencial (S/)"].apply(calc_detraccion)
+    df_merged['DETRACCIÓN'] = df_merged.apply(calc_detraccion_final, axis=1)
     
     # Estado Detracción
     def get_estado_dt(row):
@@ -414,7 +443,8 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         'DETRACCIÓN', 'DETRACCIÓN_DISPLAY',
         'ESTADO DETRACCION', 
         'AMORTIZACIONES',
-        'MATCH_KEY'
+        'MATCH_KEY',
+        'EMAIL_FINAL'
     ]
     
     # Filtrar solo columnas existentes (por seguridad, aunque deberian estar todas)
