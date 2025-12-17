@@ -151,7 +151,7 @@ if st.session_state['data_ready']:
                 opcion_saldo = st.selectbox(
                     "Condición Saldo Real", 
                     ["Todos", "Mayor que", "Mayor o igual que", "Menor que", "Menor o igual que", "Igual a"],
-                    index=1 # Default: Mayor que
+                    index=0 # Default: Todos
                 )
             with c_fil2:
                 monto_ref = st.number_input("Monto Referencia", value=0.0, step=10.0)
@@ -249,78 +249,64 @@ if st.session_state['data_ready']:
                 st.info(f"Se generarán enlaces para **{len(selected_labels)}** clientes seleccionados.")
                 
                 # BOTON PROCESAR
-                if st.button("🔄 Procesar y Generar Mensajes", type="primary"):
-                    # Generar lista de mensajes
-                    msgs_output = []
+                # --- LÓGICA DE GENERACIÓN DE MENSAJES (PREVIEW) ---
+                contacts_to_send = []
+                
+                if selected_labels:
+                    st.markdown("##### 👁️ Vista Previa")
                     
                     for label in selected_labels:
                         cod_cli = client_map[label]
-                        # Filtrar documentos de este cliente (Usando df_filtered para respetar el filtro global)
                         docs_cli = df_filtered[df_filtered['COD CLIENTE'] == cod_cli]
                         
                         if docs_cli.empty: continue
 
-                        # Datos del cliente (tomar del primer registro del grupo)
+                        # Datos Básicos
                         empresa = docs_cli['EMPRESA'].iloc[0]
                         telefono = docs_cli['TELÉFONO'].iloc[0]
-                        
-                        # --- CÁLCULO DE TOTALES POR MONEDA ---
-                        # Agrupar saldos reales por moneda
-                        sums_by_currency = docs_cli.groupby('MONEDA')['SALDO REAL'].sum()
-                        
-                        total_parts = []
-                        for curr, amount in sums_by_currency.items():
-                            # Mostrar total incluso si es negativo o cero para consistencia
-                            symbol = "S/" if str(curr).upper().startswith("S") else "$"
-                            total_parts.append(f"{symbol} {amount:,.2f}")
-                                
-                        if total_parts:
-                            total_real_str = " y ".join(total_parts)
-                        else:
-                            total_real_str = "0.00"
-                            
-                        # Total original (referencial)
-                        total_orig_val = docs_cli['SALDO'].sum() 
 
-                        # --- DETALLE DE DOCUMENTOS (UX MEJORADA v1.8 - TIPO TARJETA) ---
-                        # Diseño Final:
-                        # 📄 *F201-00003200*
-                        # 📅 Emisión: 10/11/25 | Venc: 13/11/25
-                        # ℹ️ Imp: S/ 2,478.00 | Detr: S/ 297.36 (Pendiente)
-                        # 📉 Saldo: *S/ -0.36*
-                        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                        # 1. Totales por Moneda
+                        currency_stats = docs_cli.groupby('MONEDA')['SALDO REAL'].agg(['count', 'sum'])
+                        
+                        resumen_parts = []
+                        total_parts = []
+                        
+                        for curr, stats in currency_stats.iterrows():
+                            count = int(stats['count'])
+                            amount = stats['sum']
+                            symbol = "S/" if str(curr).upper().startswith("S") else "$"
+                            
+                            resumen_parts.append(f"{count} doc(s) en {symbol}")
+                            total_parts.append(f"{symbol} {amount:,.2f}")
+                        
+                        resumen_docs_str = "(" + ", ".join(resumen_parts) + ")" if resumen_parts else ""
+                        total_real_str = " y ".join(total_parts) if total_parts else "0.00"
+                        total_orig_val = docs_cli['SALDO'].sum()
+
+                        # 2. Detalle de Documentos
                         docs_lines = []
                         for _, doc in docs_cli.iterrows():
                             saldo_doc_real = doc['SALDO REAL']
-                            
-                            # Preparar valores
                             comprobante = doc['COMPROBANTE']
                             emis = pd.to_datetime(doc['FECH EMIS']).strftime('%d/%m/%Y')
                             venc = pd.to_datetime(doc['FECH VENC']).strftime('%d/%m/%Y')
                             
-                            # Moneda Símbolo
                             mon_code = str(doc['MONEDA'])
                             mon_sym = "S/" if mon_code.upper().startswith("S") else "$"
-                            
                             monto_emit = f"{mon_sym}{doc['MONT EMIT']:,.2f}"
                             saldo_fmt = f"{mon_sym}{saldo_doc_real:,.2f}"
                             
-                            # Detracción info
                             det_val = doc['DETRACCIÓN']
                             det_estado = doc['ESTADO DETRACCION']
                             
-                            if det_estado == "Pendiente":
-                                estado_str = "Pend"
-                            elif det_estado in ["-", "No Aplica"]:
-                                estado_str = "-"
-                            else:
-                                estado_str = "Aplic" 
+                            if det_estado == "Pendiente": estado_str = "Pend"
+                            elif det_estado in ["-", "No Aplica"]: estado_str = "-"
+                            else: estado_str = "Aplic" 
                             
                             det_info = ""
                             if det_val > 0:
                                 det_info = f" | Detr: S/{det_val:,.2f} ({estado_str})"
                             
-                            # Construir Bloque
                             block = (
                                 f"📄 *{comprobante}*\n"
                                 f"📅 Emis: {emis} | Venc: {venc}\n"
@@ -331,36 +317,83 @@ if st.session_state['data_ready']:
                             docs_lines.append(block)
                         
                         txt_detalle = "\n".join(docs_lines)
+
+                        # Data dict for replacement (and sending)
+                        contact_data = {
+                            'nombre_cliente': empresa,
+                            'telefono': telefono,
+                            'EMPRESA': empresa,
+                            'DETALLE_DOCS': txt_detalle,
+                            'TOTAL_SALDO_REAL': f"{total_real_str} {resumen_docs_str}",
+                            'TOTAL_SALDO_ORIGINAL': f"{total_orig_val:,.2f}",
+                            'venta_neta': total_orig_val, 
+                            'numero_transacciones': len(docs_cli)
+                        }
                         
-                        # Reemplazo variables
-                        msg = template.replace("{EMPRESA}", str(empresa))
-                        msg = msg.replace("{DETALLE_DOCS}", txt_detalle)
-                        msg = msg.replace("{TOTAL_SALDO_REAL}", total_real_str)
-                        msg = msg.replace("{TOTAL_SALDO_ORIGINAL}", f"{total_orig_val:,.2f}") # Referencial
+                        # Generar mensaje final para preview
+                        # Importamos funcion helper (o la replicamos simple aqui para visualizacion)
+                        # Idealmente utils.whatsapp_sender.replace_variables pero para preview rápido usamos string replace básico
+                        # Para consistencia exacta, usaremos la funcion del modulo si es posible, o duplicamos logica UI
                         
-                        # Link
-                        link_wa = None
-                        if telefono and len(telefono) > 8:
-                            msg_enc = urllib.parse.quote(msg)
-                            link_wa = f"https://wa.me/{telefono.replace('+', '')}?text={msg_enc}"
+                        msg_preview = template
+                        msg_preview = msg_preview.replace("{EMPRESA}", str(empresa))
+                        msg_preview = msg_preview.replace("{DETALLE_DOCS}", txt_detalle)
+                        msg_preview = msg_preview.replace("{TOTAL_SALDO_REAL}", contact_data['TOTAL_SALDO_REAL'])
+                        msg_preview = msg_preview.replace("{TOTAL_SALDO_ORIGINAL}", contact_data['TOTAL_SALDO_ORIGINAL'])
                         
-                        msgs_output.append({
-                            "Cliente": empresa,
-                            "Link": link_wa,
-                            "Mensaje": msg
-                        })
-                    
-                    # Mostrar resultados si hay
-                    if msgs_output:
-                        for item in msgs_output:
-                            with st.expander(f"📨 {item['Cliente']}", expanded=True):
-                                st.text_area("Mensaje Generado", value=item['Mensaje'], height=250, key=f"txt_{item['Cliente']}")
-                                if item['Link']:
-                                    st.markdown(f'<a href="{item["Link"]}" target="_blank" style="background-color:#25D366;color:white;padding:10px;text-decoration:none;border-radius:5px;">📲 Enviar WhatsApp</a>', unsafe_allow_html=True)
-                                else:
-                                    st.warning("Número de teléfono no válido o faltante.")
+                        # Guardar el mensaje FINAL en el contacto para envio
+                        contact_data['mensaje'] = msg_preview
+                        contacts_to_send.append(contact_data)
+                        
+                        # Mostrar Preview
+                        with st.expander(f"📨 {empresa} ({telefono})", expanded=False):
+                            st.text_area("Mensaje", value=msg_preview, height=200, key=f"preview_{cod_cli}")
+
+                # BOTON NUEVO: ENVIAR WHATSAPP (Selenium)
+                if st.button("🚀 Enviar Mensajes por WhatsApp", type="primary"):
+                    if not contacts_to_send:
+                        st.warning("⚠️ No hay mensajes generados para enviar. Selecciona clientes.")
                     else:
-                        st.warning("No se generaron mensajes (revise la selección o filtros).")
+                        import utils.whatsapp_sender as ws
+                        
+                        # Contenedores para UI dinámica
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        log_expander = st.expander("Ver Log de Envío", expanded=True)
+                        log_area = log_expander.empty()
+
+                        def update_progress(current, total, text, log_content):
+                            if total > 0:
+                                progress_bar.progress(min(current / total, 1.0))
+                            status_text.markdown(f"**Procesando:** {text}")
+                            log_area.code(log_content, language="text")
+
+                        # Ejecutar envío
+                        try:
+                            # Pasamos contacts_to_send que YA TIENE la llave 'mensaje' con el texto procesado
+                            # El script de envio volverá a intentar reemplazar variables si las encuentra, 
+                            # pero como ya estan reemplazadas, no afectará. 
+                            # Sin embargo, el script 'replace_variables' usa 'message' argument.
+                            # Para evitar doble reemplazo o inconsistencias, pasamos el template.
+                            # PERO: nuestra UI preview mostró YA el reemplazo. 
+                            # EL script whatsapp_sender hace el reemplazo internamente.
+                            # SOLUCION: Pasamos el 'template' original al script, y dejamos que el script haga el replace.
+                            # OJO: La preview que mostramos debe coincidir. Coincide porque usamos la misma logica de replace arriba.
+                            
+                            result = ws.send_whatsapp_messages_direct(
+                                contacts_to_send, 
+                                template, 
+                                speed="Normal (Recomendado)", 
+                                progress_callback=update_progress
+                            )
+                            
+                            st.success(f"✅ Proceso Finalizado. Exitosos: {result['exitosos']}, Fallidos: {result['fallidos']}")
+                            if result['errores']:
+                                st.error("Errores encontrados:")
+                                for err in result['errores']:
+                                    st.text(f"• {err}")
+                        except Exception as e:
+                            st.error(f"Error crítico al iniciar el envío: {str(e)}")
         else:
              st.info("No hay datos para mostrar notificaciones.")
     else:
