@@ -511,23 +511,98 @@ if st.session_state['data_ready']:
                     email_map = {}
                     
                     for idx, row in client_group_email.iterrows():
-                        label = f"{row['EMPRESA']} ({row['EMAIL_FINAL']}) - S/ {row['SALDO REAL']:,.2f}"
+                        # Calcular desglose por moneda para el label
+                        cod_cli = row['COD CLIENTE']
+                        docs_cli_temp = df_filtered[df_filtered['COD CLIENTE'] == cod_cli]
+                        
+                        s_temp = docs_cli_temp[docs_cli_temp['MONEDA'].str.contains('S', na=False)]['SALDO REAL'].sum()
+                        d_temp = docs_cli_temp[docs_cli_temp['MONEDA'].str.contains('US', na=False)]['SALDO REAL'].sum()
+                        
+                        # Label Mejorado: EMPRESA (Email) | S/ 100 | $ 50
+                        label_parts = [f"{row['EMPRESA']} ({row['EMAIL_FINAL']})"]
+                        if s_temp > 0: label_parts.append(f"S/ {s_temp:,.2f}")
+                        if d_temp > 0: label_parts.append(f"$ {d_temp:,.2f}")
+                        
+                        label = " | ".join(label_parts)
+                        
                         email_options.append(label)
                         email_map[label] = {
                             'cod': row['COD CLIENTE'],
                             'email': row['EMAIL_FINAL'],
-                            'empresa': row['EMPRESA']
+                            'empresa': row['EMPRESA'],
+                            'deb_s': s_temp,
+                            'deb_d': d_temp
                         }
                     
+                    # --- FIX SELECT ALL: Usar Session State ---
+                    if "email_sel_key" not in st.session_state:
+                         st.session_state["email_sel_key"] = []
+                    
+                    # Limpiar selección si las opciones cambiaron (filtros) para evitar crash de Streamlit
+                    valid_opts_set = set(email_options)
+                    st.session_state["email_sel_key"] = [x for x in st.session_state["email_sel_key"] if x in valid_opts_set]
+
+                    def select_all_callback():
+                        st.session_state["email_sel_key"] = email_options
+
                     sel_emails = st.multiselect(
                         f"Seleccione Clientes con Correo ({len(email_options)} disponibles):",
                         options=email_options,
-                        default=[]
+                        key="email_sel_key"
                     )
                     
-                    if st.button("Seleccionar Todos (Email)"):
-                        sel_emails = email_options
-                        st.experimental_rerun()
+                    st.button("Seleccionar Todos (Email)", on_click=select_all_callback)
+                    
+                    # --- DASHBOARD RESUMEN DE ENVÍO ---
+                    if sel_emails:
+                        st.markdown("---")
+                        st.markdown("###### 📊 Resumen de Envío Seleccionado")
+                        
+                        total_cli_sel = len(sel_emails)
+                        total_s_sel = sum(email_map[x]['deb_s'] for x in sel_emails)
+                        total_d_sel = sum(email_map[x]['deb_d'] for x in sel_emails)
+                        
+                        st.markdown("""
+                        <style>
+                            .stat-box {
+                                background-color: #f8f9fa;
+                                border: 1px solid #e9ecef;
+                                border-radius: 8px;
+                                padding: 15px;
+                                text-align: center;
+                            }
+                            .stat-label { font-size: 0.9em; color: #6c757d; margin-bottom: 5px; }
+                            .stat-value { font-size: 1.4em; font-weight: bold; color: #2E86AB; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                            .stat-value svg { margin-right: 5px; }
+                        </style>
+                        """, unsafe_allow_html=True)
+
+                        k1, k2, k3 = st.columns(3)
+                        
+                        with k1:
+                            st.markdown(f"""
+                            <div class="stat-box">
+                                <div class="stat-label">Destinatarios</div>
+                                <div class="stat-value">👥 {total_cli_sel}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        with k2:
+                            st.markdown(f"""
+                            <div class="stat-box">
+                                <div class="stat-label">Total Soles</div>
+                                <div class="stat-value" title="S/ {total_s_sel:,.2f}">S/ {total_s_sel:,.2f}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        with k3:
+                            st.markdown(f"""
+                            <div class="stat-box">
+                                <div class="stat-label">Total Dólares</div>
+                                <div class="stat-value" title="$ {total_d_sel:,.2f}">$ {total_d_sel:,.2f}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        st.markdown("---")
                         
                 else:
                     st.warning("⚠️ No se detectó columna de Email. Vuelve a procesar los archivos.")
@@ -590,13 +665,21 @@ if st.session_state['data_ready']:
                                 str_s = f"S/ {t_s:,.2f}" if t_s > 0 else ""
                                 str_d = f"$ {t_d:,.2f}" if t_d > 0 else ""
                                 
+                                str_s = f"S/ {t_s:,.2f}" if t_s > 0 else ""
+                                str_d = f"$ {t_d:,.2f}" if t_d > 0 else ""
+                                
                                 body = es.generate_premium_email_body_cid(info['empresa'], d_cli, str_s, str_d, CONFIG)
+                                plain_body = es.generate_plain_text_body(info['empresa'], d_cli, str_s, str_d, CONFIG)
+                                
+                                # Asunto Profesional Anti-Spam
+                                subject_line = f"Estado de Cuenta y Documentos Pendientes - {info['empresa']}"
                                 
                                 messages_to_send.append({
                                     'email': info['email'],
                                     'client_name': info['empresa'],
-                                    'subject': f"Notificación de Deuda - {info['empresa']}",
-                                    'html_body': body
+                                    'subject': subject_line,
+                                    'html_body': body,
+                                    'plain_body': plain_body
                                 })
                             
                             smtp_cfg = {

@@ -1,6 +1,7 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 from datetime import datetime
 import pandas as pd
 
@@ -253,7 +254,48 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     """
     return html_content
 
-from email.mime.image import MIMEImage
+    return html_content
+
+def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_config):
+    """
+    Genera versión texto plano para reducir puntaje de spam.
+    """
+    company_name = branding_config.get('company_name', 'DACTA S.A.C.')
+    intro = branding_config.get('email_template', {}).get('intro_text', '').replace('{cliente}', client_name)
+    footer = branding_config.get('email_template', {}).get('footer_text', '')
+    
+    text = f"Estimados {client_name},\n\n"
+    text += f"Notificación de {company_name}\n\n"
+    text += f"{intro}\n\n"
+    text += "DETALLE DE DOCUMENTOS PENDIENTES:\n"
+    text += "-" * 60 + "\n"
+    
+    for _, row in docs_df.iterrows():
+        doc = row.get('COMPROBANTE', '')
+        venc = str(row.get('FECH VENC', ''))
+        
+        mon = row.get('MONEDA', '')
+        sim = "S/" if str(mon).upper().startswith('S') else "$"
+        
+        try:
+            imp = float(row.get('MONT EMIT', 0))
+            sal = float(row.get('SALDO REAL', 0))
+            det = float(row.get('DETRACCIÓN', 0))
+            
+            line = f"Doc: {doc} | Venc: {venc} | Importe: {sim} {imp:,.2f} | Saldo: {sim} {sal:,.2f}"
+            if det > 0:
+                line += f" | Detracción: S/ {det:,.2f}"
+        except:
+            line = f"Doc: {doc} | Venc: {venc} | Saldo: {row.get('SALDO', '')}"
+            
+        text += line + "\n"
+        
+    text += "-" * 60 + "\n"
+    text += f"TOTAL PENDIENTE: {total_s}   {total_d}\n\n"
+    text += f"{footer}\n\n"
+    text += "Nota: Este correo contiene elementos gráficos. Si no los ve, habilite el contenido HTML.\n"
+    
+    return text
 
 def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None):
     """
@@ -277,14 +319,28 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
         for i, msg_data in enumerate(messages):
             try:
                 # Crear Mensaje
-                msg = MIMEMultipart('related') # Cambiado a related para adjuntos inline
+                msg = MIMEMultipart('related') 
                 msg['From'] = smtp_config['user']
                 msg['To'] = msg_data['email']
                 msg['Subject'] = msg_data['subject']
+                msg['Reply-To'] = smtp_config['user'] # Buena práctica anti-spam
                 
-                # Cuerpo HTML
+                # Estructura MIME:
+                # related
+                #   |-- alternative
+                #        |-- plain text
+                #        |-- html
+                #   |-- logo image (inline)
+
                 msg_alternative = MIMEMultipart('alternative')
                 msg.attach(msg_alternative)
+                
+                # 1. Plain Text (Primero, para clientes viejos/filtros)
+                # Si no se pasó texto plano, generar uno básico genérico, pero idealmente debe pasarse
+                plain_text = msg_data.get('plain_body', 'Por favor habilite HTML para ver este mensaje.')
+                msg_alternative.attach(MIMEText(plain_text, 'plain'))
+                
+                # 2. HTML (Segundo, preferido)
                 msg_alternative.attach(MIMEText(msg_data['html_body'], 'html'))
                 
                 # Adjuntar Logo Inline (si existe)

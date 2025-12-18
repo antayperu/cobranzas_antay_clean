@@ -60,7 +60,12 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
         - **Sidebar Profesional**: Logo y carga compacta.
         - **Configuración Persistente**: Ajustes de color, toggles de funcionalidad y templates.
         - **Email Premium**: Vista previa individual y **Responsividad Móvil (Cartas)**.
+        - **Email Premium**: Vista previa individual y **Responsividad Móvil (Cartas)**.
         - Corrección de bugs (Iconos fantasma, validación de encabezados).
+    - **v4.2 (Email Deliverability & UX)**:
+        - **Anti-Spam**: Implementación de `multipart/alternative` (Texto Plano + HTML) y headers correctos.
+        - **UI Mejorada**: Selector con desglose de moneda `S/ | $` y Dashboard de Resumen previo al envío.
+        - **Correcciones**: Fix `st.rerun`, selección masiva con callback seguro, y visibilidad de métricas largas.
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.
