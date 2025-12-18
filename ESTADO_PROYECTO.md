@@ -66,6 +66,10 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
         - **Anti-Spam**: Implementación de `multipart/alternative` (Texto Plano + HTML) y headers correctos.
         - **UI Mejorada**: Selector con desglose de moneda `S/ | $` y Dashboard de Resumen previo al envío.
         - **Correcciones**: Fix `st.rerun`, selección masiva con callback seguro, y visibilidad de métricas largas.
+    - **v4.3 (Filtros Profesionales & KPIs Multi-Moneda)**:
+        - **Diseño de Filtros "Stacked"**: Multiselección de Empresa a ancho completo para evitar problemas de layout, y filtros secundarios organizados en grid.
+        - **Lógica de Filtrado**: Incorporación de filtro "Tipo Pedido" (Multi-select) y eliminación de filtros ocultos en backend.
+        - **KPIs Inteligentes**: Tarjetas de resumen y conteo de documentos con desglose explicito por moneda (`S/` y `$`).
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.

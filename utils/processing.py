@@ -71,13 +71,10 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     else:
         raise ValueError("Columna 'codcli' no encontrada en CtasxCobrar")
     
-    # --- FILTRO 1: Remover 'tipped' == 'PAV' ---
-    if 'tipped' in df_ctas.columns:
-        # Normalizar para asegurar consistencia
-        df_ctas = df_ctas[df_ctas['tipped'].astype(str).str.strip().str.upper() != 'PAV'].copy()
-    else:
-        # Si no existe la columna, ¿advertir? Asumimos que continua sin filtrar para no romper.
-        pass
+    # --- FILTRO 1: Remover 'tipped' == 'PAV' (ELIMINADO v4.2 - Control en Frontend) ---
+    # if 'tipped' in df_ctas.columns:
+    #     df_ctas = df_ctas[df_ctas['tipped'].astype(str).str.strip().str.upper() != 'PAV'].copy()
+    pass
 
     # Buscar columna en Cartera (codigo_cliente o codcli)
     col_cartera_key = 'codigo_cliente'

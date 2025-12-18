@@ -143,30 +143,40 @@ if st.session_state['data_ready']:
     with tab_map["Reporte General"]:
         st.subheader("Reporte General")
     
-        # Filtros
         if not df_final.empty:
-            col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-            
-            # Filtro Empresa
-            empresas = ["Todos"] + sorted(df_final['EMPRESA'].astype(str).unique().tolist())
-            sel_empresa = col_f1.selectbox("Filtrar por Empresa", empresas)
+            # --- DISEÑO DE FILTROS V4.3 (Profesional Stacked) ---
+            # Fila 1: Filtro Principal (Empresa) - Full Width para evitar desalineación visual
+            # Esto permite que el multiselect crezca hacia abajo sin romper la fila de selectbox
+            st.markdown("###### 🏢 Filtro Principal")
+            empresas = sorted(df_final['EMPRESA'].astype(str).unique().tolist())
+            sel_empresa = st.multiselect(
+                "Seleccione Empresa(s)", 
+                empresas, 
+                default=[], 
+                placeholder="Todas las empresas (Seleccione para filtrar...)"
+            )
+
+            # Fila 2: Filtros Secundarios (Grid limpio)
+            # st.markdown("###### 🔍 Filtros Detallados")
+            col_f1, col_f2, col_f3 = st.columns(3)
             
             # Filtro Estado Detraccion
             estados_dt = ["Todos"] + sorted(df_final['ESTADO DETRACCION'].astype(str).unique().tolist())
-            sel_estado = col_f2.selectbox("Estado Detracción", estados_dt)
+            sel_estado = col_f1.selectbox("Estado Detracción", estados_dt)
             
             # Filtro Moneda
             monedas = ["Todos"] + sorted(df_final['MONEDA'].astype(str).unique().tolist())
-            sel_moneda = col_f3.selectbox("Moneda", monedas)
+            sel_moneda = col_f2.selectbox("Moneda", monedas)
             
             # Buscador Global
-            search_term = col_f4.text_input("Buscar")
+            search_term = col_f3.text_input("Buscar Documento/Monto")
             
             # Aplicar filtros
             df_filtered = df_final.copy()
             
-            if sel_empresa != "Todos":
-                df_filtered = df_filtered[df_filtered['EMPRESA'].astype(str) == sel_empresa]
+            if sel_empresa:
+                df_filtered = df_filtered[df_filtered['EMPRESA'].astype(str).isin(sel_empresa)]
+
             if sel_estado != "Todos":
                 df_filtered = df_filtered[df_filtered['ESTADO DETRACCION'].astype(str) == sel_estado]
             if sel_moneda != "Todos":
@@ -176,19 +186,30 @@ if st.session_state['data_ready']:
                 mask = df_filtered.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
                 df_filtered = df_filtered[mask]
             
-            # --- FILTROS AVANZADOS ("Lo que ves es lo que es") ---
-            with st.expander("Filtros Avanzados (Saldo Real)", expanded=False):
-                c_fil1, c_fil2 = st.columns(2)
-                with c_fil1:
+            # --- FILTROS AVANZADOS (Tipo Pedido & Saldo) ---
+            with st.expander("⚙️ Filtros Avanzados (Tipo Pedido & Saldo Real)", expanded=False):
+                # Layout interno del expander
+                c_adv1, c_adv2, c_adv3 = st.columns([2, 1, 1])
+                
+                with c_adv1:
+                    # Filtro TIPO PEDIDO
+                    tipos_pedido = sorted(df_final['TIPO PEDIDO'].astype(str).unique().tolist())
+                    default_tipos = [t for t in tipos_pedido if t not in ['PAV', 'DSP']]
+                    sel_tipo_pedido = st.multiselect("Tipo Pedido", tipos_pedido, default=default_tipos)
+                
+                with c_adv2:
                     opcion_saldo = st.selectbox(
                         "Condición Saldo Real", 
                         ["Todos", "Mayor que", "Mayor o igual que", "Menor que", "Menor o igual que", "Igual a"],
-                        index=0 # Default: Todos
+                        index=0
                     )
-                with c_fil2:
+                with c_adv3:
                     monto_ref = st.number_input("Monto Referencia", value=0.0, step=10.0)
                 
-                # Aplicar filtro
+                # Aplicar Filtros Avanzados
+                if sel_tipo_pedido:
+                    df_filtered = df_filtered[df_filtered['TIPO PEDIDO'].astype(str).isin(sel_tipo_pedido)]
+                
                 if opcion_saldo == "Mayor que":
                     df_filtered = df_filtered[df_filtered['SALDO REAL'] > monto_ref]
                 elif opcion_saldo == "Mayor o igual que":
@@ -200,18 +221,65 @@ if st.session_state['data_ready']:
                 elif opcion_saldo == "Igual a":
                     df_filtered = df_filtered[df_filtered['SALDO REAL'] == monto_ref]
             
-            # Métricas Resumen (KPIs Actualizados)
-            m1, m2, m3, m4 = st.columns(4)
-            total_saldo = df_filtered['SALDO'].sum()
-            total_detra = df_filtered['DETRACCIÓN'].sum()
-            total_real = df_filtered['SALDO REAL'].sum()
-            count_docs = len(df_filtered)
+            # --- KPI DASHBOARD (Separación de Monedas & Conteo) ---
+            # Calcular totales separados
+            def safe_sum(df, col): return df[col].sum() if col in df.columns else 0.0
             
-            m1.metric("Total Saldo", f"S/ {total_saldo:,.2f}")
-            m2.metric("Total Detracción", f"S/ {total_detra:,.2f}")
-            m3.metric("Total Saldo Real", f"S/ {total_real:,.2f}")
-            m4.metric("Documentos", f"{count_docs}")
+            df_sol = df_filtered[df_filtered['MONEDA'].str.contains('S', na=False)]
+            df_dol = df_filtered[df_filtered['MONEDA'].str.contains('US', na=False)]
             
+            # Totales Soles
+            t_sal_s = safe_sum(df_sol, 'SALDO')
+            t_det_s = safe_sum(df_sol, 'DETRACCIÓN')
+            t_real_s = safe_sum(df_sol, 'SALDO REAL')
+            count_s = len(df_sol)
+            
+            # Totales Dólares
+            t_sal_d = safe_sum(df_dol, 'SALDO')
+            t_det_d = safe_sum(df_dol, 'DETRACCIÓN')
+            t_real_d = safe_sum(df_dol, 'SALDO REAL')
+            count_d = len(df_dol)
+            
+            # Renderizar KPIs Custom
+            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+            
+            def kpi_card(label, val_s, val_d, color="#2E86AB", is_currency=True):
+                if is_currency:
+                    val_s_str = f"S/ {val_s:,.2f}" if val_s != 0 else "-"
+                    val_d_str = f"$ {val_d:,.2f}" if val_d != 0 else "-"
+                    # Highlight logic
+                    if val_s == 0 and val_d == 0: val_s_str = "S/ 0.00"
+                else:
+                    # Formato Conteo
+                    val_s_str = f"{int(val_s)} docs (S/)" if val_s > 0 else "-"
+                    val_str_join = []
+                    if val_s > 0: val_str_join.append(f"{int(val_s)} (S/)")
+                    if val_d > 0: val_str_join.append(f"{int(val_d)} ($)")
+                    
+                    if not val_str_join:
+                        val_s_str = "0"
+                        val_d_str = ""
+                    elif len(val_str_join) == 1:
+                        val_s_str = val_str_join[0]
+                        val_d_str = ""
+                    else:
+                        val_s_str = val_str_join[0]
+                        val_d_str = val_str_join[1]
+
+                html = f"""
+                <div style="background:#fff; border-left:4px solid {color}; padding:10px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.05); min-height:80px;">
+                    <div style="font-size:12px; color:#666; font-weight:bold;">{label}</div>
+                    <div style="font-size:16px; color:#333; font-weight:bold; margin-top:5px;">{val_s_str}</div>
+                    <div style="font-size:14px; color:#555;">{val_d_str}</div>
+                </div>
+                """
+                return html
+
+            with kpi1: st.markdown(kpi_card("Total Saldo", t_sal_s, t_sal_d, "#17a2b8"), unsafe_allow_html=True)
+            with kpi2: st.markdown(kpi_card("Total Detracción", t_det_s, t_det_d, "#dc3545"), unsafe_allow_html=True)
+            with kpi3: st.markdown(kpi_card("Total Saldo Real", t_real_s, t_real_d, "#28a745"), unsafe_allow_html=True)
+            with kpi4: st.markdown(kpi_card("Documentos", count_s, count_d, "#6c757d", is_currency=False), unsafe_allow_html=True)
+
             st.markdown("<br>", unsafe_allow_html=True)
             
             # --- FIX INDICE DINAMICO (Empieza en 1) ---
@@ -486,14 +554,6 @@ if st.session_state['data_ready']:
     with tab_map["5. Notificaciones Email"]:
         st.subheader("Gestión de Correos")
         
-        with st.expander("Configuración del Servidor de Correo (SMTP)", expanded=True):
-            st.info("ℹ️ **Nota para Gmail**: Debes usar una **Contraseña de Aplicación**, no tu clave normal. [Ver Guía Google](https://support.google.com/accounts/answer/185833)")
-            cols_smtp = st.columns(4)
-            smtp_server = cols_smtp[0].text_input("Servidor SMTP", value=CONFIG['smtp_config']['server'])
-            smtp_port = cols_smtp[1].text_input("Puerto", value=CONFIG['smtp_config']['port'])
-            email_user = cols_smtp[2].text_input("Tu Correo", value=CONFIG['smtp_config']['user'])
-            email_pass = cols_smtp[3].text_input("Contraseña App", value=CONFIG['smtp_config']['password'], type="password", help="Usa Contraseña de Aplicación si es Gmail")
-        
         if not df_filtered.empty:
             c_mail1, c_mail2 = st.columns([1, 1])
             
@@ -652,8 +712,13 @@ if st.session_state['data_ready']:
                     
                     st.markdown("---")
                     if st.button("Enviar Correos Masivos", type="primary"):
+                        # Credenciales ahora vienen de CONFIG global
+                        smtp_cfg = CONFIG.get('smtp_config', {})
+                        email_user = smtp_cfg.get('user', '')
+                        email_pass = smtp_cfg.get('password', '')
+
                         if not email_user or not email_pass:
-                            st.error("❌ Faltan credenciales SMTP.")
+                             st.error("❌ Faltan credenciales SMTP. Configúralas en la pestaña 'Configuración'.")
                         else:
                             messages_to_send = []
                             for lbl in sel_emails:
@@ -672,7 +737,8 @@ if st.session_state['data_ready']:
                                 plain_body = es.generate_plain_text_body(info['empresa'], d_cli, str_s, str_d, CONFIG)
                                 
                                 # Asunto Profesional Anti-Spam
-                                subject_line = f"Estado de Cuenta y Documentos Pendientes - {info['empresa']}"
+                                company_sender = CONFIG.get('company_name', 'DACTA S.A.C.')
+                                subject_line = f"Estado de Cuenta {company_sender} | Cliente: {info['empresa']}"
                                 
                                 messages_to_send.append({
                                     'email': info['email'],
@@ -683,8 +749,8 @@ if st.session_state['data_ready']:
                                 })
                             
                             smtp_cfg = {
-                                'server': smtp_server,
-                                'port': smtp_port,
+                                'server': CONFIG.get('smtp_config', {}).get('server', 'smtp.gmail.com'),
+                                'port': CONFIG.get('smtp_config', {}).get('port', 587),
                                 'user': email_user,
                                 'password': email_pass
                             }
@@ -703,24 +769,7 @@ if st.session_state['data_ready']:
                                 for l in res['log']:
                                     st.text(l)
                                     if "535" in l:
-                                        st.error("""
-                                        ❌ **Error de Autenticación (535) Detectado**
-
-                                        Google bloqueó el inicio de sesión.
-                                        
-                                        **Si usas correo corporativo (@tuempresa.com):**
-                                        Es probable que el administrador haya desactivado el acceso.
-                                        1. Entra a **admin.google.com** (como Administrador).
-                                        2. Ve a **Seguridad > Autenticación > Verificación en 2 pasos**.
-                                        3. **Permite** que los usuarios la activen.
-                                        4. Luego, el usuario debe activar la verificación en su cuenta para ver la opción "Contraseñas de Aplicación".
-
-                                        **Si usas Gmail personal:**
-                                        1. Ve a tu cuenta > Seguridad > Activa "Verificación en 2 pasos".
-                                        2. Genera una "Contraseña de Aplicación".
-                                        
-                                        [Ver Guía Oficial](https://support.google.com/accounts/answer/185833)
-                                        """)
+                                        st.error("Error 535: Revisa tu contraseña de aplicación de Gmail.")
                 else:
                     st.info("Selecciona un cliente para ver la vista previa.")
 
@@ -755,6 +804,14 @@ if st.session_state['data_ready']:
                 st.markdown("---")
                 st.subheader("Configuración de Correo (SMTP)")
                 st.info("Credenciales para el envío de correos masivos.")
+                st.markdown("""
+                > **Nota Importante para Gmail:**  
+                > Debes usar una **Contraseña de Aplicación**, no tu clave normal.  
+                > 1. Ve a tu Cuenta de Google > Seguridad.  
+                > 2. Activa la Verificación en 2 pasos.  
+                > 3. Busca "Contraseñas de aplicaciones" y genera una nueva.  
+                > [Ver Guía Oficial de Google](https://support.google.com/accounts/answer/185833)
+                """)
                 new_smtp_server = st.text_input("Servidor SMTP", value=CONFIG['smtp_config']['server'])
                 new_smtp_port = st.text_input("Puerto SMTP", value=CONFIG['smtp_config']['port'])
                 new_smtp_user = st.text_input("Usuario (Correo)", value=CONFIG['smtp_config']['user'])

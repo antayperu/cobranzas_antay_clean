@@ -3,6 +3,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 from datetime import datetime
+from email.utils import make_msgid, formatdate
 import pandas as pd
 
 # Colores Branding
@@ -30,10 +31,9 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     INTRO_TEXT = TEMPLATE.get('intro_text', '').replace('{cliente}', client_name).replace('\n', '<br>')
     FOOTER_TEXT = TEMPLATE.get('footer_text', '').replace('\n', '<br>')
     ALERT_TEXT = TEMPLATE.get('alert_text', '')
-    table_rows = ""
+    html_rows = ""
     for _, row in docs_df.iterrows():
-        # Formatear valores para la vista tabla
-        # Asumimos que vienen ya formateados o los formateamos aqui
+        # Formatear valores
         moneda = row.get('MONEDA', '')
         simbolo = "S/" if str(moneda).upper().startswith('S') else "$"
         
@@ -41,9 +41,17 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         saldo = row.get('SALDO REAL', 0)
         detraccion = row.get('DETRACCIÓN', 0)
         
+        # Lógica Estado Detracción
+        estado_dt_raw = str(row.get('ESTADO DETRACCION', ''))
+        if estado_dt_raw.upper() == "NO APLICA":
+            estado_dt_val = "No aplica"
+        elif estado_dt_raw.upper() == "PENDIENTE":
+            estado_dt_val = "Pendiente"
+        else:
+            estado_dt_val = "Cobrado"
+        
         # Formato numérico visual
         try:
-             # Si ya es string (del display), usarlo, sino formatear
              if isinstance(monto_total, str) and ("S/" in monto_total or "$" in monto_total):
                  m_total = monto_total
              else:
@@ -71,10 +79,12 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
             f_emis = str(row.get('FECH EMIS'))
             f_venc = str(row.get('FECH VENC'))
 
-        # Estilo Detraccion (Alerta si hay)
+        # Estilo Detraccion
         style_det = "color: #d9534f; font-weight: bold;" if detraccion > 0 else "color: #ccc;"
+        if estado_dt_val == "Cobrado":
+             style_det = "color: #28a745; font-weight: bold;" # Verde si está cobrado
 
-        table_rows += f"""
+        html_rows += f"""
         <tr>
             <td style="padding: 10px; border-bottom: 1px solid #ddd;">
                 <span class="mobile-label">Documento:</span>
@@ -88,10 +98,6 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                 <span class="mobile-label">Vencimiento:</span>
                 {f_venc}
             </td>
-            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">
-                <span class="mobile-label">Moneda:</span>
-                {moneda}
-            </td>
             <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right;">
                 <span class="mobile-label">Importe:</span>
                 {m_total}
@@ -100,9 +106,13 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                 <span class="mobile-label">Saldo:</span>
                 {m_saldo}
             </td>
-            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right; {style_det} font-size: 0.9em;">
-                <span class="mobile-label">Detracción:</span>
-                {m_detr}
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right;">
+                 <span class="mobile-label">Detracción:</span>
+                 {m_detr}
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center; {style_det} font-size: 0.9em;">
+                <span class="mobile-label">Estado:</span>
+                {estado_dt_val}
             </td>
         </tr>
         """
@@ -202,7 +212,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                 <div class="greeting">Estimados <strong>{client_name}</strong>,</div>
                 
                 <div class="header-msg">
-                    Notificación de {COMPANY_NAME}
+                    Estado de Cuenta
                 </div>
 
                 <div class="message">
@@ -220,14 +230,14 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                                 <th>Documento</th>
                                 <th>Emisión</th>
                                 <th>Vencimiento</th>
-                                <th>Mon</th>
                                 <th style="text-align: right;">Importe</th>
                                 <th style="text-align: right;">Saldo</th>
                                 <th style="text-align: right;">Detracción</th>
+                                <th style="text-align: center;">Estado Detr.</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {table_rows}
+                            {html_rows}
                         </tbody>
                     </table>
                 </div>
@@ -254,8 +264,6 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     """
     return html_content
 
-    return html_content
-
 def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_config):
     """
     Genera versión texto plano para reducir puntaje de spam.
@@ -267,30 +275,42 @@ def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_co
     text = f"Estimados {client_name},\n\n"
     text += f"Notificación de {company_name}\n\n"
     text += f"{intro}\n\n"
-    text += "DETALLE DE DOCUMENTOS PENDIENTES:\n"
-    text += "-" * 60 + "\n"
+    text += f"{'DOC':<15} | {'VENC':<10} | {'IMPORTE':>13} | {'SALDO':>13} | {'DETRAC.':>10} | {'ESTADO':<10}\n"
+    text += "-" * 95 + "\n"
     
     for _, row in docs_df.iterrows():
         doc = row.get('COMPROBANTE', '')
         venc = str(row.get('FECH VENC', ''))
-        
+        # Limpieza de fecha: 00:00:00
+        if " " in venc:
+            venc = venc.split(" ")[0]
+            
         mon = row.get('MONEDA', '')
         sim = "S/" if str(mon).upper().startswith('S') else "$"
+        
+        # Lógica Estado Detracción
+        estado_dt_raw = str(row.get('ESTADO DETRACCION', ''))
+        if estado_dt_raw.upper() == "NO APLICA":
+            estado_dt_val = "No aplica"
+        elif estado_dt_raw.upper() == "PENDIENTE":
+            estado_dt_val = "Pendiente"
+        else:
+            estado_dt_val = "Cobrado"
         
         try:
             imp = float(row.get('MONT EMIT', 0))
             sal = float(row.get('SALDO REAL', 0))
             det = float(row.get('DETRACCIÓN', 0))
             
-            line = f"Doc: {doc} | Venc: {venc} | Importe: {sim} {imp:,.2f} | Saldo: {sim} {sal:,.2f}"
-            if det > 0:
-                line += f" | Detracción: S/ {det:,.2f}"
+            str_det = f"S/ {det:,.2f}" if det > 0 else "-"
+            
+            line = f"{doc:<15} | {venc:<10} | {sim} {imp:>9,.2f} | {sim} {sal:>9,.2f} | {str_det:>10} | {estado_dt_val:<10}"
         except:
-            line = f"Doc: {doc} | Venc: {venc} | Saldo: {row.get('SALDO', '')}"
+             line = f"{doc:<15} | {venc:<10} | {row.get('MONT EMIT', ''):>13} | {row.get('SALDO REAL', ''):>13} | {'-':>10} | {estado_dt_val:<10}"
             
         text += line + "\n"
         
-    text += "-" * 60 + "\n"
+    text += "-" * 95 + "\n"
     text += f"TOTAL PENDIENTE: {total_s}   {total_d}\n\n"
     text += f"{footer}\n\n"
     text += "Nota: Este correo contiene elementos gráficos. Si no los ve, habilite el contenido HTML.\n"
@@ -323,7 +343,9 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 msg['From'] = smtp_config['user']
                 msg['To'] = msg_data['email']
                 msg['Subject'] = msg_data['subject']
-                msg['Reply-To'] = smtp_config['user'] # Buena práctica anti-spam
+                msg['Reply-To'] = smtp_config['user']
+                msg['Date'] = formatdate(localtime=True)
+                msg['Message-ID'] = make_msgid(domain=smtp_config['user'].split('@')[-1])
                 
                 # Estructura MIME:
                 # related
