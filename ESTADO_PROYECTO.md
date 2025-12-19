@@ -7,8 +7,10 @@
 ## 🎯 Objetivo
 Construir una aplicación web en Streamlit para consolidar reportes de cobranza, calcular detracciones y generar enlaces de WhatsApp masivos.
 
+
 ## 📌 Preferencias del Proyecto
-- **Idioma**: Toda la comunicación y documentación debe ser en **Español**.
+- **Idioma**: Toda la comunicación, planes y documentación deben ser estrictamente en **Español**.
+- **UX**: Priorizar diseños premium y explicaciones claras.
 
 ## 📝 Planificación y Estado
 
