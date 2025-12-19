@@ -245,86 +245,129 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                      else:
                              raise Exception("Timeout cargando chat")
 
-                # ESTRATEGIA: IMAGEN
+                # ESTRATEGIA: ENVIAR COMO IMAGEN (Inyección Directa)
+                # Inyectar directamente en el input de fotos sin clicks
                 if img_path and os.path.exists(img_path):
-                    sent_image = False
-                    
-                    # 1. INTENTO: COPY & PASTE (Prioridad Usuario)
                     try:
-                        add_log("    📋 Intentando Pegar (Ctrl+V)...")
-                        if copy_image_to_clipboard(img_path):
+                        # Buscar TODOS los inputs de archivo
+                        file_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
+                        
+                        if not file_inputs:
+                            raise Exception("No se encontraron inputs de archivo")
+                        
+                        # Usar el PRIMER input (generalmente fotos/imágenes)
+                        # El primer input suele ser para fotos, el último para documentos
+                        photo_input = file_inputs[0]
+                        
+                        # Inyectar la imagen directamente
+                        abs_path = os.path.abspath(img_path)
+                        photo_input.send_keys(abs_path)
+                        time.sleep(3)  # Esperar carga de preview
+
+
+                        
+                        # 3. Esperar Vista Previa y Botón de Envío (MEJORADO)
+                        # Múltiples selectores para el botón de envío
+                        send_btn_selectors = [
+                            '//span[@data-icon="send"]',
+                            '//button[@aria-label="Send"]',
+                            '//button[@aria-label="Enviar"]',
+                            '//div[@role="button"][@aria-label="Send"]',
+                            '//div[@role="button"][@aria-label="Enviar"]',
+                            '//span[@data-testid="send"]',
+                            '//button[contains(@class, "send")]'
+                        ]
+                        
+                        send_button = None
+                        
+                        # Esperar con polling más corto (8 segundos máximo para documentos)
+                        for attempt in range(16):  # 16 intentos x 0.5s = 8s
+                            for selector in send_btn_selectors:
+                                try:
+                                    send_button = driver.find_element(By.XPATH, selector)
+                                    if send_button and send_button.is_displayed():
+                                        break
+                                except:
+                                    continue
+                            
+                            if send_button:
+                                break
+                            
                             time.sleep(0.5)
-                            # Click en background o input para foco
+                        
+                        if not send_button:
+                            raise Exception("No se encontró el botón de envío después de cargar la imagen")
+                        
+                        # 4. Agregar Caption (Mensaje de texto)
+                        try:
+                            # Esperar un poco más para que aparezca el cuadro de caption
+                            time.sleep(1)
+                            
+                            # Múltiples selectores para el cuadro de caption
+                            caption_selectors = [
+                                '//div[@contenteditable="true"][@data-tab="10"]',
+                                '//div[@contenteditable="true"][@role="textbox"]',
+                                '//div[contains(@class, "copyable-text")][@contenteditable="true"]',
+                                '//div[@aria-placeholder][@contenteditable="true"]',
+                                '//div[@data-lexical-editor="true"]'
+                            ]
+                            
+                            caption_box = None
+                            for selector in caption_selectors:
+                                try:
+                                    caption_box = driver.find_element(By.XPATH, selector)
+                                    if caption_box and caption_box.is_displayed():
+                                        break
+                                except:
+                                    continue
+                            
+                            if caption_box:
+                                # Agregar el mensaje usando pyperclip
+                                import pyperclip
+                                pyperclip.copy(final_msg)
+                                caption_box.click()
+                                time.sleep(0.3)
+                                caption_box.send_keys(Keys.CONTROL, "v")
+                                time.sleep(0.5)
+                            
+                            # Click en botón de envío
+                            send_button.click()
+                            add_log(f"    ✅ Enviado a {nombre}")
+                            exitosos += 1
+                            time.sleep(2)
+
+                        except Exception as e_cap:
+                            # Si falla agregar caption, intentar enviar solo imagen
                             try:
-                                driver.find_element(By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]').click()
-                            except: pass
+                                send_button.click()
+                                add_log(f"    ✅ Enviado a {nombre} (sin descripción)")
+                                exitosos += 1
+                                time.sleep(2)
+                            except:
+                                raise Exception(f"Error al enviar: {e_cap}")
+
+
+                    except Exception as e_img:
+                        # FALLBACK CRÍTICO: Enviar solo texto si falla imagen
+                        try:
+                            inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
+                            input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
                             
-                            # ActionChains Paste Global
-                            actions = ActionChains(driver)
-                            actions.key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                            import pyperclip
+                            pyperclip.copy(final_msg)
+                            input_box.click()
+                            input_box.send_keys(Keys.CONTROL, "v")
+                            time.sleep(1)
+                            input_box.send_keys(Keys.ENTER)
                             
-                            add_log("    ⏳ Esperando vista previa...")
-                            send_btn_xpath = '//span[@data-icon="send"]'
-                            wait.until(EC.presence_of_element_located((By.XPATH, send_btn_xpath)))
-                            sent_image = True
-                            add_log("    ✅ Imagen pegada correctamente.")
-                    except Exception as e_paste:
-                        add_log(f"    ⚠️ Falló pegar ({e_paste}). Intentando método tradicional...")
+                            add_log(f"    ✅ Enviado a {nombre} (solo texto)")
+                            exitosos += 1
+                            time.sleep(2)
+                        except Exception as e_fallback:
+                            add_log(f"    ❌ Error enviando a {nombre}")
+                            errores.append(f"{nombre}: No se pudo enviar")
+                            fallidos += 1
 
-                    # 2. INTENTO: ADJUNTAR (Fallback)
-                    if not sent_image:
-                         add_log("    📎 Usando método Adjuntar Archivo...")
-                         try:
-                             # Buscar '+'
-                             plus_xpaths = ['//div[@title="Adjuntar"]', '//span[@data-icon="plus"]', '//div[@aria-label="Adjuntar"]']
-                             for xp in plus_xpaths:
-                                 try:
-                                     driver.find_element(By.XPATH, xp).click()
-                                     time.sleep(0.5)
-                                     break
-                                 except: continue
-                             
-                             # Input File
-                             # Buscar input type file (suele estar presente pero oculto si no se da click al mas, a veces funciona igual)
-                             file_input = driver.find_element(By.CSS_SELECTOR, "input[type='file']")
-                             file_input.send_keys(os.path.abspath(img_path))
-                             
-                             # Wait Preview
-                             wait.until(EC.presence_of_element_located((By.XPATH, '//span[@data-icon="send"]')))
-                             sent_image = True
-                         except Exception as e_attach:
-                             add_log(f"    ❌ Falló adjuntar: {e_attach}")
-                             raise e_attach
-
-                    # 3. CAPTION & SEND
-                    try:
-                        add_log("    📝 Escribiendo caption...")
-                        import pyperclip
-                        pyperclip.copy(final_msg)
-                        
-                        # Pegar caption
-                        actions = ActionChains(driver)
-                        actions.key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
-                        time.sleep(1)
-                        actions.send_keys(Keys.ENTER).perform() # Enviar con Enter
-                        
-                        # Doble check por si el enter no funcionó (a veces pasa en modo caption)
-                        time.sleep(2)
-                        send_btns = driver.find_elements(By.XPATH, '//span[@data-icon="send"]')
-                        if send_btns:
-                             send_btns[0].click()
-
-                        add_log("    ✅ Enviado.")
-                        exitosos += 1
-                        time.sleep(3)
-                        
-                    except Exception as e_cap:
-                         try:
-                             driver.find_element(By.XPATH, '//span[@data-icon="send"]').click()
-                             exitosos += 1
-                             add_log("    ✅ Enviado (Click Fallback).")
-                         except:
-                             add_log(f"    ⚠️ Error final caption: {e_cap}")
                 
                 # ENVÍO SOLO TEXTO (Fallback o Standard)
                 else:

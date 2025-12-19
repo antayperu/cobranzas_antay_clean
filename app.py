@@ -434,6 +434,19 @@ if st.session_state['data_ready']:
                 if selected_labels:
                     st.markdown("##### Vista Previa")
                     
+                    # SOLUCIÓN 1: Cargar logo en scope global (antes del loop)
+                    # Esto garantiza que logo_b64 esté disponible tanto para preview como para envío
+                    import base64
+                    import os
+                    logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
+                    logo_b64 = ""
+                    if os.path.exists(logo_path):
+                        try:
+                            with open(logo_path, "rb") as img_file:
+                                logo_b64 = base64.b64encode(img_file.read()).decode()
+                        except:
+                            pass
+                    
                     for label in selected_labels:
                         cod_cli = client_map[label]
                         docs_cli = df_filtered[df_filtered['COD CLIENTE'] == cod_cli]
@@ -531,22 +544,114 @@ if st.session_state['data_ready']:
                         with st.expander(f"📨 {empresa} ({telefono})", expanded=False):
                             # --- v4.4 PREMIUM PREVIEW (Dynamic Branding) ---
                             import streamlit.components.v1 as components
-                            import base64
-                            import os
-
-                            # 1. Logos & Colors
-                            logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
-                            logo_b64 = ""
-                            if os.path.exists(logo_path):
-                                try:
-                                    with open(logo_path, "rb") as img_file:
-                                        logo_b64 = base64.b64encode(img_file.read()).decode()
-                                except:
-                                    pass
                             
+                            # 1. Colors (logo_b64 ya está cargado en scope global)
                             primary_col = CONFIG.get('primary_color', '#007bff')
                             secondary_col = CONFIG.get('secondary_color', '#00d4ff')
                             
+                            # --- HELPER FUNCTION: CREATE CARD HTML ---
+                            def create_whatsapp_card_html(content_html, p_col, s_col, logo_data_b64):
+                                img_tag_html = ""
+                                if logo_data_b64:
+                                    img_tag_html = f'<img src="data:image/png;base64,{logo_data_b64}" class="wa-logo" alt="Logo"/>'
+                                
+                                return f"""
+                                <html>
+                                <style>
+                                    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+                                    body {{ margin: 0; padding: 0; background: transparent; font-family: 'Roboto', sans-serif; }}
+                                    .wa-card {{
+                                        width: 400px; /* Fixed width for consistency */
+                                        max-width: 100%;
+                                        background: #ffffff;
+                                        border-radius: 12px;
+                                        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+                                        overflow: hidden;
+                                        margin: 10px auto;
+                                        border: 1px solid #e0e0e0;
+                                    }}
+                                    .wa-banner {{
+                                        background: linear-gradient(135deg, {p_col} 0%, {s_col} 100%);
+                                        min-height: 120px;
+                                        position: relative;
+                                        padding: 20px;
+                                        color: white;
+                                        display: flex;
+                                        flex-direction: column;
+                                        justify-content: center;
+                                        align-items: flex-start;
+                                    }}
+                                    .wa-banner::after {{
+                                        content: "";
+                                        position: absolute;
+                                        bottom: -20px;
+                                        left: 0;
+                                        width: 100%;
+                                        height: 40px;
+                                        background: #ffffff;
+                                        border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+                                        transform: scaleX(1.5);
+                                    }}
+                                    .wa-logo {{
+                                        max-height: 40px;
+                                        max-width: 120px;
+                                        object-fit: contain;
+                                        margin-bottom: 10px;
+                                        background: white;
+                                        padding: 5px 10px;
+                                        border-radius: 4px;
+                                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                                    }}
+                                    .wa-content {{
+                                        padding: 20px 25px 30px 25px;
+                                        color: #333;
+                                        font-size: 14px;
+                                        line-height: 1.5;
+                                    }}
+                                    .wa-title {{
+                                        font-size: 20px;
+                                        font-weight: 700;
+                                        margin-bottom: 2px;
+                                        z-index: 1;
+                                        text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                                    }}
+                                    .wa-subtitle {{
+                                        font-size: 13px;
+                                        opacity: 0.95;
+                                        z-index: 1;
+                                    }}
+                                    .wa-footer {{
+                                        margin-top: 20px;
+                                        padding-top: 15px;
+                                        border-top: 1px solid #f0f0f0;
+                                        font-size: 12px;
+                                        color: #666;
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 8px;
+                                    }}
+                                    .wa-icon {{ font-size: 16px; }}
+                                    b {{ color: #000; font-weight: 600; }}
+                                </style>
+                                <body>
+                                    <div class="wa-card" id="card">
+                                        <div class="wa-banner">
+                                            {img_tag_html}
+                                            <div class="wa-title">Importante</div>
+                                            <div class="wa-subtitle">Estado de Cuenta Digital</div>
+                                        </div>
+                                        <div class="wa-content">
+                                            {content_html}
+                                            <div class="wa-footer">
+                                                <span class="wa-icon">🤝</span>
+                                                <span>Estamos para ayudarte.</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </body>
+                                </html>
+                                """
+
                             # Simple Parser for Bold (*text*) to <b>text</b>
                             import re
                             def format_whatsapp_html(text):
@@ -554,118 +659,96 @@ if st.session_state['data_ready']:
                                 text_bold = re.sub(r'\*(.*?)\*', r'<b>\1</b>', text_safe)
                                 return text_bold.replace("\n", "<br>")
 
-                            html_msg = format_whatsapp_html(msg_preview)
+                            formatted_msg = format_whatsapp_html(msg_preview)
                             
-                            # Logo IMG Tag
-                            img_tag = ""
-                            if logo_b64:
-                                img_tag = f'<img src="data:image/png;base64,{logo_b64}" class="wa-logo" alt="Logo"/>'
-                            
-                            card_html = f"""
-                            <style>
-                                @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-                                .wa-card {{
-                                    font-family: 'Roboto', sans-serif;
-                                    max-width: 400px;
-                                    background: #ffffff;
-                                    border-radius: 12px;
-                                    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-                                    overflow: hidden;
-                                    margin: 10px auto;
-                                    border: 1px solid #e0e0e0;
-                                }}
-                                .wa-banner {{
-                                    background: linear-gradient(135deg, {primary_col} 0%, {secondary_col} 100%);
-                                    min-height: 120px; /* Flexible height */
-                                    position: relative;
-                                    padding: 20px;
-                                    color: white;
-                                    display: flex;
-                                    flex-direction: column;
-                                    justify-content: center;
-                                    align-items: flex-start;
-                                }}
-                                .wa-banner::after {{
-                                    content: "";
-                                    position: absolute;
-                                    bottom: -20px;
-                                    left: 0;
-                                    width: 100%;
-                                    height: 40px;
-                                    background: #ffffff;
-                                    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-                                    transform: scaleX(1.5);
-                                }}
-                                .wa-logo {{
-                                    max-height: 40px;
-                                    max-width: 120px;
-                                    object-fit: contain;
-                                    margin-bottom: 10px;
-                                    background: white;
-                                    padding: 5px 10px;
-                                    border-radius: 4px;
-                                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                                }}
-                                .wa-content {{
-                                    padding: 20px 25px 30px 25px;
-                                    color: #333;
-                                    font-size: 14px;
-                                    line-height: 1.5;
-                                }}
-                                .wa-title {{
-                                    font-size: 20px;
-                                    font-weight: 700;
-                                    margin-bottom: 2px;
-                                    z-index: 1;
-                                    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-                                }}
-                                .wa-subtitle {{
-                                    font-size: 13px;
-                                    opacity: 0.95;
-                                    z-index: 1;
-                                }}
-                                .wa-footer {{
-                                    margin-top: 20px;
-                                    padding-top: 15px;
-                                    border-top: 1px solid #f0f0f0;
-                                    font-size: 12px;
-                                    color: #666;
-                                    display: flex;
-                                    align-items: center;
-                                    gap: 8px;
-                                }}
-                                .wa-icon {{ font-size: 16px; }}
-                                b {{ color: #000; font-weight: 600; }}
-                            </style>
-                            
-                            <div class="wa-card">
-                                <div class="wa-banner">
-                                    {img_tag}
-                                    <div class="wa-title">Importante</div>
-                                    <div class="wa-subtitle">Estado de Cuenta Digital</div>
-                                </div>
-                                <div class="wa-content">
-                                    {html_msg}
-                                    
-                                    <div class="wa-footer">
-                                        <span class="wa-icon">🤝</span>
-                                        <span>Estamos para ayudarte.</span>
-                                    </div>
-                                </div>
-                            </div>
-                            """
+                            # GENERATE HTML PREVIEW USING SHARED FUNCTION
+                            card_html = create_whatsapp_card_html(formatted_msg, primary_col, secondary_col, logo_b64)
+
                             components.html(card_html, height=500, scrolling=True)
                             
-                            st.caption("ℹ️ **Nota**: Esta tarjeta es una visualización del contenido. Por ahora, WhatsApp enviará el **Texto Formateado** (Negritas y Emojis) de la sección inferior.")
-                            with st.popover("✏️ Editar Texto Raw"):
-                                st.text_area("Mensaje Original", value=msg_preview, height=200, key=f"edit_{cod_cli}")
+                            # OPTIMIZACIÓN: Generar imagen JPG AQUÍ (una sola vez) y guardarla
+                            # para reutilizarla al enviar, evitando regeneración
+                            if 'image_path' not in contact_data or not os.path.exists(contact_data.get('image_path', '')):
+                                try:
+                                    import tempfile
+                                    from selenium import webdriver
+                                    from selenium.webdriver.chrome.options import Options
+                                    from selenium.webdriver.chrome.service import Service
+                                    from webdriver_manager.chrome import ChromeDriverManager
+                                    from selenium.webdriver.support.ui import WebDriverWait
+                                    from selenium.webdriver.support import expected_conditions as EC
+                                    from selenium.webdriver.common.by import By
+                                    from PIL import Image
+                                    
+                                    # Crear driver headless temporal
+                                    chrome_opts = Options()
+                                    chrome_opts.add_argument("--headless")
+                                    chrome_opts.add_argument("--window-size=500,800")
+                                    chrome_opts.add_argument("--hide-scrollbars")
+                                    chrome_opts.add_argument("--disable-gpu")
+                                    
+                                    s_service = Service(ChromeDriverManager().install())
+                                    temp_driver = webdriver.Chrome(service=s_service, options=chrome_opts)
+                                    wait_driver = WebDriverWait(temp_driver, 10)
+                                    
+                                    # Guardar HTML temporal
+                                    t_html = tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode='w', encoding='utf-8')
+                                    t_html.write(card_html)
+                                    t_html.close()
+                                    
+                                    # Cargar y screenshot
+                                    temp_driver.get(f"file:///{t_html.name}")
+                                    card_elem = wait_driver.until(EC.presence_of_element_located((By.ID, "card")))
+                                    import time
+                                    time.sleep(1.5)
+                                    
+                                    # Screenshot PNG
+                                    t_png = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                                    t_png.close()
+                                    card_elem.screenshot(t_png.name)
+                                    
+                                    # Convertir a JPG VERTICAL (1080x1920)
+                                    image = Image.open(t_png.name).convert('RGB')
+                                    canvas_w, canvas_h = 1080, 1920  # VERTICAL
+                                    canvas = Image.new("RGB", (canvas_w, canvas_h), "#ffffff")
+                                    
+                                    target_w = int(canvas_w * 0.90)
+                                    ratio = target_w / float(image.width)
+                                    target_h = int(float(image.height) * ratio)
+                                    
+                                    if target_h > canvas_h * 0.90:
+                                        target_h = int(canvas_h * 0.90)
+                                        ratio = target_h / float(image.height)
+                                        target_w = int(float(image.width) * ratio)
+                                    
+                                    image_resized = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                                    pos_x = (canvas_w - target_w) // 2
+                                    pos_y = (canvas_h - target_h) // 2
+                                    canvas.paste(image_resized, (pos_x, pos_y))
+                                    
+                                    # Guardar JPG permanente
+                                    t_jpg = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+                                    t_jpg.close()
+                                    canvas.save(t_jpg.name, quality=95)
+                                    
+                                    # Guardar path en contact_data
+                                    contact_data['image_path'] = t_jpg.name
+                                    
+                                    # Limpiar temporales
+                                    try:
+                                        os.remove(t_html.name)
+                                        os.remove(t_png.name)
+                                    except:
+                                        pass
+                                    
+                                    temp_driver.quit()
+                                    
+                                except Exception as e_img:
+                                    st.warning(f"⚠️ No se pudo generar imagen para {empresa}: {str(e_img)}")
+                                    contact_data['image_path'] = None
                 
                 st.write("---")
-                col_send_1, col_send_2 = st.columns([1, 2])
                 
-                with col_send_1:
-                     send_as_image = st.checkbox("📸 Enviar como IMAGEN (Premium)", value=True, help="Envía la tarjeta diseñada como una imagen adjunta.")
-
                 # BOTON NUEVO: ENVIAR WHATSAPP (Selenium)
                 if st.button("Enviar Mensajes por WhatsApp", type="primary"):
                     from utils.whatsapp_sender import send_whatsapp_messages_direct
@@ -682,162 +765,116 @@ if st.session_state['data_ready']:
                         status_placeholder.info(f"{status} ({current}/{total})")
                         log_area.code(log_text)
                     
-                    # LOGICA DE GENERACION DE IMAGEN (Screenshot)
-                    if send_as_image:
-                        status_placeholder.warning("⏳ Generando imágenes de las tarjetas... (Esto puede demorar unos segundos)")
+                    # GENERACIÓN AUTOMÁTICA DE IMÁGENES (Batch eficiente)
+                    # Genera solo las que faltan, reutiliza las que ya existen
+                    status_placeholder.info("⏳ Preparando imágenes...")
+                    
+                    images_to_generate = [c for c in contacts_to_send if not c.get('image_path') or not os.path.exists(c.get('image_path', ''))]
+                    
+                    if images_to_generate:
+                        status_placeholder.warning(f"⏳ Generando {len(images_to_generate)} imágenes...")
+                        
                         from selenium import webdriver
                         from selenium.webdriver.chrome.options import Options
                         from selenium.webdriver.chrome.service import Service
                         from webdriver_manager.chrome import ChromeDriverManager
+                        from selenium.webdriver.support.ui import WebDriverWait
+                        from selenium.webdriver.support import expected_conditions as EC
+                        from selenium.webdriver.common.by import By
+                        from PIL import Image
+                        import time
                         
-                        chrome_options = Options()
-                        chrome_options.add_argument("--headless")
-                        chrome_options.add_argument("--window-size=500,800")
-                        chrome_options.add_argument("--hide-scrollbars")
-                        chrome_options.add_argument("--disable-gpu")
-
-                        # Intentar usar catch para evitar zombis
-                        screenshot_driver = None
+                        # Crear UN SOLO driver para todas las imágenes (eficiente)
+                        chrome_opts = Options()
+                        chrome_opts.add_argument("--headless")
+                        chrome_opts.add_argument("--window-size=500,800")
+                        chrome_opts.add_argument("--hide-scrollbars")
+                        chrome_opts.add_argument("--disable-gpu")
+                        
+                        s_service = Service(ChromeDriverManager().install())
+                        temp_driver = webdriver.Chrome(service=s_service, options=chrome_opts)
+                        wait_driver = WebDriverWait(temp_driver, 10)
+                        
                         try:
-                            s_service = Service(ChromeDriverManager().install())
-                            screenshot_driver = webdriver.Chrome(service=s_service, options=chrome_options)
+                            for idx, contact in enumerate(images_to_generate, 1):
+                                try:
+                                    empresa = contact.get('nombre_cliente', f'Cliente {idx}')
+                                    status_placeholder.info(f"⏳ Generando imagen {idx}/{len(images_to_generate)}: {empresa}")
+                                    
+                                    # Formatear mensaje
+                                    import re
+                                    def _fmt(text):
+                                        t = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                                        t = re.sub(r'\*(.*?)\*', r'<b>\1</b>', t)
+                                        return t.replace("\n", "<br>")
+                                    
+                                    _html_msg = _fmt(contact['mensaje'])
+                                    _p_col = CONFIG.get('primary_color', '#007bff')
+                                    _s_col = CONFIG.get('secondary_color', '#00d4ff')
+                                    card_html = create_whatsapp_card_html(_html_msg, _p_col, _s_col, logo_b64)
+                                    
+                                    # Guardar HTML temporal
+                                    t_html = tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode='w', encoding='utf-8')
+                                    t_html.write(card_html)
+                                    t_html.close()
+                                    
+                                    # Screenshot
+                                    temp_driver.get(f"file:///{t_html.name}")
+                                    card_elem = wait_driver.until(EC.presence_of_element_located((By.ID, "card")))
+                                    time.sleep(1.5)
+                                    
+                                    t_png = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                                    t_png.close()
+                                    card_elem.screenshot(t_png.name)
+                                    
+                                    # Convertir a JPG VERTICAL
+                                    image = Image.open(t_png.name).convert('RGB')
+                                    canvas_w, canvas_h = 1080, 1920
+                                    canvas = Image.new("RGB", (canvas_w, canvas_h), "#ffffff")
+                                    
+                                    target_w = int(canvas_w * 0.90)
+                                    ratio = target_w / float(image.width)
+                                    target_h = int(float(image.height) * ratio)
+                                    
+                                    if target_h > canvas_h * 0.90:
+                                        target_h = int(canvas_h * 0.90)
+                                        ratio = target_h / float(image.height)
+                                        target_w = int(float(image.width) * ratio)
+                                    
+                                    image_resized = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                                    pos_x = (canvas_w - target_w) // 2
+                                    pos_y = (canvas_h - target_h) // 2
+                                    canvas.paste(image_resized, (pos_x, pos_y))
+                                    
+                                    # Guardar JPG
+                                    t_jpg = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+                                    t_jpg.close()
+                                    canvas.save(t_jpg.name, quality=95)
+                                    
+                                    contact['image_path'] = t_jpg.name
+                                    
+                                    # Limpiar temporales
+                                    try:
+                                        os.remove(t_html.name)
+                                        os.remove(t_png.name)
+                                    except:
+                                        pass
+                                        
+                                except Exception as e_img:
+                                    st.warning(f"⚠️ No se pudo generar imagen para {empresa}: {str(e_img)}")
+                                    contact['image_path'] = None
                             
-                            for contact in contacts_to_send:
-                                _msg = contact['mensaje']
-                                
-                                # Re-creamos el HTML identico al preview
-                                # (Duplicamos logica brevemente para aislar el proceso)
-                                import re
-                                def _fmt(text):
-                                    t = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                                    t = re.sub(r'\*(.*?)\*', r'<b>\1</b>', t)
-                                    return t.replace("\n", "<br>")
-
-                                _html_msg = _fmt(_msg)
-                                _p_col = CONFIG.get('primary_color', '#007bff')
-                                _s_col = CONFIG.get('secondary_color', '#00d4ff')
-                                
-                                _img_tag = ""
-                                if 'logo_b64' in locals() and logo_b64:
-                                     _img_tag = f'<img src="data:image/png;base64,{logo_b64}" class="wa-logo"/>'
-
-                                full_html = f"""
-                                <html>
-                                <style>
-                                    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-                                    body {{ margin: 0; padding: 0; background: transparent; font-family: 'Roboto', sans-serif; }}
-                                    .wa-card {{
-                                        width: 400px;
-                                        background: #ffffff;
-                                        border-radius: 12px;
-                                        overflow: hidden;
-                                        border: 1px solid #e0e0e0;
-                                    }}
-                                    .wa-banner {{
-                                        background: linear-gradient(135deg, {_p_col} 0%, {_s_col} 100%);
-                                        min-height: 120px;
-                                        position: relative;
-                                        padding: 20px;
-                                        color: white;
-                                        display: flex;
-                                        flex-direction: column;
-                                        justify-content: center;
-                                        align-items: flex-start;
-                                    }}
-                                    .wa-banner::after {{
-                                        content: ""; position: absolute; bottom: -21px; left: 0; width: 100%; height: 40px;
-                                        background: #ffffff; border-radius: 50% 50% 0 0 / 100% 100% 0 0; transform: scaleX(1.5);
-                                    }}
-                                    .wa-logo {{
-                                        max-height: 40px; max-width: 120px; object-fit: contain;
-                                        margin-bottom: 10px; background: white; padding: 5px 10px; border-radius: 4px;
-                                    }}
-                                    .wa-content {{ padding: 20px 25px 30px 25px; color: #333; font-size: 14px; line-height: 1.5; }}
-                                    .wa-title {{ font-size: 20px; font-weight: 700; margin-bottom: 2px; z-index: 1; }}
-                                    .wa-subtitle {{ font-size: 13px; opacity: 0.95; z-index: 1; }}
-                                    .wa-footer {{
-                                        margin-top: 20px; padding-top: 15px; border-top: 1px solid #f0f0f0;
-                                        font-size: 12px; color: #666; display: flex; align-items: center; gap: 8px;
-                                    }}
-                                    b {{ color: #000; font-weight: 600; }}
-                                </style>
-                                <body>
-                                    <div class="wa-card" id="card">
-                                        <div class="wa-banner">
-                                            {_img_tag}
-                                            <div class="wa-title">Importante</div>
-                                            <div class="wa-subtitle">Estado de Cuenta Digital</div>
-                                        </div>
-                                        <div class="wa-content">
-                                            {_html_msg}
-                                            <div class="wa-footer"><span>🤝</span><span>Estamos para ayudarte.</span></div>
-                                        </div>
-                                    </div>
-                                </body>
-                                </html>
-                                """
-                                
-                                t_html = tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode='w', encoding='utf-8')
-                                t_html.write(full_html)
-                                t_html.close()
-                                
-                                screenshot_driver.get(f"file:///{t_html.name}")
-                                import time
-                                time.sleep(0.5)
-                                
-                                card_element = screenshot_driver.find_element("id", "card")
-                                
-                                # 1. Guardar PNG temporal
-                                t_png = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                                t_png.close()
-                                card_element.screenshot(t_png.name)
-                                
-                                # 2. ESTRATEGIA: FULL HD (1920x1080)
-                                # Usamos una resolución estándar de pantalla.
-                                # Esto garantiza que WhatsApp lo trate como una FOTO.
-                                from PIL import Image
-                                t_jpg = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
-                                t_jpg.close()
-                                
-                                image = Image.open(t_png.name).convert('RGB')
-                                
-                                # Lienzo Full HD
-                                canvas_w, canvas_h = 1920, 1080
-                                canvas = Image.new("RGB", (canvas_w, canvas_h), "#ffffff")
-                                
-                                # Escalar imagen original si es muy pequeña o muy grande
-                                # Queremos que ocupe aprox el 80% del alto
-                                target_h = int(canvas_h * 0.85)
-                                ratio = target_h / float(image.height)
-                                target_w = int(float(image.width) * ratio)
-                                
-                                # Resize suave
-                                image_resized = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
-                                
-                                # Centrar
-                                pos_x = (canvas_w - target_w) // 2
-                                pos_y = (canvas_h - target_h) // 2
-                                
-                                canvas.paste(image_resized, (pos_x, pos_y))
-                                
-                                # Guardar como JPG
-                                canvas.save(t_jpg.name, quality=95)
-                                
-                                # 3. Usar Path del JPG y limpiar PNG
-                                contact['image_path'] = t_jpg.name
-                                try: 
-                                    os.remove(t_html.name)
-                                    os.remove(t_png.name)
-                                except: pass
-                                
+                            temp_driver.quit()
+                            status_placeholder.success(f"✅ {len(images_to_generate)} imágenes generadas")
+                            
                         except Exception as e:
-                             st.error(f"Error generando imágenes: {e}")
-                             screenshot_driver.quit()
-                             st.stop()
-                        
-                        if screenshot_driver:
-                            screenshot_driver.quit()
+                            temp_driver.quit()
+                            st.error(f"Error generando imágenes: {e}")
+                    else:
+                        status_placeholder.success(f"✅ {len(contacts_to_send)} imágenes ya disponibles")
 
+
+                    
                     try:
                         results = send_whatsapp_messages_direct(
                             contacts_to_send, 
@@ -845,10 +882,13 @@ if st.session_state['data_ready']:
                             speed="Normal (Recomendado)",
                             progress_callback=progress_callback
                         )
-                        st.success("Proceso Finalizado")
+                        st.success("✅ Proceso Finalizado")
                         st.json(results)
                     except Exception as e:
-                        st.error(f"Error en envío: {e}")
+                        st.error(f"❌ Error: {str(e)}")
+                        import traceback
+                        with st.expander("Ver detalles del error"):
+                            st.code(traceback.format_exc())
 
         else:
              st.info("No hay datos para mostrar notificaciones.")
