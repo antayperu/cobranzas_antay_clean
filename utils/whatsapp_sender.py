@@ -230,60 +230,107 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                 driver.get(url)
                 
                 # Esperamos carga del chat
+                # Esperamos carga del chat
                 try:
-                    chat_loaded_xpath = '//div[@contenteditable="true"][@data-tab="10"] | //span[@data-icon="plus"]'
-                    wait.until(EC.presence_of_element_located((By.XPATH, chat_loaded_xpath)))
-                    time.sleep(2) # Stability
-                except:
-                     # Check invalid number popup
-                     invalid_xpath = '//div[contains(text(), "inválido") or contains(text(), "invalid")]'
-                     if driver.find_elements(By.XPATH, invalid_xpath):
-                             add_log("    ❌ Número inválido")
-                             errores.append(f"{nombre}: Número inválido")
-                             fallidos += 1
-                             continue
-                     else:
-                             raise Exception("Timeout cargando chat")
+                    # Tiempos dinámicos: El primero siempre tarda más (Cold Start)
+                    timeout_val = 60 if i == 1 else 30 
+                    
+                    # Selectores de éxito (Chat cargado)
+                    chat_loaded_xpath = '//div[@contenteditable="true"][@data-tab="10"] | //span[@data-icon="plus"] | //div[@title="Escribe un mensaje"]'
+                    
+                    # Verificar periódicamente para detectar popup de invalido rapido
+                    start_time = time.time()
+                    loaded = False
+                    while time.time() - start_time < timeout_val:
+                        try:
+                            if driver.find_elements(By.XPATH, chat_loaded_xpath):
+                                loaded = True
+                                break
+                            
+                            # Check invalid number popup (Fast Fail)
+                            invalid_xpath = '//div[contains(text(), "inválido") or contains(text(), "invalid") or contains(text(), "url is invalid")]'
+                            if driver.find_elements(By.XPATH, invalid_xpath):
+                                raise ValueError("NumeroInvalido")
+                                
+                        except ValueError as ve:
+                            raise ve
+                        except:
+                            pass
+                        time.sleep(1)
+                    
+                    if not loaded:
+                        raise Exception("Timeout cargando chat (DOM no listo)")
+
+                    time.sleep(2) # Stability buffer
+                except ValueError:
+                     add_log("    ❌ Número inválido detectado por WhatsApp")
+                     errores.append(f"{nombre}: Número inválido")
+                     fallidos += 1
+                     continue
+                except Exception as e_load:
+                     raise Exception(f"Timeout cargando chat: {str(e_load)}")
 
                 # ESTRATEGIA: ENVIAR COMO IMAGEN (Inyección Directa)
                 # Inyectar directamente en el input de fotos sin clicks
                 # ESTRATEGIA: COPY & PASTE (Ctrl+V)
                 # Esta es la forma más robusta de enviar como FOTO y no como sticker
+                # ESTRATEGIA: COPY & PASTE (Ctrl+V) CON REINTENTOS ROBUSTOS
                 if img_path and os.path.exists(img_path):
                     try:
-                        # 1. Copiar imagen al portapapeles
-                        add_log("    📋 Copiando imagen al portapapeles...")
-                        if not copy_image_to_clipboard(img_path):
-                            raise Exception("Fallo al copiar imagen al portapapeles")
+                        image_sent_success = False
                         
-                        # 2. Enfocar el cuadro de texto del chat
-                        inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
-                        input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
-                        input_box.click()
-                        time.sleep(0.5)
+                        # Intentar hasta 3 veces el ciclo Copiar -> Pegar -> Detectar Modal
+                        for attempt_idx in range(3):
+                            try:
+                                add_log(f"    📋 Intento {attempt_idx+1}/3 de adjuntar imagen...")
+                                
+                                # 1. Copiar imagen al portapapeles
+                                if not copy_image_to_clipboard(img_path):
+                                    add_log("      ⚠️ Fallo al copiar al portapapeles, reintentando...")
+                                    time.sleep(1)
+                                    continue
+                                
+                                # 2. Enfocar input y Pegar
+                                inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
+                                input_box = wait.until(EC.element_to_be_clickable((By.XPATH, inp_xpath)))
+                                input_box.click()
+                                time.sleep(0.5)
+                                input_box.send_keys(Keys.CONTROL, "v")
+                                
+                                # 3. Verificar si apareció el modal (Wait corto)
+                                # Si aparece el modal, rompemos el bucle de intentos
+                                try:
+                                    preview_indicator = '//div[contains(@class, "media-body")] | //span[@data-icon="x-alt"] | //div[@aria-label="Escribe un comentario"] | //div[@aria-label="Write a caption"]'
+                                    wait_short = WebDriverWait(driver, 5) 
+                                    wait_short.until(EC.presence_of_element_located((By.XPATH, preview_indicator)))
+                                    image_sent_success = True
+                                    break # Éxito, salimos del retry
+                                except:
+                                    add_log("      ⚠️ No apareció el modal de imagen, reintentando pegado...")
+                                    time.sleep(1)
+                                    continue
+                            
+                            except Exception as e_retry:
+                                add_log(f"      ⚠️ Error en intento {attempt_idx+1}: {str(e_retry)}")
+                                time.sleep(1)
+
+                        if not image_sent_success:
+                            raise Exception("No se logró adjuntar la imagen tras 3 intentos (Fallo Portapapeles)")
+
+                        # 4. Una vez en el modal, buscar botón enviar
+                        # (El código continúa aquí con el modal ya abierto)
+                        time.sleep(1) # Estabilizar modal
                         
-                        # 3. Pegar (Ctrl+V)
-                        add_log("    ⌨️ Pegando imagen (Ctrl+V)...")
-                        input_box.send_keys(Keys.CONTROL, "v")
-                        
-                        # 4. Esperar a que aparezca el modal de vista previa de imagen
-                        # Buscamos el contenedor que suele aparecer al adjuntar
-                        preview_xpath = '//div[contains(@class, "media-body")] | //span[@data-icon="x-alt"] | //div[@aria-label="Escribe un comentario"]' 
-                        # Nota: El selector específico puede variar, pero buscamos señal de que cambió la UI
-                        
-                        # Esperar un poco a que reaccione la UI
-                        time.sleep(2)
-                        
-                        # 5. Buscar el botón de envío (ahora estará en el modal de imagen)
                         send_btn_selectors = [
                             '//span[@data-icon="send"]',
                             '//div[@role="button"][@aria-label="Send"]',
                             '//div[@role="button"][@aria-label="Enviar"]',
                             '//span[@data-testid="send"]'
                         ]
-                        
+                            
+                        # 5. Buscar el botón de envío
                         send_button = None
-                        for attempt in range(10): # 5 segundos
+                        for _ in range(10): 
                             for selector in send_btn_selectors:
                                 try:
                                     btns = driver.find_elements(By.XPATH, selector)
@@ -297,7 +344,7 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                             time.sleep(0.5)
                         
                         if not send_button:
-                             raise Exception("No se detectó el modo de envío de imagen (posible fallo al pegar)")
+                                raise Exception("No se detectó el botón de enviar en el modal de imagen")
 
                         # 6. Escribir el Caption (Mensaje)
                         try:
@@ -356,14 +403,12 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
 
                     except Exception as e_img:
                         # Log limpio para el usuario
-                        err_msg = str(e_img).split('\n')[0] # Solo la primera línea del error
+                        err_msg = str(e_img).split('\n')[0]
                         add_log(f"    ⚠️ Falló envío de imagen: {err_msg}. Intentando solo texto...")
-                        raise e_img # Lanzar para fallback
-
-
-                    except Exception as e_img:
-                        # FALLBACK CRÍTICO: Enviar solo texto si falla imagen
+                        
+                        # FALLBACK CRÍTICO INTGRADO: Enviar solo texto
                         try:
+                            # Intentar recuperar el foco en el input principal
                             inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
                             input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
                             
@@ -374,12 +419,12 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                             time.sleep(1)
                             input_box.send_keys(Keys.ENTER)
                             
-                            add_log(f"    ✅ Enviado a {nombre} (solo texto)")
+                            add_log(f"    ✅ Enviado a {nombre} (Fallback Texto)")
                             exitosos += 1
                             time.sleep(2)
                         except Exception as e_fallback:
-                            add_log(f"    ❌ Error enviando a {nombre}")
-                            errores.append(f"{nombre}: No se pudo enviar")
+                            add_log(f"    ❌ Error fallback texto: {str(e_fallback)}")
+                            errores.append(f"{nombre}: No se pudo enviar imagen ni texto")
                             fallidos += 1
 
                 
