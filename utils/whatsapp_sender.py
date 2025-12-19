@@ -132,12 +132,26 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
         log_lines.append(f"[{timestamp}] {text}")
         return "\n".join(log_lines)
 
+    def copy_image_to_clipboard(image_path):
+        """Copia una imagen al portapapeles usando PowerShell (Nativo Windows)"""
+        try:
+            import subprocess
+            abs_path = os.path.abspath(image_path)
+            # Escapar comillas simples dentro de la ruta para PowerShell
+            escaped_path = abs_path.replace("'", "''")
+            cmd = f'powershell -command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile(\'{escaped_path}\'))"'
+            subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
+            return True
+        except Exception as e:
+            add_log(f"    Error clipboard: {e}")
+            return False
+
     driver = None
 
     try:
         # Inicializar
         add_log("="*60)
-        add_log("INICIANDO ENVÍO DE MENSAJES WHATSAPP (Selenium)")
+        add_log("INICIANDO ENVÍO DE MENSAJES WHATSAPP (Híbrido: Paste / Adjuntar)") # Updated log message
         add_log("="*60)
         add_log(f"Total de mensajes a enviar: {len(processed_contacts)}")
         add_log(f"Velocidad: {speed} (Delay: {delay}s)")
@@ -173,24 +187,21 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
         # Abrir WhatsApp Web
         add_log("Navegando a WhatsApp Web...")
         driver.get("https://web.whatsapp.com")
-
+        
         add_log("")
         add_log("⚠️  ESCANEA EL CÓDIGO QR AHORA")
-        add_log("⏳ Esperando 45 segundos para inicio de sesión...")
+        add_log("⏳ Esperando 45 segundos para inicio de sesión...") # Updated log message
         
         if progress_callback:
            progress_callback(0, len(processed_contacts), "Escanea el QR en WhatsApp Web...", "\n".join(log_lines))
 
         # Espera inicial para login (QR)
-        # Podríamos mejorar esto esperando un elemento clave de la UI de WhatsApp cargado (ej. panel lateral)
         try:
-            # Esperar a que aparezca el panel de chats (indicador de login exitoso)
-            # O esperar el tiempo fijo si falla la detección rápida
             wait.until(EC.presence_of_element_located((By.XPATH, '//div[@id="pane-side"]')))
             add_log("✅ Sesión iniciada detectada.")
         except:
              add_log("⏳ Tiempo de espera de login finalizado. Asumiendo sesión iniciada o continuando...")
-             time.sleep(10) # Wait extra if element not found quickly
+             time.sleep(10) 
         
         time.sleep(5) 
 
@@ -202,6 +213,7 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
             phone = contact['telefono']
             final_msg = contact['mensaje']
             nombre = contact['nombre']
+            img_path = contact.get('image_path', None) # Path Local de Imagen
             
             if not phone:
                 add_log(f"[{i}/{len(processed_contacts)}] ⚠️ Salteando {nombre}: Sin teléfono")
@@ -214,56 +226,128 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                 if progress_callback:
                     progress_callback(i-1, len(processed_contacts), f"Enviando a {nombre}...", "\n".join(log_lines))
 
-                encoded_msg = urllib.parse.quote(final_msg)
-                url = f"https://web.whatsapp.com/send?phone={phone}&text={encoded_msg}"
-                
+                url = f"https://web.whatsapp.com/send?phone={phone}"
                 driver.get(url)
                 
                 # Esperamos carga del chat
-                time.sleep(5)
-                
-                # Intentar enviar
                 try:
-                    # Buscamos el botón de enviar
-                    # Selectores comunes de WhatsApp Web (pueden cambiar)
-                    # El script original usaba //span[@data-icon="send"] o Enter en input
-                    # Vamos a intentar el enfoque de ENTER en el input que es más robusto a veces
-                    
-                    # 1. Esperar al input box
-                    inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
-                    input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
-                    
-                    # 2. Focus y Enter
-                    input_box.click()
-                    time.sleep(1)
-                    input_box.send_keys(Keys.ENTER)
-                    
-                    add_log("    ✅ Enviado (Enter)")
-                    exitosos += 1
-                    time.sleep(2) # Esperar confirmación visual (check) implícita
-
-                except TimeoutException:
-                    # Si no encuentra el input, puede que el número sea inválido
-                    # O que haya un popup de "Número no válido"
-                    try:
-                        # Buscar popup de invalido
-                        invalid_xpath = '//div[contains(text(), "inválido") or contains(text(), "invalid")]'
-                        if driver.find_elements(By.XPATH, invalid_xpath):
+                    chat_loaded_xpath = '//div[@contenteditable="true"][@data-tab="10"] | //span[@data-icon="plus"]'
+                    wait.until(EC.presence_of_element_located((By.XPATH, chat_loaded_xpath)))
+                    time.sleep(2) # Stability
+                except:
+                     # Check invalid number popup
+                     invalid_xpath = '//div[contains(text(), "inválido") or contains(text(), "invalid")]'
+                     if driver.find_elements(By.XPATH, invalid_xpath):
                              add_log("    ❌ Número inválido")
                              errores.append(f"{nombre}: Número inválido")
-                        else:
-                             add_log("    ❌ Timeout esperando chat")
-                             errores.append(f"{nombre}: Timeout chat")
-                    except:
-                        add_log("    ❌ Timeout genérico")
-                        errores.append(f"{nombre}: Timeout")
-                    
-                    fallidos += 1
+                             fallidos += 1
+                             continue
+                     else:
+                             raise Exception("Timeout cargando chat")
 
-                except Exception as e:
-                     add_log(f"    ❌ Error al hacer click/enter: {str(e)}")
-                     fallidos += 1
-                     errores.append(f"{nombre}: {str(e)}")
+                # ESTRATEGIA: IMAGEN
+                if img_path and os.path.exists(img_path):
+                    sent_image = False
+                    
+                    # 1. INTENTO: COPY & PASTE (Prioridad Usuario)
+                    try:
+                        add_log("    📋 Intentando Pegar (Ctrl+V)...")
+                        if copy_image_to_clipboard(img_path):
+                            time.sleep(0.5)
+                            # Click en background o input para foco
+                            try:
+                                driver.find_element(By.XPATH, '//div[@contenteditable="true"][@data-tab="10"]').click()
+                            except: pass
+                            
+                            # ActionChains Paste Global
+                            actions = ActionChains(driver)
+                            actions.key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                            
+                            add_log("    ⏳ Esperando vista previa...")
+                            send_btn_xpath = '//span[@data-icon="send"]'
+                            wait.until(EC.presence_of_element_located((By.XPATH, send_btn_xpath)))
+                            sent_image = True
+                            add_log("    ✅ Imagen pegada correctamente.")
+                    except Exception as e_paste:
+                        add_log(f"    ⚠️ Falló pegar ({e_paste}). Intentando método tradicional...")
+
+                    # 2. INTENTO: ADJUNTAR (Fallback)
+                    if not sent_image:
+                         add_log("    📎 Usando método Adjuntar Archivo...")
+                         try:
+                             # Buscar '+'
+                             plus_xpaths = ['//div[@title="Adjuntar"]', '//span[@data-icon="plus"]', '//div[@aria-label="Adjuntar"]']
+                             for xp in plus_xpaths:
+                                 try:
+                                     driver.find_element(By.XPATH, xp).click()
+                                     time.sleep(0.5)
+                                     break
+                                 except: continue
+                             
+                             # Input File
+                             # Buscar input type file (suele estar presente pero oculto si no se da click al mas, a veces funciona igual)
+                             file_input = driver.find_element(By.CSS_SELECTOR, "input[type='file']")
+                             file_input.send_keys(os.path.abspath(img_path))
+                             
+                             # Wait Preview
+                             wait.until(EC.presence_of_element_located((By.XPATH, '//span[@data-icon="send"]')))
+                             sent_image = True
+                         except Exception as e_attach:
+                             add_log(f"    ❌ Falló adjuntar: {e_attach}")
+                             raise e_attach
+
+                    # 3. CAPTION & SEND
+                    try:
+                        add_log("    📝 Escribiendo caption...")
+                        import pyperclip
+                        pyperclip.copy(final_msg)
+                        
+                        # Pegar caption
+                        actions = ActionChains(driver)
+                        actions.key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
+                        time.sleep(1)
+                        actions.send_keys(Keys.ENTER).perform() # Enviar con Enter
+                        
+                        # Doble check por si el enter no funcionó (a veces pasa en modo caption)
+                        time.sleep(2)
+                        send_btns = driver.find_elements(By.XPATH, '//span[@data-icon="send"]')
+                        if send_btns:
+                             send_btns[0].click()
+
+                        add_log("    ✅ Enviado.")
+                        exitosos += 1
+                        time.sleep(3)
+                        
+                    except Exception as e_cap:
+                         try:
+                             driver.find_element(By.XPATH, '//span[@data-icon="send"]').click()
+                             exitosos += 1
+                             add_log("    ✅ Enviado (Click Fallback).")
+                         except:
+                             add_log(f"    ⚠️ Error final caption: {e_cap}")
+                
+                # ENVÍO SOLO TEXTO (Fallback o Standard)
+                else:
+                    try:
+                        inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
+                        input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
+                        
+                        # Paste Text
+                        import pyperclip
+                        pyperclip.copy(final_msg)
+                        input_box.click()
+                        input_box.send_keys(Keys.CONTROL, "v")
+                        time.sleep(1)
+                        input_box.send_keys(Keys.ENTER)
+                        
+                        add_log("    ✅ Enviado (Texto)")
+                        exitosos += 1
+                        time.sleep(2)
+
+                    except Exception as e_txt:
+                        add_log(f"    ❌ Error envío texto: {str(e_txt)}")
+                        fallidos += 1
+                        errores.append(f"{nombre}: {str(e_txt)}")
 
                 # Delay entre mensajes
                 if i < len(processed_contacts):

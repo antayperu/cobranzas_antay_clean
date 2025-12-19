@@ -70,6 +70,15 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
         - **Diseño de Filtros "Stacked"**: Multiselección de Empresa a ancho completo para evitar problemas de layout, y filtros secundarios organizados en grid.
         - **Lógica de Filtrado**: Incorporación de filtro "Tipo Pedido" (Multi-select) y eliminación de filtros ocultos en backend.
         - **KPIs Inteligentes**: Tarjetas de resumen y conteo de documentos con desglose explicito por moneda (`S/` y `$`).
+    - **v4.5 (Actual)**: 
+        - **WhatsApp Bulletproof**: Estrategia Híbrida (Intento Paste + Fallback Adjuntar) y correcciones lógicas.
+        - **Anti-Stickers**: Generación de imágenes Full HD (1920x1080) para evitar detección como sticker.
+        - **Email**: Separación estricta de totales (Soles vs Dólares).
+    - **v4.4 (Email Refinements & Logic)**:
+        - **Refinamiento Visual**: Aumento de fuente en títulos, cambio de etiquetas ("Saldo Pendiente") y ajuste de etiquetas móviles ("Estado Detr.").
+        - **Lógica Robusta**: Corrección de suma de monedas (exclusión estricta de Dólares en totales Soles) y prevención de errores de sintaxis CSS.
+        - **Intro Dinámico**: Texto introductorio inteligente con resumen automático de deuda por moneda y cantidad de documentos (e.g., "S/ 100 (2 docs) y $ 50 (1 doc)").
+        - **Limpieza**: Eliminación de título redundante "Estado de Cuenta".
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.
