@@ -28,9 +28,47 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     COMPANY_NAME = branding_config.get('company_name', 'DACTA S.A.C.')
     TEMPLATE = branding_config.get('email_template', {})
     
-    INTRO_TEXT = TEMPLATE.get('intro_text', '').replace('{cliente}', client_name).replace('\n', '<br>')
+    # --- NUEVA LÓGICA DE TEXTO INTRODUCTORIO CON RESUMEN (Step 59) ---
+    # Calcular totales y cantidad de documentos por moneda internamente
+    try:
+        mask_soles = docs_df['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
+        
+        df_sol = docs_df[mask_soles]
+        df_dol = docs_df[~mask_soles]
+        
+        sum_s = df_sol['SALDO REAL'].sum()
+        count_s = len(df_sol)
+        
+        sum_d = df_dol['SALDO REAL'].sum()
+        count_d = len(df_dol)
+        
+        parts = []
+        if sum_s > 0 or count_s > 0:
+            parts.append(f"S/ {sum_s:,.2f} ({count_s:02d} documentos)")
+        if sum_d > 0 or count_d > 0:
+            parts.append(f"$ {sum_d:,.2f} ({count_d:02d} documentos)")
+            
+        if not parts:
+            totals_str = "S/ 0.00 (00 documentos)" # Fallback
+        else:
+            totals_str = " y ".join(parts)
+            
+    except Exception as e:
+        totals_str = "Error calculando totales"
+        
+    # Texto fijo solicitado
+    # "Le informamos que a la fecha presenta documentos pendientes de pago por un *Total de: ...*"
+    INTRO_TEXT = (
+        f"Le informamos que a la fecha presenta documentos pendientes de pago por un "
+        f"<strong>Total de: {totals_str}</strong>.<br>"
+        f"Agradeceremos gestionar la cancelación para mantener su servicio activo y evitar inconvenientes."
+    )
+
+    # TEMPLATE.get('intro_text') se ignora deliberadamente para cumplir requerimiento específico
+    
     FOOTER_TEXT = TEMPLATE.get('footer_text', '').replace('\n', '<br>')
     ALERT_TEXT = TEMPLATE.get('alert_text', '')
+
     html_rows = ""
     for _, row in docs_df.iterrows():
         # Formatear valores
@@ -111,7 +149,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                  {m_detr}
             </td>
             <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center; {style_det} font-size: 0.9em;">
-                <span class="mobile-label">Estado:</span>
+                <span class="mobile-label">Estado Detr.:</span>
                 {estado_dt_val}
             </td>
         </tr>
@@ -138,7 +176,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         .totals-box strong {{ color: {COLOR_SECONDARY}; font-size: 16px; margin-left: 15px; }}
         .footer {{ background-color: #333; color: #ccc; padding: 20px; text-align: center; font-size: 12px; line-height: 1.5; }}
         .btn {{ display: inline-block; background-color: {COLOR_SECONDARY}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px; }}
-        .header-msg {{ text-align:center; font-weight:bold; color:{COLOR_PRIMARY}; margin-bottom:20px; }}
+        .header-msg {{ text-align:center; font-weight:bold; color:{COLOR_PRIMARY}; margin-bottom:20px; font-size: 24px; }}
         
         /* Default: Hide mobile labels on desktop */
         .mobile-label {{ display: none; }}
@@ -211,9 +249,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
             <div class="content">
                 <div class="greeting">Estimados <strong>{client_name}</strong>,</div>
                 
-                <div class="header-msg">
-                    Estado de Cuenta
-                </div>
+
 
                 <div class="message">
                     {INTRO_TEXT}
@@ -243,7 +279,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                 </div>
 
                 <div class="totals-box">
-                    Total Pendiente: 
+                    Saldo Pendiente: 
                     <strong>{total_s}</strong>
                     <strong>{total_d}</strong>
                 </div>

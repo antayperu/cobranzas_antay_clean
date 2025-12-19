@@ -225,58 +225,75 @@ if st.session_state['data_ready']:
             # Calcular totales separados
             def safe_sum(df, col): return df[col].sum() if col in df.columns else 0.0
             
-            df_sol = df_filtered[df_filtered['MONEDA'].str.contains('S', na=False)]
-            df_dol = df_filtered[df_filtered['MONEDA'].str.contains('US', na=False)]
+            # FIX v4.3.1: Usar startswith para evitar que 'US$' (contiene S) caiga en Soles
+            df_sol = df_filtered[df_filtered['MONEDA'].astype(str).str.startswith('S', na=False)]
+            # Para Dolares asumimos el resto o que contiene U/$.
+            df_dol = df_filtered[~df_filtered['MONEDA'].astype(str).str.startswith('S', na=False)]
             
             # Totales Soles
             t_sal_s = safe_sum(df_sol, 'SALDO')
-            t_det_s = safe_sum(df_sol, 'DETRACCIÓN')
+            # REGLA DE NEGOCIO: Detracciones SIEMPRE suman en Soles, sin importar moneda del doc.
+            # Agrupamos todas las detracciones del filtro actual.
+            t_detru_global_s = safe_sum(df_filtered, 'DETRACCIÓN') 
             t_real_s = safe_sum(df_sol, 'SALDO REAL')
             count_s = len(df_sol)
             
             # Totales Dólares
             t_sal_d = safe_sum(df_dol, 'SALDO')
-            t_det_d = safe_sum(df_dol, 'DETRACCIÓN')
+            # t_det_d = safe_sum(df_dol, 'DETRACCIÓN') # Eliminado: Detracción NO existe en Dólares
             t_real_d = safe_sum(df_dol, 'SALDO REAL')
             count_d = len(df_dol)
             
             # Renderizar KPIs Custom
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
             
-            def kpi_card(label, val_s, val_d, color="#2E86AB", is_currency=True):
+            def kpi_card(label, val_s, val_d, color="#2E86AB", is_currency=True, force_single_s=False):
                 if is_currency:
-                    val_s_str = f"S/ {val_s:,.2f}" if val_s != 0 else "-"
-                    val_d_str = f"$ {val_d:,.2f}" if val_d != 0 else "-"
-                    # Highlight logic
-                    if val_s == 0 and val_d == 0: val_s_str = "S/ 0.00"
+                    # Lógica de visualización: Solo mostrar lo que tiene valor > 0
+                    # Si ambos 0, mostrar S/ 0.00
+                    s_visible = abs(val_s) > 0.01
+                    d_visible = abs(val_d) > 0.01
+                    
+                    if force_single_s:
+                        # Caso especial Detracción: Solo mostrar línea S/
+                        lines = [f"<div style='font-size:16px; color:#333; font-weight:bold; margin-top:5px;'>S/ {val_s:,.2f}</div>"]
+                    elif not s_visible and not d_visible:
+                        lines = [f"<div style='font-size:16px; color:#333; font-weight:bold; margin-top:5px;'>S/ 0.00</div>"]
+                    else:
+                        lines = []
+                        if s_visible:
+                             lines.append(f"<div style='font-size:16px; color:#333; font-weight:bold; margin-top:5px;'>S/ {val_s:,.2f}</div>")
+                        if d_visible:
+                             # Si dolar es el único, lo ponemos grande, si es segundo, un poco dif
+                             style = "font-size:16px; color:#333; font-weight:bold; margin-top:5px;" if not s_visible else "font-size:14px; color:#555;"
+                             lines.append(f"<div style='{style}'>$ {val_d:,.2f}</div>")
+                    
+                    html_content = "".join(lines)
+
                 else:
                     # Formato Conteo
-                    val_s_str = f"{int(val_s)} docs (S/)" if val_s > 0 else "-"
-                    val_str_join = []
-                    if val_s > 0: val_str_join.append(f"{int(val_s)} (S/)")
-                    if val_d > 0: val_str_join.append(f"{int(val_d)} ($)")
+                    # Solo mostrar los que tienen > 0
+                    lines = []
+                    if val_s > 0: lines.append(f"<div style='font-size:16px; color:#333; font-weight:bold; margin-top:5px;'>{int(val_s)} (S/)</div>")
+                    if val_d > 0:
+                        style = "font-size:16px; color:#333; font-weight:bold; margin-top:5px;" if val_s == 0 else "font-size:14px; color:#555;"
+                        lines.append(f"<div style='{style}'>{int(val_d)} ($)</div>")
                     
-                    if not val_str_join:
-                        val_s_str = "0"
-                        val_d_str = ""
-                    elif len(val_str_join) == 1:
-                        val_s_str = val_str_join[0]
-                        val_d_str = ""
-                    else:
-                        val_s_str = val_str_join[0]
-                        val_d_str = val_str_join[1]
+                    if not lines:
+                         lines.append("<div style='font-size:16px; color:#333; font-weight:bold; margin-top:5px;'>0</div>")
+                    
+                    html_content = "".join(lines)
 
                 html = f"""
                 <div style="background:#fff; border-left:4px solid {color}; padding:10px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.05); min-height:80px;">
                     <div style="font-size:12px; color:#666; font-weight:bold;">{label}</div>
-                    <div style="font-size:16px; color:#333; font-weight:bold; margin-top:5px;">{val_s_str}</div>
-                    <div style="font-size:14px; color:#555;">{val_d_str}</div>
+                    {html_content}
                 </div>
                 """
                 return html
 
             with kpi1: st.markdown(kpi_card("Total Saldo", t_sal_s, t_sal_d, "#17a2b8"), unsafe_allow_html=True)
-            with kpi2: st.markdown(kpi_card("Total Detracción", t_det_s, t_det_d, "#dc3545"), unsafe_allow_html=True)
+            with kpi2: st.markdown(kpi_card("Total Detracción", t_detru_global_s, 0, "#dc3545", force_single_s=True), unsafe_allow_html=True)
             with kpi3: st.markdown(kpi_card("Total Saldo Real", t_real_s, t_real_d, "#28a745"), unsafe_allow_html=True)
             with kpi4: st.markdown(kpi_card("Documentos", count_s, count_d, "#6c757d", is_currency=False), unsafe_allow_html=True)
 
@@ -292,7 +309,7 @@ if st.session_state['data_ready']:
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
                 'DÍAS MORA', 'ESTADO DEUDA', # Critical Analysis
-                'MONEDA', 
+                'MONEDA', 'TIPO CAMBIO',
                 'MONT EMIT_DISPLAY', 
                 'DETRACCIÓN_DISPLAY', 'ESTADO DETRACCION',
                 'AMORTIZACIONES',
@@ -575,8 +592,8 @@ if st.session_state['data_ready']:
                         cod_cli = row['COD CLIENTE']
                         docs_cli_temp = df_filtered[df_filtered['COD CLIENTE'] == cod_cli]
                         
-                        s_temp = docs_cli_temp[docs_cli_temp['MONEDA'].str.contains('S', na=False)]['SALDO REAL'].sum()
-                        d_temp = docs_cli_temp[docs_cli_temp['MONEDA'].str.contains('US', na=False)]['SALDO REAL'].sum()
+                        s_temp = docs_cli_temp[docs_cli_temp['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
+                        d_temp = docs_cli_temp[~docs_cli_temp['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
                         
                         # Label Mejorado: EMPRESA (Email) | S/ 100 | $ 50
                         label_parts = [f"{row['EMPRESA']} ({row['EMAIL_FINAL']})"]
@@ -683,8 +700,9 @@ if st.session_state['data_ready']:
                         info_sel = email_map[selected_label]
                         docs_cli_mail = df_filtered[df_filtered['COD CLIENTE'] == info_sel['cod']]
                         
-                        totales_s = docs_cli_mail[docs_cli_mail['MONEDA'].str.contains('S', na=False, case=False)]['SALDO REAL'].sum()
-                        totales_d = docs_cli_mail[docs_cli_mail['MONEDA'].str.contains('US', na=False, case=False)]['SALDO REAL'].sum()
+                        mask_soles_prev = docs_cli_mail['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
+                        totales_s = docs_cli_mail[mask_soles_prev]['SALDO REAL'].sum()
+                        totales_d = docs_cli_mail[~mask_soles_prev]['SALDO REAL'].sum()
                         
                         txt_s = f"S/ {totales_s:,.2f}" if totales_s > 0 else ""
                         txt_d = f"$ {totales_d:,.2f}" if totales_d > 0 else ""
@@ -725,10 +743,11 @@ if st.session_state['data_ready']:
                                 info = email_map[lbl]
                                 d_cli = df_filtered[df_filtered['COD CLIENTE'] == info['cod']]
                                 
-                                t_s = d_cli[d_cli['MONEDA'].str.contains('S', na=False)]['SALDO REAL'].sum()
-                                t_d = d_cli[d_cli['MONEDA'].str.contains('US', na=False)]['SALDO REAL'].sum()
-                                str_s = f"S/ {t_s:,.2f}" if t_s > 0 else ""
-                                str_d = f"$ {t_d:,.2f}" if t_d > 0 else ""
+                                # Refined Currency Logic (Robustness fix)
+                                mask_soles = d_cli['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
+
+                                t_s = d_cli[mask_soles]['SALDO REAL'].sum()
+                                t_d = d_cli[~mask_soles]['SALDO REAL'].sum()
                                 
                                 str_s = f"S/ {t_s:,.2f}" if t_s > 0 else ""
                                 str_d = f"$ {t_d:,.2f}" if t_d > 0 else ""

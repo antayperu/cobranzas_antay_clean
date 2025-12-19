@@ -409,7 +409,12 @@ def process_data(df_ctas, df_cartera, df_cobranza):
             
             # Obtener símbolo
             mon = str(row.get('MONEDA', '')).strip().upper()
-            symbol = "S/" if mon.startswith('S') else "$"
+            
+            # REGLA DE NEGOCIO: La Detracción SIEMPRE es en Soles
+            if col_name == 'DETRACCIÓN':
+                symbol = "S/"
+            else:
+                symbol = "S/" if mon.startswith('S') else "$"
             
             return f"{symbol} {amount:,.2f}"
         except:
@@ -434,6 +439,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         'COMPROBANTE', 'FECH EMIS', 'FECH VENC',
         'DÍAS MORA', 'ESTADO DEUDA',
         'MONEDA',
+        'TIPO CAMBIO', # AGREGADO v4.3.2
         'MONT EMIT', 'MONT EMIT_DISPLAY',
         'SALDO REAL', 'SALDO REAL_DISPLAY',
         'SALDO', 'SALDO_DISPLAY',
