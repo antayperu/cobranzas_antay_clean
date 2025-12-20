@@ -215,6 +215,15 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
             nombre = contact['nombre']
             img_path = contact.get('image_path', None) # Path Local de Imagen
             
+            # 0. Limpieza Preventiva del Portapapeles (Enterprise Standard)
+            # Evita que residuos de iteraciones anteriores contaminen la actual
+            try:
+                import subprocess
+                subprocess.run('powershell -command "Set-Clipboard -Value $null"', shell=True, check=False)
+                time.sleep(0.5) # Short sync wait
+            except:
+                pass
+            
             if not phone:
                 add_log(f"[{i}/{len(processed_contacts)}] ⚠️ Salteando {nombre}: Sin teléfono")
                 fallidos += 1
@@ -270,56 +279,51 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                 except Exception as e_load:
                      raise Exception(f"Timeout cargando chat: {str(e_load)}")
 
-                # ESTRATEGIA: ENVIAR COMO IMAGEN (Inyección Directa)
-                # Inyectar directamente en el input de fotos sin clicks
-                # ESTRATEGIA: COPY & PASTE (Ctrl+V)
-                # Esta es la forma más robusta de enviar como FOTO y no como sticker
-                # ESTRATEGIA: COPY & PASTE (Ctrl+V) CON REINTENTOS ROBUSTOS
+
+                # ESTRATEGIA: JS-FORCE-CLICK + PASTE TRADICIONAL (Grado Militar)
+                # Esta combinación "perfora" cualquier botón encima y activa los listeners de WhatsApp.
                 if img_path and os.path.exists(img_path):
                     try:
                         image_sent_success = False
                         
-                        # Intentar hasta 3 veces el ciclo Copiar -> Pegar -> Detectar Modal
-                        for attempt_idx in range(3):
-                            try:
-                                add_log(f"    📋 Intento {attempt_idx+1}/3 de adjuntar imagen...")
-                                
-                                # 1. Copiar imagen al portapapeles
-                                if not copy_image_to_clipboard(img_path):
-                                    add_log("      ⚠️ Fallo al copiar al portapapeles, reintentando...")
-                                    time.sleep(1)
-                                    continue
-                                
-                                # 2. Enfocar input y Pegar
-                                inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
-                                input_box = wait.until(EC.element_to_be_clickable((By.XPATH, inp_xpath)))
-                                input_box.click()
-                                time.sleep(0.5)
-                                input_box.send_keys(Keys.CONTROL, "v")
-                                
-                                # 3. Verificar si apareció el modal (Wait corto)
-                                # Si aparece el modal, rompemos el bucle de intentos
-                                try:
-                                    preview_indicator = '//div[contains(@class, "media-body")] | //span[@data-icon="x-alt"] | //div[@aria-label="Escribe un comentario"] | //div[@aria-label="Write a caption"]'
-                                    wait_short = WebDriverWait(driver, 5) 
-                                    wait_short.until(EC.presence_of_element_located((By.XPATH, preview_indicator)))
-                                    image_sent_success = True
-                                    break # Éxito, salimos del retry
-                                except:
-                                    add_log("      ⚠️ No apareció el modal de imagen, reintentando pegado...")
-                                    time.sleep(1)
-                                    continue
-                            
-                            except Exception as e_retry:
-                                add_log(f"      ⚠️ Error en intento {attempt_idx+1}: {str(e_retry)}")
-                                time.sleep(1)
+                        # 1. Copiar imagen al portapapeles
+                        add_log(f"    📋 Preparando imagen en memoria...")
+                        if not copy_image_to_clipboard(img_path):
+                            raise Exception("Error al copiar imagen (OS Clipboard Error)")
+                        
+                        # Espera extendida para sincronización de sistema operativo móvil/escritorio
+                        time.sleep(3) 
+                        
+                        # 2. Localizar input principal
+                        inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
+                        input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
+                        
+                        # 3. CLICK FANTASMA (JS) + PEGAR
+                        # El JS Click traspasa el botón "Clip" o cualquier interceptor visual.
+                        add_log("    📋 Pegando imagen (JS Force & Paste)...")
+                        driver.execute_script("arguments[0].focus(); arguments[0].click();", input_box)
+                        time.sleep(1)
+                        
+                        # Usamos send_keys directo sobre el elemento para disparar el evento de pegado
+                        input_box.send_keys(Keys.CONTROL, 'v')
+                        
+                        # 4. Verificar si apareció el modal con paciencia
+                        try:
+                            preview_indicator = '//span[@data-icon="x-alt"] | //div[@aria-label="Escribe un comentario"] | //div[@aria-label="Write a caption"]'
+                            # Esperar hasta 15s porque la imagen puede ser pesada en red
+                            wait_long = WebDriverWait(driver, 15) 
+                            wait_long.until(EC.visibility_of_element_located((By.XPATH, preview_indicator)))
+                            image_sent_success = True
+                        except:
+                            # REINTENTO DE EMERGENCIA: Si no hay modal, intentar pegar una vez más
+                            add_log("      ⚠️ Modal lento, reintentando pegado manual...")
+                            input_box.send_keys(Keys.CONTROL, 'v')
+                            time.sleep(5)
+                            if not driver.find_elements(By.XPATH, preview_indicator):
+                                raise Exception("WhatsApp no detectó la imagen tras el pegado (Modal ausente)")
 
-                        if not image_sent_success:
-                            raise Exception("No se logró adjuntar la imagen tras 3 intentos (Fallo Portapapeles)")
-
-                        # 4. Una vez en el modal, buscar botón enviar
-                        # (El código continúa aquí con el modal ya abierto)
-                        time.sleep(1) # Estabilizar modal
+                        # 5. Una vez en el modal, buscar botón enviar
+                        time.sleep(1.5) # Estabilizar modal
                         
                         send_btn_selectors = [
                             '//span[@data-icon="send"]',
@@ -328,9 +332,9 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                             '//span[@data-testid="send"]'
                         ]
                             
-                        # 5. Buscar el botón de envío
+                        # 6. Buscar el botón de envío (Con paciencia)
                         send_button = None
-                        for _ in range(10): 
+                        for _ in range(15): 
                             for selector in send_btn_selectors:
                                 try:
                                     btns = driver.find_elements(By.XPATH, selector)
@@ -344,22 +348,18 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                             time.sleep(0.5)
                         
                         if not send_button:
-                                raise Exception("No se detectó el botón de enviar en el modal de imagen")
+                                raise Exception("No se visualizó el botón Enviar en el modal")
 
-                        # 6. Escribir el Caption (Mensaje)
+                        # 7. Escribir el Caption (Mensaje)
                         try:
-                            # Intentar encontrar el input de caption en el modal
-                            # Suele ser diferente al del chat normal
                             caption_selectors = [
                                 '//div[@aria-label="Escribe un comentario"]',
-                                '//div[@aria-label="Add a caption"]',
-                                '//div[@contenteditable="true"][@data-tab="10"]' # A veces reutiliza el mismo tabindex visualmente
+                                '//div[@aria-label="Add a caption"]'
                             ]
                             
                             caption_box = None
                             for selector in caption_selectors:
                                 try:
-                                    # En el modal, puede haber varios, queremos el visible
                                     candidates = driver.find_elements(By.XPATH, selector)
                                     for cand in candidates:
                                         if cand.is_displayed():
@@ -370,62 +370,29 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                             
                             if caption_box:
                                 add_log("    📝 Agregando mensaje...")
-                                # Usar portapapeles para el texto
                                 import pyperclip
                                 pyperclip.copy(final_msg)
                                 
-                                # FIX: Click Intercepted - Usar JS para forzar focus/click
-                                try:
-                                    driver.execute_script("arguments[0].click();", caption_box)
-                                    time.sleep(0.5)
-                                    caption_box.send_keys(Keys.CONTROL, "v")
-                                except Exception as e_click:
-                                    add_log("    ⚠️ Falló click normal, intentando envío directo de teclas...")
-                                    caption_box.send_keys(Keys.CONTROL, "v")
-                                
+                                # Forzar foco en caption y pegar
+                                driver.execute_script("arguments[0].focus(); arguments[0].click();", caption_box)
                                 time.sleep(0.5)
-                            else:
-                                add_log("    ⚠️ No se encontró caja para texto, enviando solo imagen")
-
+                                caption_box.send_keys(Keys.CONTROL, 'v')
+                                time.sleep(0.5)
                         except Exception as e_cap:
-                            # Log limpio
-                            add_log(f"    ⚠️ No se pudo poner texto: {type(e_cap).__name__}")
+                            add_log(f"    ⚠️ Error en caption (opcional): {str(e_cap)}")
 
-                        # 7. Click Enviar
-                        try:
-                            driver.execute_script("arguments[0].click();", send_button)
-                        except:
-                            send_button.click()
+                        # 8. Envío Final (JS Click para no fallar por superposición)
+                        driver.execute_script("arguments[0].click();", send_button)
                             
                         add_log(f"    ✅ Enviado a {nombre}")
                         exitosos += 1
-                        time.sleep(3) # Esperar a que salga de la pantalla de carga
+                        time.sleep(3) 
 
                     except Exception as e_img:
-                        # Log limpio para el usuario
                         err_msg = str(e_img).split('\n')[0]
-                        add_log(f"    ⚠️ Falló envío de imagen: {err_msg}. Intentando solo texto...")
-                        
-                        # FALLBACK CRÍTICO INTGRADO: Enviar solo texto
-                        try:
-                            # Intentar recuperar el foco en el input principal
-                            inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
-                            input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
-                            
-                            import pyperclip
-                            pyperclip.copy(final_msg)
-                            input_box.click()
-                            input_box.send_keys(Keys.CONTROL, "v")
-                            time.sleep(1)
-                            input_box.send_keys(Keys.ENTER)
-                            
-                            add_log(f"    ✅ Enviado a {nombre} (Fallback Texto)")
-                            exitosos += 1
-                            time.sleep(2)
-                        except Exception as e_fallback:
-                            add_log(f"    ❌ Error fallback texto: {str(e_fallback)}")
-                            errores.append(f"{nombre}: No se pudo enviar imagen ni texto")
-                            fallidos += 1
+                        add_log(f"    ❌ Falló envío de imagen: {err_msg}")
+                        errores.append(f"{nombre}: Falló envío de imagen ({err_msg})")
+                        fallidos += 1
 
                 
                 # ENVÍO SOLO TEXTO (Fallback o Standard)
@@ -434,10 +401,17 @@ def send_whatsapp_messages_direct(contacts, message, speed="Normal (Recomendado)
                         inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
                         input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
                         
-                        # Paste Text
+                        # Paste Text (Robust Focus)
                         import pyperclip
                         pyperclip.copy(final_msg)
-                        input_box.click()
+                        
+                        # FIX: ElementClickInterceptedException (Text Mode)
+                        driver.execute_script("arguments[0].focus();", input_box)
+                        try:
+                            input_box.click()
+                        except:
+                            driver.execute_script("arguments[0].click();", input_box)
+                            
                         input_box.send_keys(Keys.CONTROL, "v")
                         time.sleep(1)
                         input_box.send_keys(Keys.ENTER)
