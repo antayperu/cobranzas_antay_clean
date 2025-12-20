@@ -1,7 +1,9 @@
 # Estado del Proyecto: Reporte de Cobranzas y WhatsApp
 
 **Fecha de Inicio**: 2025-12-16
-**Estado General**: 🟢 v4.5 (Estable - WhatsApp Especialista)
+**Estado General**:# � STATUS: v4.6 (Estable) -> Iniciando v5.0 (WhatsApp Pro Upgrade)
+**Última Actualización:** 2025-12-20
+**Estado:** Estable (v4.6) | **En Proceso:** Planificación de Potenciación WhatsApp
 **Repositorio**: [antayperu/cobranzas_antay](https://github.com/antayperu/cobranzas_antay)
 
 ## 🎯 Objetivo
@@ -90,6 +92,34 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
         - **Solución Definitiva**: Implementación de técnica **JS-Force-Click** para bypass de intersección de elementos (`ElementClickInterceptedException`).
         - **Sincronización Avanzada**: Aumento de tiempo de portapapeles (3s) para garantizar integridad de datos en el pegado.
         - **Modo Estricto (Imagen)**: Eliminado fallback de texto para cumplir con el requerimiento de calidad visual 100%.
+   ### 📅 ROADMAP: WhatsApp Pro Upgrade (v5.0) - [EN PROCESO]
+Se ha decidido pivotar la estrategia de envío para maximizar profesionalismo y legibilidad:
+
+1.  **Imagen "Tarjeta Resumen Ejecutivo"**:
+    - Sustituir el listado detallado (tira larga) por una tarjeta de impacto.
+    - Contenido: Logo corporativo destacado, texto introductorio y totales consolidados por moneda.
+2.  **Adjunto de PDF Formal**:
+    - Opción (vía configuración) de adjuntar un Estado de Cuenta en PDF.
+    - El PDF replicará fielmente el diseño de alta fidelidad usado en los correos corporativos (PC).
+3.  **Selector de Modo de Envío**:
+    - Toggle en interfaz: **Solo Texto** vs **Imagen + Texto**.
+    - Previsualización dinámica basada en la selección para asegurar predictibilidad.
+4.  **Trazabilidad Total**: Todas las configuraciones de plantilla y logo son ahora persistentes.
+
+---
+
+### ✅ LOGROS RECIENTES (v4.6)
+- **Document Mode Estabilizado**: Implementación de tablas HTML dentro de imágenes para WhatsApp.
+- **Persistencia de Plantillas**: Sistema de guardado de mensajes de marketing implementado en `config.json`.
+- **Canvas Dinámico**: Eliminación de bandas negras/espacio vacío en imágenes verticales.
+- **Selenium Ultra-Stable**: Inyección vía JS-Force-Click para evitar bloqueos por capas de UI.
+
+---
+
+### 📦 HISTORIAL DE VERSIONES
+- **v1.0 - v4.0**: Desarrollo base de reportes, email y primer motor WhatsApp.
+- **v4.5**: WhatsApp Pro Fix (Estabilidad Selenium y sincronización Dual).
+- **v4.6**: Diseño Document Mode y Persistencia.
 - **Cómo Retomar**: 
     1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
     2. Ejecutar la app con `streamlit run app.py`.

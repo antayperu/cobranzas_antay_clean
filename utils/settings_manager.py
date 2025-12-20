@@ -20,6 +20,14 @@ DEFAULT_SETTINGS = {
         "user": "",
         "password": ""
     },
+    "whatsapp_template": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"
+        "**Detalle de Documentos:**\n"
+        "{DETALLE_DOCS}\n\n"
+        "Agradeceremos gestionar el pago a la brevedad.\n\n"
+        "_DACTA S.A.C. | RUC: 20375779448 Este es un mensaje automático de notificación de deuda. Consultas: +51 998 080 797_"
+    ),
     "text_color": "#262730",
     "features": {
         "show_analysis": False,

@@ -386,15 +386,30 @@ if st.session_state['data_ready']:
             
             with c1:
                 st.markdown("##### Configurar Plantilla")
-                default_template = (
+                
+                # Cargar plantilla de CONFIG o usar default si no existe
+                saved_template = CONFIG.get('whatsapp_template', (
                     "Estimados *{EMPRESA}*,\n\n"
                     "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"
                     "**Detalle de Documentos:**\n"
                     "{DETALLE_DOCS}\n\n"
                     "Agradeceremos gestionar el pago a la brevedad.\n\n"
                     "_DACTA S.A.C. | RUC: 20375779448 Este es un mensaje automático de notificación de deuda. Consultas: +51 998 080 797_"
-                )
-                template = st.text_area("Plantilla del Mensaje", value=default_template, height=350)
+                ))
+                
+                template = st.text_area("Plantilla del Mensaje", value=saved_template, height=350)
+                
+                # --- BOTÓN GUARDAR PLANTILLA ---
+                if st.button("💾 Guardar como Plantilla Predeterminada"):
+                    new_config = CONFIG.copy()
+                    new_config['whatsapp_template'] = template
+                    if sm.save_settings(new_config):
+                        st.success("✅ Plantilla guardada correctamente.")
+                        # Actualizamos CONFIG local para la sesión actual
+                        CONFIG['whatsapp_template'] = template
+                    else:
+                        st.error("❌ No se pudo guardar la plantilla.")
+                
                 st.caption("Variables: `{EMPRESA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
 
             with c2:
@@ -549,96 +564,147 @@ if st.session_state['data_ready']:
                             primary_col = CONFIG.get('primary_color', '#007bff')
                             secondary_col = CONFIG.get('secondary_color', '#00d4ff')
                             
-                            # --- HELPER FUNCTION: CREATE CARD HTML (PREMIUM V2) ---
-                            def create_whatsapp_card_html(content_html, p_col, s_col, logo_data_b64):
+                            # --- HELPER FUNCTION: CREATE WHATSAPP DOCUMENT HTML (TABULAR) ---
+                            def create_whatsapp_document_html(client_name, docs_df, p_col, s_col, logo_data_b64):
+                                # 1. Generar Filas de la Tabla (Estilo Email PC)
+                                table_rows = ""
+                                for _, row in docs_df.iterrows():
+                                    mon = str(row.get('MONEDA', ''))
+                                    sym = "S/" if mon.upper().startswith('S') else "$"
+                                    f_venc = pd.to_datetime(row.get('FECH VENC')).strftime('%d/%m/%y')
+                                    
+                                    m_emit = f"{sym}{row['MONT EMIT']:,.2f}"
+                                    m_saldo = f"{sym}{row['SALDO REAL']:,.2f}"
+                                    
+                                    # Detracción (Solo Soles)
+                                    det_val = row.get('DETRACCIÓN', 0)
+                                    det_fmt = f"S/ {det_val:,.2f}" if det_val > 0 else "-"
+                                    
+                                    table_rows += f"""
+                                    <tr style="border-bottom: 1px solid #eee;">
+                                        <td style="padding: 12px 8px; font-weight: 500;">{row['COMPROBANTE']}</td>
+                                        <td style="padding: 12px 8px; color: #666;">{f_venc}</td>
+                                        <td style="padding: 12px 8px; text-align: right;">{m_emit}</td>
+                                        <td style="padding: 12px 8px; text-align: right; font-weight: bold; color: {p_col};">{m_saldo}</td>
+                                        <td style="padding: 12px 8px; text-align: right; font-size: 0.9em; color: #888;">{det_fmt}</td>
+                                    </tr>
+                                    """
+
                                 img_tag_html = ""
                                 if logo_data_b64:
-                                    # Logo grande, centrado, sin fondo, padding generoso
-                                    img_tag_html = f'<div style="text-align:center; padding: 25px 0 15px 0;"><img src="data:image/png;base64,{logo_data_b64}" style="max-height: 80px; max-width: 80%; object-fit: contain;" alt="Logo"/></div>'
+                                    img_tag_html = f'<div style="text-align:center; padding: 40px 0 30px 0; background: #fff;"><img src="data:image/png;base64,{logo_data_b64}" style="max-height: 160px; max-width: 80%; object-fit: contain;" alt="Logo"/></div>'
                                 
-                                # Diseño más limpio, estilo Apple/Fintech
-                                # Diseño más limpio, estilo Apple/Fintech
-                                # Nota: Usamos Divs directos para st.markdown, sin tags html/body globales que rompan layout
+                                # HTML FINAL (Estilo Documento Formal)
                                 return f"""
                                 <style>
-                                    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-                                    /* Scoped class to prevent leaks if possible, though st.markdown is global css usually */
-                                    .wa-card {{
-                                        width: 100%;
-                                        max-width: 400px; /* Responsive consistency */
-                                        background: #ffffff;
-                                        border-radius: 12px;
-                                        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-                                        overflow: hidden;
-                                        margin: 10px 0; /* Align left usually in expander */
-                                        border: 1px solid #f0f0f0;
-                                        font-family: 'Roboto', sans-serif;
+                                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+                                    .doc-container {{
+                                        width: 900px;
+                                        background: white;
+                                        margin: 0 auto;
+                                        font-family: 'Inter', sans-serif;
+                                        padding: 0;
+                                        border: 1px solid #eee;
+                                        color: #1a1a1a;
                                     }}
-                                    .wa-header {{
-                                        background: #ffffff;
-                                        border-bottom: 4px solid {p_col};
-                                        padding-bottom: 15px;
-                                    }}
-                                    .wa-title {{
+                                    .doc-header {{
                                         text-align: center;
-                                        font-size: 18px;
+                                        border-bottom: 6px solid {p_col};
+                                        padding-bottom: 20px;
+                                    }}
+                                    .doc-title {{
+                                        font-size: 32px;
                                         font-weight: 700;
-                                        color: #333;
                                         text-transform: uppercase;
-                                        letter-spacing: 1px;
-                                        margin-top: 5px;
+                                        letter-spacing: 2px;
+                                        margin: 20px 0;
+                                        color: #000;
                                     }}
-                                    .wa-content {{
-                                        padding: 25px 30px 40px 30px;
-                                        color: #444;
-                                        font-size: 14px;
-                                        line-height: 1.6;
+                                    .doc-body {{ padding: 60px 70px; }}
+                                    .greeting {{ font-size: 24px; font-weight: 600; margin-bottom: 25px; color: {p_col}; }}
+                                    .intro {{ font-size: 19px; line-height: 1.6; margin-bottom: 40px; color: #333; }}
+                                    .table-wrapper {{ width: 100%; margin-bottom: 40px; }}
+                                    table {{ width: 100%; border-collapse: collapse; font-size: 18px; }}
+                                    th {{ background: #f9f9f9; padding: 15px 8px; text-align: left; font-weight: 700; border-bottom: 3px solid {p_col}; color: #444; }}
+                                    .totals-block {{ 
+                                        background: #f4f8fb; 
+                                        padding: 25px 35px; 
+                                        border-radius: 8px; 
+                                        text-align: right; 
+                                        margin-top: 30px;
+                                        border-left: 5px solid {s_col};
                                     }}
-                                    .wa-footer {{
-                                        margin-top: 25px;
-                                        padding-top: 20px;
-                                        border-top: 1px solid #f5f5f5;
-                                        font-size: 11px;
-                                        color: #888;
-                                        text-align: center;
+                                    .total-label {{ font-size: 18px; color: #666; font-weight: 500; }}
+                                    .total-value {{ font-size: 24px; font-weight: 700; color: {s_col}; margin-left: 20px; }}
+                                    .doc-footer {{ 
+                                        background: #1a1a1a; 
+                                        color: #999; 
+                                        padding: 40px; 
+                                        text-align: center; 
+                                        font-size: 15px;
+                                        line-height: 1.5;
                                     }}
-                                    /* Fix for streamlit markdown styling interference */
-                                    .wa-card p {{ margin-bottom: 10px; }}
                                 </style>
-                                <div class="wa-card" id="card">
-                                    <div class="wa-header">
+                                <div class="doc-container" id="card">
+                                    <div class="doc-header">
                                         {img_tag_html}
-                                        <div class="wa-title">Estado de Cuenta</div>
+                                        <div class="doc-title">Estado de Cuenta Oficial</div>
                                     </div>
-                                    <div class="wa-content">
-                                        {content_html}
-                                        <div class="wa-footer">
-                                            Documento generado automáticamente
+                                    <div class="doc-body">
+                                        <div class="greeting">Estimados {client_name},</div>
+                                        <div class="intro">
+                                            Le informamos que a la fecha presenta documentos pendientes de pago por un <b>Total de: {total_real_str}</b>.<br>
+                                            Agradeceremos gestionar la cancelación a la brevedad posible.
                                         </div>
+                                        
+                                        <div class="table-wrapper">
+                                            <table>
+                                                <thead>
+                                                    <tr>
+                                                        <th>Documento</th>
+                                                        <th>Venc.</th>
+                                                        <th style="text-align: right;">Importe</th>
+                                                        <th style="text-align: right;">Saldo</th>
+                                                        <th style="text-align: right;">Detr.</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {table_rows}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        <div class="totals-block">
+                                            <span class="total-label">SALDO TOTAL PENDIENTE:</span>
+                                            <span class="total-value">{total_real_str}</span>
+                                        </div>
+                                    </div>
+                                    <div class="doc-footer">
+                                        {CONFIG.get('company_name', 'DACTA S.A.C.')} | RUC: {CONFIG.get('company_ruc', '20375779448')}<br>
+                                        Este es un documento formal generado automáticamente. Consultas: {CONFIG.get('phone_contact', '')}
                                     </div>
                                 </div>
                                 """
 
+                            # Para el preview en pantalla, usamos una versión más compacta pero similar
+                            def get_preview_html(msg):
+                                import re
+                                def _fmt(text):
+                                    t = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                                    t = re.sub(r'\*(.*?)\*', r'<b>\1</b>', t)
+                                    return t.replace("\n", "<br>")
+                                return f"""<div style='background:#fff; padding:20px; border-radius:8px; border:1px solid #ddd; font-family:sans-serif; font-size:14px;'>{_fmt(msg)}</div>"""
 
-                            # Simple Parser for Bold (*text*) to <b>text</b>
-                            import re
-                            def format_whatsapp_html(text):
-                                text_safe = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                                text_bold = re.sub(r'\*(.*?)\*', r'<b>\1</b>', text_safe)
-                                return text_bold.replace("\n", "<br>")
-
-                            formatted_msg = format_whatsapp_html(msg_preview)
-                            
-                            # GENERATE HTML PREVIEW USING SHARED FUNCTION
-                            card_html = create_whatsapp_card_html(formatted_msg, primary_col, secondary_col, logo_b64)
+                            # GENERATE HTML PREVIEW (Usa Document Mode para consistencia visual)
+                            # Pero en el expander de Streamlit mostramos solo el texto por velocidad
+                            # y guardamos el HTML complejo para la generación de imagen
+                            card_html = create_whatsapp_document_html(empresa, docs_cli, primary_col, secondary_col, logo_b64)
                             
                             contact_data['card_html'] = card_html
                             contact_data['image_path'] = None 
 
                             # --- RENDERIZADO INMEDIATO (User Preference) ---
-                            # Usamos st.markdown con unsafe_allow_html=True
-                            # Es MUCHO más rápido que components.html (iframe) y permite listar 100+ items sin lag severo.
-                            st.markdown(card_html, unsafe_allow_html=True)
+                            st.markdown(get_preview_html(msg_preview), unsafe_allow_html=True)
                     
 
                 
@@ -737,7 +803,8 @@ if st.session_state['data_ready']:
                         # Crear UN SOLO driver para todas las imágenes (eficiente)
                         chrome_opts = Options()
                         chrome_opts.add_argument("--headless")
-                        chrome_opts.add_argument("--window-size=500,4000")
+                        # AUMENTAMOS EL ANCHO para que no se vea como una tira y simule una página
+                        chrome_opts.add_argument("--window-size=1100,5000") 
                         chrome_opts.add_argument("--hide-scrollbars")
                         chrome_opts.add_argument("--disable-gpu")
                         
@@ -761,7 +828,7 @@ if st.session_state['data_ready']:
                                     _html_msg = _fmt(contact['mensaje'])
                                     _p_col = CONFIG.get('primary_color', '#007bff')
                                     _s_col = CONFIG.get('secondary_color', '#00d4ff')
-                                    card_html = create_whatsapp_card_html(_html_msg, _p_col, _s_col, logo_b64)
+                                    card_html = create_whatsapp_document_html(empresa, docs_cli, _p_col, _s_col, logo_b64)
                                     
                                     # Guardar HTML temporal
                                     t_html = tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode='w', encoding='utf-8')
@@ -777,31 +844,35 @@ if st.session_state['data_ready']:
                                     # Obtener altura total requerida
                                     required_height = temp_driver.execute_script("return document.body.parentNode.scrollHeight")
                                     
-                                    # Redimensionar ventana
-                                    temp_driver.set_window_size(500, required_height + 150)
+                                    # Redimensionar ventana (ANCHO FIJO para legibilidad)
+                                    temp_driver.set_window_size(1100, required_height + 200)
                                     
                                     # Screenshot PNG
                                     t_png = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
                                     t_png.close()
                                     card_elem.screenshot(t_png.name)
                                     
-                                    # Convertir a JPG VERTICAL
+                                    # --- LÓGICA DE CANVAS ESTILO CARTA (MAX LEGIBILIDAD) ---
                                     image = Image.open(t_png.name).convert('RGB')
-                                    canvas_w, canvas_h = 1080, 1920
-                                    canvas = Image.new("RGB", (canvas_w, canvas_h), "#ffffff")
                                     
-                                    target_w = int(canvas_w * 0.90)
+                                    # Ancho estándar para WhatsApp HD (1200px)
+                                    canvas_w = 1200
+                                    
+                                    # Escalamos la imagen para que ocupe el 95% del ancho del canvas
+                                    # EL ALTO SERÁ PROPORCIONAL (Sin aplastar)
+                                    target_w = int(canvas_w * 0.95)
                                     ratio = target_w / float(image.width)
                                     target_h = int(float(image.height) * ratio)
                                     
-                                    if target_h > canvas_h * 0.90:
-                                        target_h = int(canvas_h * 0.90)
-                                        ratio = target_h / float(image.height)
-                                        target_w = int(float(image.width) * ratio)
+                                    # El alto del canvas será el alto escalado de la imagen + márgenes generosos (Letter Look)
+                                    canvas_h = target_h + 200 # 100px arriba y abajo
                                     
+                                    canvas = Image.new("RGB", (canvas_w, canvas_h), "#ffffff")
                                     image_resized = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                                    
+                                    # Centramos la "hoja" en el canvas
                                     pos_x = (canvas_w - target_w) // 2
-                                    pos_y = (canvas_h - target_h) // 2
+                                    pos_y = 100 # Margen superior fijo
                                     canvas.paste(image_resized, (pos_x, pos_y))
                                     
                                     # Guardar JPG
