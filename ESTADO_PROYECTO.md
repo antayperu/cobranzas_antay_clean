@@ -55,6 +55,21 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     - **v1.6**: Mensaje WhatsApp Detallado (Listado completo y pie de página).
     - **v1.7**: UX WhatsApp Rediseñado (Estilo "Tarjeta" con iconos).
     - **v1.8**: Ajuste Fino de UX (Orden específico de campos).
+### ✅ Módulo de WhatsApp (v5.0)
+- **Estado**: Funcional (Texto e Imágenes), En Depuración (Adjunto PDF Encolado).
+- **Características**:
+  - Selección de modo: Texto, Tarjeta Ejecutiva, Tarjeta + PDF.
+  - Lógica de envío robusta para Texto e Imagen (Pegado directo).
+  - **Reto Actual**: El adjunto automático de PDF en la versión Web está en fase de refinamiento. Se implementó loop de reintentos (x3) y selectores estrictos para evitar falsos positivos.
+- **Archivos**: `utils/whatsapp_sender.py`, `app.py`.
+
+### 🔄 Próximos Pasos (Prioridad Alta)
+1. **Validar Envío PDF**: Confirmar que la nueva estrategia de "Solo Enter + Loop de Reintento" funciona en el entorno del usuario.
+2. **Refinar UX**: Mejorar feedback visual durante el proceso de envío múltiple.
+
+## 📦 Backlog
+- [ ] Implementar envío de correos masivos (módulo listo, falta integración final UI).
+- [ ] Dashboard de estadísticas de cobranza.
     - **v2.0**: Lógica Flexible (Filtros, Totales Estrictos).
     - **v2.1**: Rendimiento y UI (Procesamiento Manual con Memoria, Corrección de Índice de Tabla).
     - **v3.0**: Integración de Selenium para WhatsApp, refactor UI y lógica de conteo por moneda.

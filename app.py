@@ -83,9 +83,45 @@ with st.sidebar:
     # Uploaders en Expander para limpieza visual
     st.subheader("📂 Cargar Datos")
     
-    file_ctas = st.file_uploader("CtasxCobrar.xlsx", type=["xlsx"])
-    file_cobranza = st.file_uploader("Cobranza.xlsx", type=["xlsx"])
-    file_cartera = st.file_uploader("cartera_clientes.xlsx", type=["xlsx"])
+    # Inicializar estado de archivos en sesión
+    if 'uploaded_files' not in st.session_state:
+        st.session_state['uploaded_files'] = {
+            'ctas': None,
+            'cobranza': None,
+            'cartera': None
+        }
+    
+    # Uploaders con persistencia
+    file_ctas_new = st.file_uploader("CtasxCobrar.xlsx", type=["xlsx"], key="uploader_ctas")
+    file_cobranza_new = st.file_uploader("Cobranza.xlsx", type=["xlsx"], key="uploader_cobranza")
+    file_cartera_new = st.file_uploader("cartera_clientes.xlsx", type=["xlsx"], key="uploader_cartera")
+    
+    # Actualizar archivos en sesión si se cargan nuevos
+    if file_ctas_new:
+        st.session_state['uploaded_files']['ctas'] = file_ctas_new
+    if file_cobranza_new:
+        st.session_state['uploaded_files']['cobranza'] = file_cobranza_new
+    if file_cartera_new:
+        st.session_state['uploaded_files']['cartera'] = file_cartera_new
+    
+    # Usar archivos de sesión
+    file_ctas = st.session_state['uploaded_files']['ctas']
+    file_cobranza = st.session_state['uploaded_files']['cobranza']
+    file_cartera = st.session_state['uploaded_files']['cartera']
+    
+    # Mostrar estado de archivos cargados
+    if file_ctas or file_cobranza or file_cartera:
+        st.success(f"✅ Archivos en memoria: {sum([1 for f in [file_ctas, file_cobranza, file_cartera] if f is not None])}/3")
+        
+        # Botón para limpiar archivos
+        if st.button("🗑️ Limpiar Archivos", help="Elimina los archivos cargados de la memoria"):
+            st.session_state['uploaded_files'] = {
+                'ctas': None,
+                'cobranza': None,
+                'cartera': None
+            }
+            st.session_state['data_ready'] = False
+            st.rerun()
     
     st.markdown("---")
 
@@ -442,6 +478,40 @@ if st.session_state['data_ready']:
 
                 st.info(f"Se generarán enlaces para **{len(selected_labels)}** clientes seleccionados.")
                 
+                # ========== NUEVO: SELECTOR DE MODO DE ENVÍO v5.0 ==========
+                st.markdown("---")
+                st.markdown("### ⚙️ Configuración de Envío WhatsApp")
+                
+                # Información general
+                st.info("💡 **v5.0 Pro Upgrade**: Elige cómo enviar tus notificaciones de cobranza")
+                
+                # Selector de modo simplificado
+                send_mode_options = [
+                    ("texto", "📝 Solo Texto", "Mensaje de texto plano sin archivos adjuntos"),
+                    ("imagen_ejecutiva", "🎴 Tarjeta Ejecutiva", "Imagen compacta con logo y totales consolidados (Recomendado)"),
+                    ("imagen_pdf", "📊 Tarjeta + PDF Completo", "Imagen ejecutiva + PDF detallado con todos los documentos")
+                ]
+                
+                send_mode_index = st.radio(
+                    "**Modo de Envío:**",
+                    range(len(send_mode_options)),
+                    format_func=lambda x: send_mode_options[x][1],
+                    index=1,  # Default: Tarjeta Ejecutiva
+                    help="Elige cómo se enviarán los mensajes a tus clientes"
+                )
+                send_mode_value = send_mode_options[send_mode_index][0]
+                
+                # Mostrar descripción del modo seleccionado con colores
+                selected_description = send_mode_options[send_mode_index][2]
+                if send_mode_value == "texto":
+                    st.warning(f"💬 {selected_description}")
+                elif send_mode_value == "imagen_ejecutiva":
+                    st.success(f"🎴 {selected_description}")
+                else:
+                    st.info(f"📊 {selected_description}")
+                
+                # ========== FIN SELECTOR DE MODO ==========
+                
                 # BOTON PROCESAR
                 # --- LÓGICA DE GENERACIÓN DE MENSAJES (PREVIEW) ---
                 contacts_to_send = []
@@ -533,6 +603,16 @@ if st.session_state['data_ready']:
                         
                         txt_detalle = "\n".join(docs_lines)
 
+                        # ========== NUEVO v5.0: Preparar datos para tarjeta ejecutiva y PDF ==========
+                        # Calcular totales por moneda para la tarjeta ejecutiva
+                        df_sol_cli = docs_cli[docs_cli['MONEDA'].astype(str).str.startswith('S', na=False)]
+                        df_dol_cli = docs_cli[~docs_cli['MONEDA'].astype(str).str.startswith('S', na=False)]
+                        
+                        sum_s_cli = df_sol_cli['SALDO REAL'].sum() if len(df_sol_cli) > 0 else 0
+                        sum_d_cli = df_dol_cli['SALDO REAL'].sum() if len(df_dol_cli) > 0 else 0
+                        count_s_cli = len(df_sol_cli)
+                        count_d_cli = len(df_dol_cli)
+                        
                         # Data dict for replacement (and sending)
                         contact_data = {
                             'nombre_cliente': empresa,
@@ -542,7 +622,14 @@ if st.session_state['data_ready']:
                             'TOTAL_SALDO_REAL': total_real_str,
                             'TOTAL_SALDO_ORIGINAL': f"{total_orig_val:,.2f}",
                             'venta_neta': total_orig_val, 
-                            'numero_transacciones': len(docs_cli)
+                            'numero_transacciones': len(docs_cli),
+                            # NUEVO v5.0: Datos para tarjeta ejecutiva y PDF
+                            'docs_df': docs_cli,  # DataFrame completo de documentos
+                            'TOTAL_SALDO_S': f"S/ {sum_s_cli:,.2f}",
+                            'TOTAL_SALDO_D': f"$ {sum_d_cli:,.2f}",
+                            'COUNT_DOCS_S': count_s_cli,
+                            'COUNT_DOCS_D': count_d_cli,
+                            'cod_cliente': cod_cli  # Para referencia
                         }
                         
                         msg_preview = template
@@ -781,135 +868,22 @@ if st.session_state['data_ready']:
                         # Update visual
                         results_placeholder.dataframe(pd.DataFrame(session_results), hide_index=True, use_container_width=True)
                     
-                    # GENERACIÓN AUTOMÁTICA DE IMÁGENES (Batch eficiente)
-                    # Genera solo las que faltan, reutiliza las que ya existen
-                    status_placeholder.info("⏳ Preparando imágenes...")
                     
-                    images_to_generate = [c for c in contacts_to_send if not c.get('image_path') or not os.path.exists(c.get('image_path', ''))]
+                    # ========== NUEVO v5.0: ENVÍO UNIFICADO CON MULTI-MODO ==========
+                    # La generación de imágenes y PDFs se maneja automáticamente en el backend
+                    # según el modo seleccionado (send_mode_value)
                     
-                    if images_to_generate:
-                        status_placeholder.warning(f"⏳ Generando {len(images_to_generate)} imágenes...")
-                        
-                        from selenium import webdriver
-                        from selenium.webdriver.chrome.options import Options
-                        from selenium.webdriver.chrome.service import Service
-                        from webdriver_manager.chrome import ChromeDriverManager
-                        from selenium.webdriver.support.ui import WebDriverWait
-                        from selenium.webdriver.support import expected_conditions as EC
-                        from selenium.webdriver.common.by import By
-                        from PIL import Image
-                        import time
-                        
-                        # Crear UN SOLO driver para todas las imágenes (eficiente)
-                        chrome_opts = Options()
-                        chrome_opts.add_argument("--headless")
-                        # AUMENTAMOS EL ANCHO para que no se vea como una tira y simule una página
-                        chrome_opts.add_argument("--window-size=1100,5000") 
-                        chrome_opts.add_argument("--hide-scrollbars")
-                        chrome_opts.add_argument("--disable-gpu")
-                        
-                        s_service = Service(ChromeDriverManager().install())
-                        temp_driver = webdriver.Chrome(service=s_service, options=chrome_opts)
-                        wait_driver = WebDriverWait(temp_driver, 10)
-                        
-                        try:
-                            for idx, contact in enumerate(images_to_generate, 1):
-                                try:
-                                    empresa = contact.get('nombre_cliente', f'Cliente {idx}')
-                                    status_placeholder.info(f"⏳ Generando imagen {idx}/{len(images_to_generate)}: {empresa}")
-                                    
-                                    # Formatear mensaje
-                                    import re
-                                    def _fmt(text):
-                                        t = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                                        t = re.sub(r'\*(.*?)\*', r'<b>\1</b>', t)
-                                        return t.replace("\n", "<br>")
-                                    
-                                    _html_msg = _fmt(contact['mensaje'])
-                                    _p_col = CONFIG.get('primary_color', '#007bff')
-                                    _s_col = CONFIG.get('secondary_color', '#00d4ff')
-                                    card_html = create_whatsapp_document_html(empresa, docs_cli, _p_col, _s_col, logo_b64)
-                                    
-                                    # Guardar HTML temporal
-                                    t_html = tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode='w', encoding='utf-8')
-                                    t_html.write(card_html)
-                                    t_html.close()
-                                    
-                                    # Screenshot
-                                    temp_driver.get(f"file:///{t_html.name}")
-                                    
-                                    # 3. Lógica Enterprise: MEDIR y REDIMENSIONAR (Auto-Scalable)
-                                    card_elem = wait_driver.until(EC.presence_of_element_located((By.ID, "card")))
-                                    
-                                    # Obtener altura total requerida
-                                    required_height = temp_driver.execute_script("return document.body.parentNode.scrollHeight")
-                                    
-                                    # Redimensionar ventana (ANCHO FIJO para legibilidad)
-                                    temp_driver.set_window_size(1100, required_height + 200)
-                                    
-                                    # Screenshot PNG
-                                    t_png = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                                    t_png.close()
-                                    card_elem.screenshot(t_png.name)
-                                    
-                                    # --- LÓGICA DE CANVAS ESTILO CARTA (MAX LEGIBILIDAD) ---
-                                    image = Image.open(t_png.name).convert('RGB')
-                                    
-                                    # Ancho estándar para WhatsApp HD (1200px)
-                                    canvas_w = 1200
-                                    
-                                    # Escalamos la imagen para que ocupe el 95% del ancho del canvas
-                                    # EL ALTO SERÁ PROPORCIONAL (Sin aplastar)
-                                    target_w = int(canvas_w * 0.95)
-                                    ratio = target_w / float(image.width)
-                                    target_h = int(float(image.height) * ratio)
-                                    
-                                    # El alto del canvas será el alto escalado de la imagen + márgenes generosos (Letter Look)
-                                    canvas_h = target_h + 200 # 100px arriba y abajo
-                                    
-                                    canvas = Image.new("RGB", (canvas_w, canvas_h), "#ffffff")
-                                    image_resized = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
-                                    
-                                    # Centramos la "hoja" en el canvas
-                                    pos_x = (canvas_w - target_w) // 2
-                                    pos_y = 100 # Margen superior fijo
-                                    canvas.paste(image_resized, (pos_x, pos_y))
-                                    
-                                    # Guardar JPG
-                                    t_jpg = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
-                                    t_jpg.close()
-                                    canvas.save(t_jpg.name, quality=95)
-                                    
-                                    contact['image_path'] = t_jpg.name
-                                    
-                                    # Limpiar temporales
-                                    try:
-                                        os.remove(t_html.name)
-                                        os.remove(t_png.name)
-                                    except:
-                                        pass
-                                        
-                                except Exception as e_img:
-                                    st.warning(f"⚠️ No se pudo generar imagen para {empresa}: {str(e_img)}")
-                                    contact['image_path'] = None
-                            
-                            temp_driver.quit()
-                            status_placeholder.success(f"✅ {len(images_to_generate)} imágenes generadas")
-                            
-                        except Exception as e:
-                            temp_driver.quit()
-                            st.error(f"Error generando imágenes: {e}")
-                    else:
-                        status_placeholder.success(f"✅ {len(contacts_to_send)} imágenes ya disponibles")
-
-
+                    status_placeholder.info("⏳ Preparando envío...")
                     
                     try:
                         results = send_whatsapp_messages_direct(
-                            contacts_to_send, 
-                            template, 
+                            contacts=contacts_to_send, 
+                            message=template, 
                             speed="Normal (Recomendado)",
-                            progress_callback=progress_callback
+                            progress_callback=progress_callback,
+                            send_mode=send_mode_value,  # NUEVO v5.0: Modo de envío
+                            branding_config=CONFIG,      # NUEVO v5.0: Configuración de branding
+                            logo_path=logo_path          # NUEVO v5.0: Ruta al logo
                         )
                         
                         # Actualización Final de la Tabla
