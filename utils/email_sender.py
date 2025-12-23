@@ -420,10 +420,11 @@ def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_co
     
     return text
 
-def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False):
+def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, supervisor_config=None):
     """
     Envía lote de correos con reporte de progreso y bloqueo TTL por negocio.
     force_resend: Si True, ignora el bloqueo TTL (Reason: USER_RESEND).
+    supervisor_config: Dict opcional {'email': '...', 'enabled': True/False, 'mode': 'BCC'/'CC'}
     """
     import smtplib
     from email.mime.multipart import MIMEMultipart
@@ -480,6 +481,9 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                      (ledger_key TEXT PRIMARY KEY, last_sent_at TIMESTAMP, last_msg_id TEXT, send_count INTEGER)''')
         
         # History Table (Auditoría)
+        # RC-FEAT-011: Added supervisor_copied column logic could be in 'status' or metadata. 
+        # For now we keep schema compatible and log 'SUPERVISOR_COPY' in log or new column if we wanted migration.
+        # We will log it in 'reason' or append to status if needed, but lets keep it simple to avoid schema migration risks on hotfix.
         c.execute('''CREATE TABLE IF NOT EXISTS send_attempts
                      (id TEXT PRIMARY KEY, ledger_key TEXT, recipient TEXT, status TEXT, reason TEXT, timestamp TIMESTAMP, run_id TEXT)''')
         conn.commit()
@@ -604,6 +608,28 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 all_recipients = [e.strip() for e in raw_to if e.strip()]
                 unique_envelope_recipients = list(set(email.lower() for email in all_recipients))
                 
+                # --- RC-FEAT-011: Copia Supervisión (BCC/CC) ---
+                supervisor_copy_target = None
+                supervisor_log_info = ""
+                
+                if supervisor_config and supervisor_config.get('enabled', False):
+                    sup_email = str(supervisor_config.get('email', '')).strip()
+                    if sup_email and '@' in sup_email:
+                        supervisor_copy_target = sup_email
+                        sup_mode = str(supervisor_config.get('mode', 'BCC')).upper()
+                        
+                        # Agregar al envelope siempre (se enviará a esta direcicón)
+                        if sup_email.lower() not in unique_envelope_recipients:
+                            unique_envelope_recipients.append(sup_email.lower())
+                            
+                        # Configurar Headers (CC vs BCC)
+                        if sup_mode == 'CC':
+                            msg['Cc'] = sup_email
+                            supervisor_log_info = f"[CC: {sup_email}]"
+                        else:
+                            # BCC (Default): No header, just envelope
+                            supervisor_log_info = f"[BCC: {sup_email}]"
+                
                 # --- Advanced Forensic Headers ---
                 # Identificadores de Proceso/Hilo
                 thread_id = str(threading.get_ident())
@@ -622,7 +648,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 # Log Actual RCPT LIST
                 recipients_log_str = ", ".join(unique_envelope_recipients)
                 print(f"DEBUG_FORENSIC: [RunID:{run_id}] Thread:{thread_id} | RCPT_LIST={recipients_log_str} | LedgerKey={ledger_key}")
-                stats['log'].append(f"📧 [RunID:{run_id}] Envelope Targets ({len(unique_envelope_recipients)}): {recipients_log_str}")
+                stats['log'].append(f"📧 [RunID:{run_id}] Envelope Targets ({len(unique_envelope_recipients)}): {recipients_log_str} {supervisor_log_info}")
 
                 # Enviar con sobre explícito (Explicit Envelope)
                 server.send_message(msg, to_addrs=unique_envelope_recipients)
@@ -632,6 +658,8 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 
                 # 4. Update Ledger (Confirm Sent)
                 reason = "USER_RESEND" if force_resend else "NORMAL"
+                if supervisor_copy_target:
+                    reason += f"_wCOPY_{supervisor_config.get('mode','BCC')}"
                 
                 try:
                     # Update State
@@ -655,7 +683,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     'Cliente': client_name,
                     'Email': recipient_ledger,
                     'Estado': '✅ Enviado',
-                    'Detalle': 'Entregado a SMTP Server',
+                    'Detalle': f'Entregado SMTP {supervisor_log_info}',
                     'RunID': run_id
                 })
 

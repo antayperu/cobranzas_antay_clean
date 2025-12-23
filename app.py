@@ -1160,6 +1160,12 @@ if st.session_state['data_ready']:
                         if not email_user or not email_pass:
                              st.error("❌ Faltan credenciales SMTP. Configúralas en la pestaña 'Configuración'.")
                         else:
+                            # --- Feedback Visual de Supervisión (RC-BUG-017) ---
+                            sup_cfg_active = CONFIG.get('supervisor_config', {})
+                            if sup_cfg_active.get('enabled', False):
+                                sup_mode_act = sup_cfg_active.get('mode', 'BCC')
+                                st.success(f"👮 Copia de Supervisión ACTIVADA ({sup_mode_act}): {sup_cfg_active.get('email')}")
+                            
                             messages_to_send = []
                             # RC-BUG-007: Deduplicación explícita en el origen
                             seen_emails_batch = set()
@@ -1227,7 +1233,8 @@ if st.session_state['data_ready']:
                                     messages_to_send, 
                                     progress_callback=lambda i, t, m: st.toast(f"{m} ({i}/{t})"),
                                     logo_path=logo_path,
-                                    force_resend=force_resend_ttl # RC-BUG-015
+                                    force_resend=force_resend_ttl, # RC-BUG-015
+                                    supervisor_config=CONFIG.get('supervisor_config', None) # RC-FEAT-011
                                 )
                             
                             # Marcar como enviado para prevenir duplicados
@@ -1358,6 +1365,75 @@ if st.session_state['data_ready']:
                 else:
                     st.error("❌ Error al guardar la configuración.")
 
+        # --- SECCION INDEPENDIENTE: SUPERVISION (RC-BUG-017 & UX Feedback) ---
+        st.markdown("---")
+        st.subheader("🛠️ Supervisión de Cobranza")
+        st.info("Configuración de copia de auditoría. Estos cambios se aplican inmediatamente.")
+        
+        # Cargar config actual
+        curr_sup_cfg = CONFIG.get('supervisor_config', sm.DEFAULT_SETTINGS['supervisor_config'])
+        
+        # 1. Main Toggle (Control Principal)
+        sup_enabled_ui = st.toggle("✅ Activar Copia a Supervisión", value=curr_sup_cfg.get('enabled', True))
+        
+        # 2. Options (Disabled if Main Toggle is OFF)
+        c_sup1, c_sup2 = st.columns([2, 2])
+        
+        with c_sup1:
+            sup_email_ui = st.text_input(
+                "Email Supervisor", 
+                value=curr_sup_cfg.get('email', ''), 
+                help="Este correo recibirá copia de TODOS los envíos.",
+                disabled=not sup_enabled_ui
+            )
+            
+        with c_sup2:
+            # Mapping Logic for Verbose UI
+            mode_map = {
+                "BCC": "Copia oculta (BCC) – Recomendado",
+                "CC": "Copia visible (CC)"
+            }
+            rev_mode_map = {v: k for k, v in mode_map.items()}
+            
+            # Determine current value for UI
+            curr_mode_code = curr_sup_cfg.get('mode', 'BCC')
+            curr_mode_ui = mode_map.get(curr_mode_code, mode_map["BCC"])
+            
+            selected_mode_ui = st.selectbox(
+                "Modo de Envío", 
+                options=list(mode_map.values()),
+                index=list(mode_map.values()).index(curr_mode_ui),
+                help="BCC: El cliente NO VE a la supervisión.\nCC: El cliente SÍ VE a la supervisión.",
+                disabled=not sup_enabled_ui
+            )
+            # Resolve back to code
+            sup_mode_ui = rev_mode_map[selected_mode_ui]
+            
+        if st.button("💾 Guardar Configuración de Supervisión"):
+            # 1. Update Global Config Wrapper
+            new_sup_settings = {
+                "email": sup_email_ui,
+                "enabled": sup_enabled_ui,
+                "mode": sup_mode_ui
+            }
+            CONFIG['supervisor_config'] = new_sup_settings
+            
+            # 2. Persist to Disk
+            if sm.save_settings(CONFIG):
+                status_msg = f"Copia {'ACTIVADA' if sup_enabled_ui else 'DESACTIVADA'}"
+                if sup_enabled_ui:
+                    status_msg += f" ({sup_mode_ui}) a {sup_email_ui}"
+                
+                st.success(f"✅ Guardado: {status_msg}")
+                st.toast("Configuración de supervisión actualizada", icon="👮")
+                import time
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("Error guardando config.json")
+        # -------------------------------------------------------
+
+        st.markdown("---")
         st.subheader("Logo de la Empresa")
         uploaded_logo = st.file_uploader("Subir Logo (PNG/JPG)", type=['png', 'jpg', 'jpeg'])
         if uploaded_logo:

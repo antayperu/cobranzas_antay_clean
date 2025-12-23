@@ -12,6 +12,7 @@ El Smoke Test se considera **APROBADO (PASSED)** si y solo si:
 3.  **Reenvío Intencional**: Funciona correctamente (Override del Ledger) cuando el usuario lo solicita explícitamente y queda auditado en log.
 4.  **No-Bloqueo**: El Ledger/TTL no impide escenarios válidos de negocio (ej. re-enviar a los 11 minutos o forzar envío).
 5.  **UI Feedback**: La interfaz muestra claramente Resultados (Enviados/Fallidos/Omitidos) y el Log Técnico está oculto en la sección "Avanzado".
+6.  **Supervisor Copy**: El supervisor configurado recibe copia (BCC/CC) de todos los envíos.
 
 ## 2. Checklist de Pruebas (Email Focus)
 
@@ -22,6 +23,9 @@ El Smoke Test se considera **APROBADO (PASSED)** si y solo si:
 | **ET-03** | **Multi-Cliente (Mismo Email)** | Configurar `cliente1@test.com` para Empresa A y Empresa B (mismo Excel). Enviar masivo. | Recibe **2 correos** (uno por Empresa A, uno por Empresa B). Log muestra 2 envíos exitosos. | [ ] |
 | **ET-04** | **Force Send (Reenvío)** | Activar check "Forzar reenvío" y enviar al cliente de ET-01. | Se envía correo nuevamente. Log indica envío forzado. | [ ] |
 | **ET-05** | **UI/UX Clean** | Revisar panel de resultados tras envío masivo. | Resumen claro (ej. "3 Enviados"). Logs técnicos ("DEBUG: ...") **no visibles** por defecto. Panel "Avanzado" funciona. | [ ] |
+| **ET-06** | **Supervisor Copy (BCC)** | Configurar `enable_supervisor_copy=ON`. Enviar. | Cliente recibe 1. Supervisor recibe 1. Log indica envío con copia. | [ ] |
+| **ET-07** | **Config Persistence (RC-BUG-017)** | Cambiar email supervisor -> Guardar (Botón Nuevo) -> Recargar F5. | Valor persiste. Pestaña Email muestra "Copia de Supervisión ACTIVADA". | [ ] |
+| **ET-08** | **UX Validation (Toggle & Modes)** | Probar Toggle OFF (inputs grises) y ON (habilitados). Verificar textos "Recomendado". | UI responde correctamente. Inputs se bloquean. Mapeo BCC/CC es correcto en backend. | [ ] |
 
 ## 3. Evidencia de Ejecución
 

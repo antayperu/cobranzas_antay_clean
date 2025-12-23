@@ -20,6 +20,11 @@ DEFAULT_SETTINGS = {
         "user": "",
         "password": ""
     },
+    "supervisor_config": {
+        "email": "acamacho@integrens.com",
+        "enabled": True,
+        "mode": "BCC"
+    },
     "whatsapp_template": (
         "Estimados *{EMPRESA}*,\n\n"
         "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"

@@ -60,7 +60,8 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
 - **Fix Crítico**: Solucionado problema de duplicidad con "Smart Ledger" (SQLite) y limpieza de código en `app.py`.
 - **Causa Raíz**: Bloque duplicado en `app.py` que invocaba la función de envío dos veces.
 - **Solución**: Eliminación de código redundante + Ledger SQLite + TTL + Soporte Multi-cliente.
-- **Tickets Completados**: [RC-BUG-013] a [RC-BUG-016] y [RC-UX-002].
+- **New Feature**: Supervisor Copy (BCC/CC) con persistencia y UX Enterprise [RC-FEAT-011] [RC-BUG-017].
+- **Tickets Completados**: [RC-BUG-013] a [RC-BUG-017], [RC-UX-002] y [RC-FEAT-011].
 
 ### ✅ Módulo de WhatsApp (v4.6.1-hotfix)
 - **Estado**: ⚠️ Mantenimiento Parcial (Modo Solo Texto Habilitado).

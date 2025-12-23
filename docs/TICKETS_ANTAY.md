@@ -54,6 +54,7 @@
 | **RC-BUG-015** | Smart Ledger (TTL 10m + Reenvío Explícito) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-BUG-016** | Soporte Multi-Cliente Mismo Email (Dedup por Notif) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-UX-002** | Panel de Envío Profesional (Resumen + Detalle) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
+| **RC-FEAT-011** | Supervisor Email Copy (BCC/CC Automatico) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 
 ---
 
