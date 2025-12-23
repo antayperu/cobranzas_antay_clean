@@ -1,6 +1,6 @@
 # SMOKE TEST PACK - EMAIL (SMTP)
 
-> **Ticket**: RC-QA-002 | **Fecha**: 22/12/2025 | **Módulo**: Notificaciones Email
+> **Ticket**: RC-QA-002 | **Fecha**: 23/12/2025 | **Módulo**: Notificaciones Email | **Versión**: v4.6.1 (Stable)
 
 Este documento define las pruebas de aceptación para el módulo de envío de correos, asegurando que la configuración SMTP y el renderizado HTML funcionan correctamente sin bloquear la aplicación.
 
@@ -44,6 +44,15 @@ Este documento define las pruebas de aceptación para el módulo de envío de co
     - [ ] Intentar hacer clic de nuevo inmediatamente (debe mostrar advertencia de "Ya enviado").
 - [ ] **Prueba Log**:
     - [ ] Verificar en consola/log que diga: "X solicitudes -> X únicos".
+
+### ET-10: Smart Ledger Persistence (RC-BUG-014)
+- [ ] **Prueba de Reinicio**:
+    - [ ] Enviar correo a "Cliente A". (Éxito)
+    - [ ] Cerrar la app (`Ctrl+C`).
+    - [ ] Volver a abrir la app (`streamlit run app.py`).
+    - [ ] Intentar enviar correo a "Cliente A" inmediatamente.
+    - [ ] **Resultado**: DEBE bloquearse por TTL (< 10 min) o "Ya enviado hoy".
+    - [ ] **Log**: Debe mostrar "Smart Ledger: Skip (Already sent)".
 
 ## 3. Riesgos y Mitigaciones
 *   **Riesgo**: `config.json` guarda la contraseña en texto plano.

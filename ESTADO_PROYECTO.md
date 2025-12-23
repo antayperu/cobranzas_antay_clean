@@ -55,6 +55,11 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     - **v1.6**: Mensaje WhatsApp Detallado (Listado completo y pie de página).
     - **v1.7**: UX WhatsApp Rediseñado (Estilo "Tarjeta" con iconos).
     - **v1.8**: Ajuste Fino de UX (Orden específico de campos).
+### ✅ Módulo de Correo (v4.6.1-stable)
+- **Estado**: ✅ Estable.
+- **Fix Crítico**: Solucionado problema de duplicidad con "Smart Ledger" (SQLite) y limpieza de código en `app.py`.
+- **Tickets Completados**: [RC-BUG-013] a [RC-BUG-016].
+
 ### ✅ Módulo de WhatsApp (v4.6.1-hotfix)
 - **Estado**: ⚠️ Mantenimiento Parcial (Modo Solo Texto Habilitado).
 - **HOTIX EMERGENCY**: Se ha deshabilitado temporalmente el envío de "Tarjeta" y "PDF" por inestabilidad.
@@ -139,6 +144,7 @@ Se ha decidido pivotar la estrategia de envío para maximizar profesionalismo y 
 - **Persistencia de Plantillas**: Sistema de guardado de mensajes de marketing implementado en `config.json`.
 - **Canvas Dinámico**: Eliminación de bandas negras/espacio vacío en imágenes verticales.
 - **Selenium Ultra-Stable**: Inyección vía JS-Force-Click para evitar bloqueos por capas de UI.
+- **Email Zero-Duplicate**: Implementación de Ledger SQLite, TTL para prevenir re-envíos accidentales y UX Premium.
 
 ---
 
