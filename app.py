@@ -1464,6 +1464,8 @@ if st.session_state['data_ready']:
         
         if uploaded_logo:
              # --- RC-BUG-LOGO: Automatic Processing ---
+             import io # Import local safe
+             from PIL import Image
              raw_bytes = uploaded_logo.getbuffer()
              
              # 1. Process Image
@@ -1499,7 +1501,11 @@ if st.session_state['data_ready']:
              col_l1, col_l2 = st.columns(2)
              with col_l1:
                  st.caption("Original")
-                 st.image(raw_bytes, width=200)
+                 try:
+                     image_pil = Image.open(io.BytesIO(raw_bytes))
+                     st.image(image_pil, width=200)
+                 except Exception as e:
+                     st.warning("No se pudo previsualizar el logo original.")
                  st.text(f"Size: {len(raw_bytes)//1024} KB")
                  
              with col_l2:
