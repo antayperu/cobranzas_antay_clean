@@ -55,17 +55,28 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     - **v1.6**: Mensaje WhatsApp Detallado (Listado completo y pie de página).
     - **v1.7**: UX WhatsApp Rediseñado (Estilo "Tarjeta" con iconos).
     - **v1.8**: Ajuste Fino de UX (Orden específico de campos).
-### ✅ Módulo de WhatsApp (v5.0)
-- **Estado**: Funcional (Texto e Imágenes), En Depuración (Adjunto PDF Encolado).
-- **Características**:
-  - Selección de modo: Texto, Tarjeta Ejecutiva, Tarjeta + PDF.
-  - Lógica de envío robusta para Texto e Imagen (Pegado directo).
-  - **Reto Actual**: El adjunto automático de PDF en la versión Web está en fase de refinamiento. Se implementó loop de reintentos (x3) y selectores estrictos para evitar falsos positivos.
-- **Archivos**: `utils/whatsapp_sender.py`, `app.py`.
+### ✅ Módulo de WhatsApp (v4.6.1-hotfix)
+- **Estado**: ⚠️ Mantenimiento Parcial (Modo Solo Texto Habilitado).
+- **HOTIX EMERGENCY**: Se ha deshabilitado temporalmente el envío de "Tarjeta" y "PDF" por inestabilidad.
+- **Tickets P0**: [RC-OPS-001] (Hotfix UI/Backend), [RC-QA-001] (Smoke Test).
+- **Hotfix (v4.6.1)**: Deshabilitado temporalmente. Se usa modo "Solo Texto".
+- **Status**: En Mantenimiento (v5.0 Roadap).
 
-### 🔄 Próximos Pasos (Prioridad Alta)
-1. **Validar Envío PDF**: Confirmar que la nueva estrategia de "Solo Enter + Loop de Reintento" funciona en el entorno del usuario.
-2. **Refinar UX**: Mejorar feedback visual durante el proceso de envío múltiple.
+#### ⚠️ Reglas de No-Regresión (Critical)
+1. **Excel Export**: SIEMPRE usar `df_export` (numérico) separado de `df_display` (visual).
+   - Montos (`SALDO`, `DETRACCIÓN`) deben ser **NUMÉRICOS/SUMABLES**.
+   - `DETRACCIÓN` siempre en Soles (`S/`).
+   - `AMORTIZACIONES` siempre Texto Completo (No 0.00).
+
+### 3. Documentación
+- `docs/SMOKE_TEST_v1.0.md`: Checklist de validación (Release v4.6.1).
+
+### 🔄 Próximos Pasos (ROADMAP v5.x)
+1. **[RC-QA-002] Ejecutar Smoke Test**: Validar que el modo Texto funciona 100% para release hoy.
+2. **[RC-QA-001] Validar Envío PDF**: Retomar pruebas tras la entrega urgente.
+
+## 📦 Backlog (Ver docs/TICKETS_ANTAY.md)
+*Consulta el archivo técnico oficial `docs/TICKETS_ANTAY.md` para el backlog detallado.*
 
 ## 📦 Backlog
 - [ ] Implementar envío de correos masivos (módulo listo, falta integración final UI).

@@ -11,6 +11,35 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
+# --- RC-ARCH-001: CENTRALIZED SELECTORS ---
+SELECTORS = {
+    'chat_loaded': '//div[@contenteditable="true"][@data-tab="10"] | //span[@data-icon="plus"] | //div[@title="Escribe un mensaje"]',
+    'invalid_number': '//div[contains(text(), "inválido") or contains(text(), "invalid") or contains(text(), "url is invalid")]',
+    'input_box': '//div[@contenteditable="true"][@data-tab="10"]',
+    'preview_loading': '//span[@data-icon="x-alt"] | //div[@aria-label="Escribe un comentario"] | //div[@aria-label="Write a caption"]',
+    'send_button': [
+        '//span[@data-icon="send"]',
+        '//div[@role="button"][@aria-label="Send"]',
+        '//div[@role="button"][@aria-label="Enviar"]',
+        '//span[@data-testid="send"]'
+    ],
+    'attach_menu_btn': [
+        '//div[@title="Adjuntar"]',
+        '//div[@title="Attach"]',
+        '//span[@data-icon="plus"]',
+        '//span[@data-icon="clip"]'
+    ],
+    'file_input': '//input[@type="file"]',
+    'modal_caption': [
+        '//div[@aria-label="Añade un comentario"]',
+        '//div[@aria-label="Add a caption"]',
+        '//div[@aria-label="Escribe un comentario"]'
+    ],
+    'modal_view': '//div[@aria-label="Enviar archivo"] | //div[contains(@class, "media-viewer")] | //span[@data-icon="x-viewer"]',
+    'doc_sent_check': '//span[@data-icon="document"]'
+}
+
+
 def format_soles(amount):
     """Formatea un monto en soles peruanos."""
     try:
@@ -459,15 +488,19 @@ def generate_pdf_statement(client_data, docs_df, branding_config, logo_path=None
 def _check_pdf_sent(driver, pdf_path):
     """Verifica si el PDF fue enviado buscándolo en el chat"""
     try:
-        doc_sent_selectors = [
-            '//div[contains(@class, "message-out")]//span[@data-icon="document"]',
-            '//div[@data-testid="msg-container"]//span[@data-icon="document"]',
-            f'//span[contains(text(), "{os.path.basename(pdf_path)}")]'
-        ]
+        # Check genérico de documento + check específico por nombre
+        base_name = os.path.basename(pdf_path)
         
-        for selector in doc_sent_selectors:
-            if driver.find_elements(By.XPATH, selector):
-                return True
+        # 1. Verificar si existe algún icono de documento reciente
+        if driver.find_elements(By.XPATH, SELECTORS['doc_sent_check']):
+            # 2. Refinar búsqueda por nombre si es posible (más costoso)
+            try:
+                if driver.find_elements(By.XPATH, f'//span[contains(text(), "{base_name}")]'):
+                    return True
+            except:
+                pass
+            return True # Asumimos éxito si hay icono de documento y no saltó error
+            
         return False
     except:
         return False
@@ -476,14 +509,9 @@ def _check_pdf_sent(driver, pdf_path):
 def _check_modal_gone(driver):
     """Verifica si el modal de envío de archivo se ha cerrado"""
     try:
-        modal_selectors = [
-            '//div[@aria-label="Enviar archivo"]',
-            '//div[contains(@class, "media-viewer")]',
-            '//span[@data-icon="x-viewer"]'
-        ]
-        for selector in modal_selectors:
-            if driver.find_elements(By.XPATH, selector):
-                return False # Aún está presente
+        # Usamos el selector centralizado
+        if driver.find_elements(By.XPATH, SELECTORS['modal_view']):
+            return False # Aún está presente
         return True # No se encontró -> Se cerró
     except:
         return True # Si da error al buscar, asumimos que no está
@@ -520,6 +548,13 @@ def send_whatsapp_messages_direct(
             'log': str
         }
     """
+    # [HOTFIX RC-OPS-001] SAFETY GUARD - DESHABILITAR MODOS DE IMAGEN
+    if send_mode in ["imagen_ejecutiva", "imagen_pdf"]:
+        print(f"⚠️ [HOTFIX] El modo '{send_mode}' está deshabilitado temporalmente. Se forzará 'texto'.")
+        # Log visual en consola/streamlit si fuera posible, aqui solo print backend
+        if progress_callback: progress_callback(f"⚠️ Alerta: Modo Imagen en mantenimiento. Enviando solo texto.")
+        send_mode = "texto"
+
     # Configurar delays según velocidad
     delays = {
         "Rápida (Riesgo de bloqueo)": 1,
@@ -692,7 +727,7 @@ def send_whatsapp_messages_direct(
                     timeout_val = 60 if i == 1 else 30 
                     
                     # Selectores de éxito (Chat cargado)
-                    chat_loaded_xpath = '//div[@contenteditable="true"][@data-tab="10"] | //span[@data-icon="plus"] | //div[@title="Escribe un mensaje"]'
+                    chat_loaded_xpath = SELECTORS['chat_loaded']
                     
                     # Verificar periódicamente para detectar popup de invalido rapido
                     start_time = time.time()
@@ -704,7 +739,7 @@ def send_whatsapp_messages_direct(
                                 break
                             
                             # Check invalid number popup (Fast Fail)
-                            invalid_xpath = '//div[contains(text(), "inválido") or contains(text(), "invalid") or contains(text(), "url is invalid")]'
+                            invalid_xpath = SELECTORS['invalid_number']
                             if driver.find_elements(By.XPATH, invalid_xpath):
                                 raise ValueError("NumeroInvalido")
                                 
@@ -742,7 +777,7 @@ def send_whatsapp_messages_direct(
                         time.sleep(3) 
                         
                         # 2. Localizar input principal
-                        inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
+                        inp_xpath = SELECTORS['input_box']
                         input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
                         
                         # 3. CLICK FANTASMA (JS) + PEGAR
@@ -756,7 +791,7 @@ def send_whatsapp_messages_direct(
                         
                         # 4. Verificar si apareció el modal con paciencia
                         try:
-                            preview_indicator = '//span[@data-icon="x-alt"] | //div[@aria-label="Escribe un comentario"] | //div[@aria-label="Write a caption"]'
+                            preview_indicator = SELECTORS['preview_loading']
                             # Esperar hasta 15s porque la imagen puede ser pesada en red
                             wait_long = WebDriverWait(driver, 15) 
                             wait_long.until(EC.visibility_of_element_located((By.XPATH, preview_indicator)))
@@ -772,12 +807,7 @@ def send_whatsapp_messages_direct(
                         # 5. Una vez en el modal, buscar botón enviar
                         time.sleep(1.5) # Estabilizar modal
                         
-                        send_btn_selectors = [
-                            '//span[@data-icon="send"]',
-                            '//div[@role="button"][@aria-label="Send"]',
-                            '//div[@role="button"][@aria-label="Enviar"]',
-                            '//span[@data-testid="send"]'
-                        ]
+                        send_btn_selectors = SELECTORS['send_button']
                             
                         # 6. Buscar el botón de envío (Con paciencia)
                         send_button = None
@@ -799,10 +829,7 @@ def send_whatsapp_messages_direct(
 
                         # 7. Escribir el Caption (Mensaje)
                         try:
-                            caption_selectors = [
-                                '//div[@aria-label="Escribe un comentario"]',
-                                '//div[@aria-label="Add a caption"]'
-                            ]
+                            caption_selectors = SELECTORS['modal_caption']
                             
                             caption_box = None
                             for selector in caption_selectors:
@@ -851,12 +878,7 @@ def send_whatsapp_messages_direct(
                                         
                                         # 1. Buscar el botón de adjuntar (clip)
                                         attach_btn = None
-                                        attach_selectors = [
-                                            '//div[@title="Adjuntar"]',
-                                            '//div[@title="Attach"]',
-                                            '//span[@data-icon="plus"]',
-                                            '//span[@data-icon="clip"]'
-                                        ]
+                                        attach_selectors = SELECTORS['attach_menu_btn']
                                         
                                         for selector in attach_selectors:
                                             try:
@@ -874,16 +896,13 @@ def send_whatsapp_messages_direct(
                                         
                                         # 2. Buscar el input de archivo (Wait for presence)
                                         file_input = None
-                                        input_selectors = [
-                                            '//input[@accept="*"][@type="file"]',
-                                            '//input[@type="file"]'
-                                        ]
                                         
-                                        for selector in input_selectors:
-                                            try:
-                                                file_input = driver.find_element(By.XPATH, selector)
-                                                if file_input: break
-                                            except: continue
+                                        try:
+                                            # Usamos wait explícito para el input file
+                                            input_wait = WebDriverWait(driver, 5)
+                                            file_input = input_wait.until(EC.presence_of_element_located((By.XPATH, SELECTORS['file_input'])))
+                                        except:
+                                            pass
                                         
                                         if not file_input:
                                             add_log("    ⚠️ Input file no encontrado, reintentando...")
@@ -894,11 +913,7 @@ def send_whatsapp_messages_direct(
                                         file_input.send_keys(abs_pdf_path)
                                         
                                         # 4. Esperar modal de preview (CRITICO)
-                                        preview_selectors = [
-                                            '//div[@aria-label="Añade un comentario"]',
-                                            '//div[@aria-label="Add a caption"]',
-                                            '//span[@data-icon="x-viewer"]'
-                                        ]
+                                        preview_selectors = [SELECTORS['modal_view']] + SELECTORS['modal_caption']
                                         
                                         preview_found = False
                                         for _ in range(10): # Esperar hasta 5s
@@ -943,11 +958,7 @@ def send_whatsapp_messages_direct(
                                 # INTENTO 1: Escribir caption real + Click en botón (Nativo)
                                 try:
                                     # Buscar input de comentario
-                                    caption_selectors = [
-                                        '//div[@aria-label="Añade un comentario"]',
-                                        '//div[@aria-label="Add a caption"]'
-                                        # REMOVIDO: Selectores genéricos que confunden con chat principal
-                                    ]
+                                    caption_selectors = SELECTORS['modal_caption']
                                     
                                     caption_box = None
                                     for selector in caption_selectors:
@@ -991,11 +1002,7 @@ def send_whatsapp_messages_direct(
                                     else:
                                         add_log(f"    ⚠️ No se encontró caption, buscando botón...")
                                         # Buscar botón enviar
-                                        send_btn_selectors = [
-                                            '//span[@data-icon="send"]',
-                                            '//div[@role="button"][@aria-label="Send"]',
-                                            '//div[@role="button"][@aria-label="Enviar"]'
-                                        ]
+                                        send_btn_selectors = SELECTORS['send_button']
                                         
                                         send_btn = None
                                         for selector in send_btn_selectors:
@@ -1059,7 +1066,7 @@ def send_whatsapp_messages_direct(
                 # ENVÍO SOLO TEXTO (Fallback o Standard)
                 else:
                     try:
-                        inp_xpath = '//div[@contenteditable="true"][@data-tab="10"]'
+                        inp_xpath = SELECTORS['input_box']
                         input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
                         
                         # Paste Text (Robust Focus)

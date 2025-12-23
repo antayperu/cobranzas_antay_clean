@@ -2,12 +2,14 @@ import streamlit as st
 import pandas as pd
 import urllib.parse
 from datetime import date, datetime
+import hashlib
 from utils.processing import load_data, process_data
 from utils.excel_export import generate_excel
 
 # Configuración de Página
 import utils.email_sender as es
 import utils.settings_manager as sm
+import utils.helpers as helpers
 
 # Cargar Configuración Global
 CONFIG = sm.load_settings()
@@ -124,6 +126,11 @@ with st.sidebar:
             st.rerun()
     
     st.markdown("---")
+    
+    # --- RC-BUG-014: Business Key Inputs ---
+    # Fecha de Corte Explícita para Business Key (Idempotencia)
+    st.subheader("📅 Parámetros de Reporte")
+    fecha_corte = st.date_input("Fecha de Corte (Business Key)", value=date.today(), help="Define el periodo para evitar duplicados en la misma fecha")
 
     # Inicializar Estado de Sesión
     if 'data_ready' not in st.session_state:
@@ -392,12 +399,43 @@ if st.session_state['data_ready']:
             
             # --- PASO 3: EXPORTAR ---
             st.subheader("Exportar Reporte")
-            # Generar Excel usando la vista limpia (Strings formateados)
-            excel_data = generate_excel(df_display)
+            
+            # [FIX RC-BUG-004] Usar columnas NUMÉRICAS para el Excel (no strings formateados)
+            # Definir columnas de exportación (misma estructura que view, pero usando valores raw)
+            export_cols = [
+                'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 
+                'TIPO PEDIDO', 'COMPROBANTE', 
+                'FECH EMIS', 'FECH VENC',
+                'DÍAS MORA', 'ESTADO DEUDA',
+                'MONEDA', 'TIPO CAMBIO',
+                'MONT EMIT', # Numérico
+                'DETRACCIÓN', # Numérico
+                'ESTADO DETRACCION',
+                'AMORTIZACIONES',
+                'SALDO', # Numérico
+                'SALDO REAL', # Numérico
+                'MATCH_KEY'
+            ]
+            # Filtrar existentes
+            export_cols = [c for c in export_cols if c in df_filtered.columns]
+            
+            df_export = df_filtered[export_cols].copy()
+            
+            # Reset Index para que coincida con lo visual (si se usa index en excel)
+            df_export.reset_index(drop=True, inplace=True)
+            df_export.index = df_export.index + 1
+            
+            # Generar Excel con datos numéricos (excel_export se encarga del formato visual)
+            excel_data = generate_excel(df_export)
+            
+            # [FIX RC-UX-001] Nombre dinámico (Empresa + Timestamp)
+            company = CONFIG.get('company_name', 'Empresa_No_Definida')
+            export_fname = helpers.get_export_filename(company)
+            
             st.download_button(
                 label="Descargar Excel Estilizado",
                 data=excel_data,
-                file_name=f"Reporte_Cobranzas_DACTA_SAC_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                file_name=export_fname,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         
@@ -487,18 +525,19 @@ if st.session_state['data_ready']:
                 
                 # Selector de modo simplificado
                 send_mode_options = [
-                    ("texto", "📝 Solo Texto", "Mensaje de texto plano sin archivos adjuntos"),
-                    ("imagen_ejecutiva", "🎴 Tarjeta Ejecutiva", "Imagen compacta con logo y totales consolidados (Recomendado)"),
-                    ("imagen_pdf", "📊 Tarjeta + PDF Completo", "Imagen ejecutiva + PDF detallado con todos los documentos")
+                    ("texto", "📝 Solo Texto (Estable)", "Mensaje de texto plano sin archivos adjuntos")
                 ]
                 
                 send_mode_index = st.radio(
                     "**Modo de Envío:**",
                     range(len(send_mode_options)),
                     format_func=lambda x: send_mode_options[x][1],
-                    index=1,  # Default: Tarjeta Ejecutiva
+                    index=0,  # Default: Texto
                     help="Elige cómo se enviarán los mensajes a tus clientes"
                 )
+                
+                # Bloque informativo de mantenimiento
+                st.info("ℹ️ **Nota:** Los modos *Tarjeta Ejecutiva* y *PDF* se encuentran en mantenimiento por actualización a v5.0. Estarán disponibles próximamente.")
                 send_mode_value = send_mode_options[send_mode_index][0]
                 
                 # Mostrar descripción del modo seleccionado con colores
@@ -1042,7 +1081,13 @@ if st.session_state['data_ready']:
                     import os
                     import base64
                     
+                    # Definir ruta de logo (Hardcoded relative path for now, but scalable)
+                    # Idealmente debería estar en CONFIG o ser subido
                     logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
+                    if not os.path.exists(logo_path):
+                         # Fallback/Warning if logo doesn't exist
+                         # st.warning(f"Logo no encontrado en: {logo_path}")
+                         logo_path = None
                     
                     for selected_label in sel_emails:
                         info_sel = email_map[selected_label]
@@ -1065,19 +1110,48 @@ if st.session_state['data_ready']:
                         )
                         
                         # Convertir imagen a base64 para el preview en iframe
-                        try:
-                            with open(logo_path, "rb") as image_file:
-                                    encoded_string = base64.b64encode(image_file.read()).decode()
-                            src_base64 = f"data:image/png;base64,{encoded_string}"
-                            preview_html_view = preview_html_cid.replace("cid:logo_dacta", src_base64)
-                        except:
-                            preview_html_view = preview_html_cid # Fallback sin logo visual
+                        preview_html_view = preview_html_cid
+                        if logo_path:
+                            try:
+                                with open(logo_path, "rb") as image_file:
+                                        encoded_string = base64.b64encode(image_file.read()).decode()
+                                src_base64 = f"data:image/png;base64,{encoded_string}"
+                                preview_html_view = preview_html_cid.replace("cid:logo_dacta", src_base64)
+                            except:
+                                pass # Fallback (mostrará alt text)
                         
                         with st.expander(f"✉️ {info_sel['empresa']}", expanded=False):
-                            components.html(preview_html_view, height=500, scrolling=True)
+                            components.html(preview_html_view, height=600, scrolling=True)
                     
-                    st.markdown("---")
-                    if st.button("Enviar Correos Masivos", type="primary"):
+                    
+                    # --- RC-BUG-006 & 010: Protección Avanzada contra Doble Envío ---
+                    # Generar una firma única del lote actual
+                    current_batch_hash = hash(tuple(sorted(sel_emails)))
+                    current_batch_id = f"{len(sel_emails)}_{current_batch_hash}"
+                    
+                    if 'last_processed_batch_id' not in st.session_state:
+                         st.session_state['last_processed_batch_id'] = None
+                    
+                    # 2. Bloqueo de UI si ya se procesó
+                    is_processed = (st.session_state['last_processed_batch_id'] == current_batch_id)
+                    
+                    if is_processed:
+                        st.info("ℹ️ Este lote ya fue procesado. Para enviar otro, cambie la selección o recargue (F5).")
+                        if st.button("🔄 Resetear Bloqueo (Permitir reenvío)"):
+                            st.session_state['last_processed_batch_id'] = None
+                            st.rerun()
+
+
+                    # --- RC-BUG-015: Explicit Resend Control ---
+                    force_resend_ttl = st.checkbox("🔄 Habilitar reenvío (Ignorar bloqueo 10min)", help="Marca esto para reenviar intencionalmente una notificación reciente.")
+                    
+                    # Botón Main de Envío
+                    if st.button("Enviar Correos Masivos", type="primary", disabled=is_processed):
+                        if is_processed:
+                             st.stop()
+                        
+                        st.write(f"👷 DEBUG: Iniciando envío... Hash: {current_batch_id} | ForceResend: {force_resend_ttl}")
+
                         # Credenciales ahora vienen de CONFIG global
                         smtp_cfg = CONFIG.get('smtp_config', {})
                         email_user = smtp_cfg.get('user', '')
@@ -1087,9 +1161,39 @@ if st.session_state['data_ready']:
                              st.error("❌ Faltan credenciales SMTP. Configúralas en la pestaña 'Configuración'.")
                         else:
                             messages_to_send = []
+                            # RC-BUG-007: Deduplicación explícita en el origen
+                            seen_emails_batch = set()
+                            
                             for lbl in sel_emails:
                                 info = email_map[lbl]
+                                
+                                # Normalizar email 
+                                email_norm = str(info['email']).strip().lower()
+                                
+                                # RC-BUG-016: Permitir múltiple envío al mismo email si son clientes distintos
+                                # (Ya no bloqueamos por email único en el batch)
+                                # if email_norm in seen_emails_batch:
+                                #     continue
+                                # seen_emails_batch.add(email_norm)
+                                
                                 d_cli = df_filtered[df_filtered['COD CLIENTE'] == info['cod']]
+                                
+                                # --- RC-BUG-014: Business Key Calculation (Idempotency) ---
+                                # 1. Document Fingerprint (Hash de documentos ordenados)
+                                if 'MATCH_KEY' in d_cli.columns:
+                                    doc_ids = sorted(d_cli['MATCH_KEY'].astype(str).unique())
+                                    doc_str = "|".join(doc_ids)
+                                else:
+                                    # Fallback si no hay MATCH_KEY (usar COMPROBANTE o lo que haya)
+                                    doc_ids = sorted(d_cli['COMPROBANTE'].astype(str).unique()) if 'COMPROBANTE' in d_cli.columns else []
+                                    doc_str = "|".join(doc_ids)
+                                
+                                doc_set_fingerprint = hashlib.md5(doc_str.encode()).hexdigest()[:8]
+                                
+                                # 2. Notification Key Stable
+                                # Key = Company | Email | Date | Type | DocSetHash
+                                tipo_notificacion = "Email_EstadoCuenta"
+                                notif_key = f"{CONFIG.get('company_name','Antay')}|{email_norm}|{fecha_corte}|{tipo_notificacion}|{doc_set_fingerprint}"
                                 
                                 # Refined Currency Logic (Robustness fix)
                                 mask_soles = d_cli['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
@@ -1112,28 +1216,59 @@ if st.session_state['data_ready']:
                                     'client_name': info['empresa'],
                                     'subject': subject_line,
                                     'html_body': body,
-                                    'plain_body': plain_body
+                                    'plain_body': plain_body,
+                                    'notification_key': notif_key # New Field
                                 })
                             
-                            smtp_cfg = {
-                                'server': CONFIG.get('smtp_config', {}).get('server', 'smtp.gmail.com'),
-                                'port': CONFIG.get('smtp_config', {}).get('port', 587),
-                                'user': email_user,
-                                'password': email_pass
-                            }
+                            # Enviar Batch con Logo
+                            with st.spinner(f"Enviando con Business Lock (Fecha: {fecha_corte})..."):
+                                results = es.send_email_batch(
+                                    smtp_cfg, 
+                                    messages_to_send, 
+                                    progress_callback=lambda i, t, m: st.toast(f"{m} ({i}/{t})"),
+                                    logo_path=logo_path,
+                                    force_resend=force_resend_ttl # RC-BUG-015
+                                )
                             
-                            prog_bar = st.progress(0)
-                            status_txt = st.empty()
+                            # Marcar como enviado para prevenir duplicados
+                            if results['success'] > 0:
+                                 st.session_state['last_processed_batch_id'] = current_batch_id
                             
-                            def update_prog(curr, tot, txt):
-                                prog_bar.progress(curr/tot)
-                                status_txt.text(txt)
+                            # --- RC-UX-002: Panel de Resultados Amigable ---
+                            st.divider()
+                            st.subheader("📊 Resumen del Proceso")
                             
-                            res = es.send_email_batch(smtp_cfg, messages_to_send, update_prog, logo_path=logo_path)
+                            # A) Resumen Ejecutivo (Métricas)
+                            c1, c2, c3 = st.columns(3)
+                            c1.metric("✅ Enviados", results['success'])
+                            c2.metric("❌ Fallidos", results['failed'])
+                            c3.metric("🔒 Bloqueados (TTL)", results.get('blocked', 0))
                             
-                            st.success(f"✅ Enviados: {res['success']} | Fallidos: {res['failed']}")
-                            with st.expander("Ver Log SMTP (Detallado)"):
-                                for l in res['log']:
+                            # B) Tabla de Detalles (Negocio)
+                            if 'details' in results and results['details']:
+                                df_res = pd.DataFrame(results['details'])
+                                
+                                # Estilizar tabla simple
+                                st.write("📝 **Detalle por Cliente:**")
+                                st.dataframe(
+                                    df_res[['Cliente', 'Email', 'Estado', 'Detalle']], 
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+                                
+                                # Botón descarga
+                                csv = df_res.to_csv(index=False).encode('utf-8')
+                                st.download_button(
+                                    "📄 Descargar Reporte de Envío (CSV)",
+                                    data=csv,
+                                    file_name=f"reporte_envio_{current_batch_id[:8]}.csv",
+                                    mime="text/csv"
+                                )
+                            
+                            # C) Log Técnico (Oculto)
+                            with st.expander("🛠️ Avanzado (QA / Soporte Técnico)", expanded=False):
+                                st.write(f"RunID: {current_batch_id}")
+                                for l in results['log']:
                                     st.text(l)
                                     if "535" in l:
                                         st.error("Error 535: Revisa tu contraseña de aplicación de Gmail.")

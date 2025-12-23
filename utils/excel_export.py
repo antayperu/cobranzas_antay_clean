@@ -42,8 +42,34 @@ def generate_excel(df: pd.DataFrame) -> bytes:
     # Autofiltro
     ws.auto_filter.ref = ws.dimensions
 
+    # Identificar índice de columna MONEDA para formato condicional
+    try:
+        moneda_idx = headers.index("MONEDA")
+    except ValueError:
+        moneda_idx = -1
+
+    def _clean_currency(val):
+        """Convierte string de moneda a float."""
+        if isinstance(val, (int, float)):
+            return float(val)
+        if not val or not isinstance(val, str):
+            return 0.0
+        # Remover símbolos comunes
+        clean_val = val.replace('S/', '').replace('$', '').replace(',', '').replace(' ', '')
+        try:
+            return float(clean_val)
+        except ValueError:
+            return 0.0
+
     # Escribir datos
     for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), 2):
+        # Obtener moneda de la fila actual (si existe columna MONEDA)
+        current_currency = "S/"
+        if moneda_idx != -1 and len(row) > moneda_idx:
+            val_mon = str(row[moneda_idx]).strip().upper()
+            if "$" in val_mon or "DOL" in val_mon:
+                current_currency = "$"
+
         for c_idx, value in enumerate(row, 1):
             cell = ws.cell(row=r_idx, column=c_idx, value=value)
             
@@ -55,13 +81,29 @@ def generate_excel(df: pd.DataFrame) -> bytes:
                 cell.number_format = 'DD/MM/YYYY'
                 
             # Formato de Moneda y Números
-            # Incluir nuevas columnas: SALDO REAL, IMPORTE REFERENCIAL (S/)
+            # Incluir nuevas columnas: SALDO REAL, IMPORTE REFERENCIAL (S/), TIPO CAMBIO
+            # [FIX RC-BUG-003] AMORTIZACIONES es TEXTO, sacar de limpieza numérica
             monetary_cols = [
                 "MONT EMIT", "CALCULADO (S/)", "DETRACCIÓN", "SALDO", 
-                "SALDO REAL", "IMPORTE REFERENCIAL (S/)"
+                "SALDO REAL", "IMPORTE REFERENCIAL (S/)", "TIPO CAMBIO"
             ]
+            
             if col_name in monetary_cols:
-                cell.number_format = '#,##0.00'
+                # 1. Convertir a número (float)
+                num_val = _clean_currency(value)
+                cell.value = num_val
+                
+                # 2. Aplicar formato según Moneda
+                if col_name == "TIPO CAMBIO":
+                     cell.number_format = '0.000'
+                elif col_name == "DETRACCIÓN":
+                     # [FIX RC-BUG-002] Detracción SIEMPRE es en Soles
+                     cell.number_format = '"S/" #,##0.00'
+                else:
+                    if current_currency == "$":
+                        cell.number_format = '"$" #,##0.00'
+                    else:
+                        cell.number_format = '"S/" #,##0.00'
             
             # Ajuste de Texto para columnas con saltos de línea
             if col_name in ["ESTADO DETRACCION", "AMORTIZACIONES"]:
