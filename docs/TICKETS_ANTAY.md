@@ -41,7 +41,7 @@
 | **RC-UX-002** | Plantillas Email Premium (PC + Móvil) + Total Detracción | **P1** (Alto) | Done | Antigravity | 2025-12-22 |
 | **RC-UX-003** | Refinamiento Email Premium (Formalidad, Layout, Medios de Pago) | **P1** (Alto) | In Progress | Antigravity | 2025-12-22 |
 | **RC-DOC-001** | Reglas comunicación DACTA vs SUNAT (Detracción) | **P2** (Medio) | In Progress | Antigravity | 2025-12-22 |
-| **RC-QA-002** | Smoke Test Email (SMTP) v4.6.1 | **P1** (Alto) | In Progress | Antigravity | 2025-12-22 |
+| **RC-QA-002** | Smoke Test Email (SMTP) v4.6.1 | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-SEC-001** | Seguridad Configuración JSON (Plain Text Risk) | **P1** (Alto) | Backlog | Antigravity | 2025-12-22 |
 | **RC-BUG-006** | Email Duplicado (Doble Envío / Rerun Issue) | **P0** (Critico) | Done | Antigravity | 2025-12-22 |
 | **RC-BUG-007** | Email Duplicado (Protección Triple Capa) | **P0** (Critico) | In Progress | Antigravity | 2025-12-22 |

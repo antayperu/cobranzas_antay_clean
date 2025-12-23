@@ -1,9 +1,9 @@
 # Estado del Proyecto: Reporte de Cobranzas y WhatsApp
 
 **Fecha de Inicio**: 2025-12-16
-**Estado General**:# � STATUS: v4.6 (Estable) -> Iniciando v5.0 (WhatsApp Pro Upgrade)
-**Última Actualización:** 2025-12-20
-**Estado:** Estable (v4.6) | **En Proceso:** Planificación de Potenciación WhatsApp
+**Estado General**: ✅ STATUS: v4.6.1 (Completado/Validado) -> Iniciando v5.0 (WhatsApp Pro Upgrade)
+**Última Actualización:** 2025-12-23
+**Estado:** Estable (v4.6.1) | **En Proceso:** Planificación de Potenciación WhatsApp
 **Repositorio**: [antayperu/cobranzas_antay](https://github.com/antayperu/cobranzas_antay)
 
 ## 🎯 Objetivo
@@ -58,7 +58,9 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
 ### ✅ Módulo de Correo (v4.6.1-stable)
 - **Estado**: ✅ Estable.
 - **Fix Crítico**: Solucionado problema de duplicidad con "Smart Ledger" (SQLite) y limpieza de código en `app.py`.
-- **Tickets Completados**: [RC-BUG-013] a [RC-BUG-016].
+- **Causa Raíz**: Bloque duplicado en `app.py` que invocaba la función de envío dos veces.
+- **Solución**: Eliminación de código redundante + Ledger SQLite + TTL + Soporte Multi-cliente.
+- **Tickets Completados**: [RC-BUG-013] a [RC-BUG-016] y [RC-UX-002].
 
 ### ✅ Módulo de WhatsApp (v4.6.1-hotfix)
 - **Estado**: ⚠️ Mantenimiento Parcial (Modo Solo Texto Habilitado).
