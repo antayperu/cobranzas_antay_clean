@@ -1,4 +1,5 @@
 import smtplib
+import html
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
@@ -24,18 +25,19 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     """
     Genera cuerpo HTML asumiendo que el logo se adjunta con Content-ID: <logo_dacta>
     branding_config: {company_name, primary_color, secondary_color, email_template, ...}
-    Refinado v2 (RC-UX-003): Header Compacto, Lenguaje Formal, Layout Reordenado.
+    Refinado v3 (RC-UX-003): "Corporate Sheet" Look (700px, Shadow, Formal Header).
     """
     
     # 1. Branding y Config
     COLOR_PRIMARY = branding_config.get('primary_color', '#2E86AB')
     COLOR_SECONDARY = branding_config.get('secondary_color', '#A23B72')
-    BG_COLOR = "#f4f4f4"
+    BG_COLOR = "#F5F7FB" # RC-UX-003: Fondo gris azulado corporativo
     TEXT_COLOR = "#333333"
     COMPANY_NAME = branding_config.get('company_name', 'DACTA S.A.C.')
     TEMPLATE = branding_config.get('email_template', {})
     
     # --- PROCESAMIENTO DE TOTALES Y KPIs ---
+    sum_detr = 0.0 # Define base scope
     try:
         mask_soles = docs_df['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
         
@@ -46,14 +48,12 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         # 1. Deuda DACTA Soles
         sum_s = df_sol['SALDO REAL'].sum()
         count_s = len(df_sol)
-        # Format Formal (US$ y documentos)
-        kpi_dacta_s = f"S/ {sum_s:,.2f} ({count_s:02d} documentos)" if (sum_s > 0 or count_s > 0) else None
+        kpi_dacta_s = f"S/ {sum_s:,.2f} ({count_s:02d} documentos)" if (sum_s > 0 or count_s > 0) else "S/ 0.00 (00 documentos)"
 
         # 2. Deuda DACTA Dolares
         sum_d = df_dol['SALDO REAL'].sum()
         count_d = len(df_dol)
-        # Format Formal (US$ y documentos)
-        kpi_dacta_d = f"US$ {sum_d:,.2f} ({count_d:02d} documentos)" if (sum_d > 0 or count_d > 0) else None
+        kpi_dacta_d = f"US$ {sum_d:,.2f} ({count_d:02d} documentos)" if (sum_d > 0 or count_d > 0) else "US$ 0.00 (00 documentos)"
         
         # 3. Detracción SUNAT (Solo documentos afectos)
         df_detr = docs_df[docs_df['DETRACCIÓN'] > 0]
@@ -69,37 +69,111 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         sum_detr = df_detr_pending['DETRACCIÓN'].sum()
         count_detr = len(df_detr_pending)
         
-        kpi_sunat = f"S/ {sum_detr:,.2f} ({count_detr:02d} documentos afectos)" if sum_detr > 0 else "S/ 0.00 (00 documentos)"
+        # RC-UX-003: Always display Sunat line, even if 0, for consistency in "Corporate Summary"
+        kpi_sunat = f"S/ {sum_detr:,.2f} ({count_detr:02d} documentos afectos)" 
 
-        # Construir Lista de Totales Formal
-        intro_totals_html = ""
-        if kpi_dacta_s:
-            intro_totals_html += f"<li>Deuda a DACTA (Soles): <strong>{kpi_dacta_s}</strong></li>"
-        if kpi_dacta_d:
-            intro_totals_html += f"<li>Deuda a DACTA (Dólares): <strong>{kpi_dacta_d}</strong></li>"
-        
-        # Detracción siempre se menciona en resumen si hay
-        if sum_detr > 0:
-             # Refined styling: no red text line, just standard text with clear label
-             intro_totals_html += f"<li class='detr-item'>Detracción SUNAT (Total S/): <strong>{kpi_sunat}</strong></li>"
-
-        if not intro_totals_html:
-             intro_totals_html = "<li>Sin deuda pendiente.</li>"
+        # Construir HTML de Totales (Tabla Resumen Formal)
+        # RC-UX-003: Require 3 explicit lines/rows in a summary box, not just bullets.
+        summary_rows_html = f"""
+            <tr>
+                <td style="padding: 6px 0; color: #555;">Deuda Total <strong>Soles</strong>:</td>
+                <td style="padding: 6px 0; text-align: right; font-weight: bold; color: {COLOR_PRIMARY};">{kpi_dacta_s}</td>
+            </tr>
+            <tr>
+                <td style="padding: 6px 0; color: #555;">Deuda Total <strong>Dólares</strong>:</td>
+                <td style="padding: 6px 0; text-align: right; font-weight: bold; color: {COLOR_PRIMARY};">{kpi_dacta_d}</td>
+            </tr>
+            <tr>
+                <td style="padding: 6px 0; color: #555;">Detracciones SUNAT Pendientes:</td>
+                <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #333;">{kpi_sunat}</td>
+            </tr>
+        """
 
     except Exception as e:
-        intro_totals_html = "<li>Error calculando totales.</li>"
+        summary_rows_html = "<tr><td colspan='2'>Error calculando totales.</td></tr>"
 
-    # Header Compacto (Fecha actual)
+    # --- 1. CONFIGURABLE TEXTS & SAFETY (RC-UX-004) ---
+    email_config = branding_config.get('email_template', {})
+    
+    # Helper for safe HTML rendering
+    def nl2br_safe(text_input):
+        if not text_input:
+            return ""
+        # Escape HTML special characters first to prevent injection
+        safe_text = html.escape(str(text_input))
+        # Convert newlines to <br> for email rendering
+        return safe_text.replace('\n', '<br>')
+
+    # A. Intro Text
+    raw_intro = email_config.get('intro_text', '').strip()
+    if not raw_intro:
+        # Default with {cliente} placeholder support
+        raw_intro = "Estimado cliente {cliente},\nAdjuntamos el detalle actualizado de sus documentos pendientes de pago. Agradeceremos verificar la siguiente información:"
+    
+    # Process Intro: Safe render + Client Name injection
+    safe_cliente = html.escape(str(client_name))
+    intro_html = nl2br_safe(raw_intro).replace("{cliente}", safe_cliente)
+
+    # B. Footer Text (RC-BUG-018: Exclusive Logic)
+    # If custom text is present, we use IT ALONE (replacing the default signature).
+    # If custom text is empty, we use the DEFAULT SIGNATURE.
+    
+    raw_footer = email_config.get('footer_text', '').strip()
+    
+    if raw_footer:
+        # User defined footer -> Use it exclusively
+        # We wrap it in a div for spacing if needed, but the content is just the text
+        footer_block_html = nl2br_safe(raw_footer)
+    else:
+        # Default Signature
+        ruc = branding_config.get('company_ruc', '20601995817')
+        footer_block_html = f"<strong>{COMPANY_NAME}</strong> &bull; RUC: {ruc}<br>Área de Cobranzas y Facturación"
+
+    # C. Detraccion Block (Conditional)
+    detraccion_block_html = ""
+    if sum_detr > 0:
+        raw_alert = email_config.get('alert_text', '').strip()
+        if raw_alert:
+            alert_content_html = nl2br_safe(raw_alert)
+            # Styling matches the existing warning style but wrapped clean
+            detraccion_block_html = f"""
+            <div style="background-color: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 15px; margin: 20px 0; border-radius: 4px; font-size: 14px;">
+                {alert_content_html}
+            </div>
+            """
+
+    # Header Compacto
     current_date = datetime.now().strftime("%d/%m/%Y")
     
-    FOOTER_TEXT = TEMPLATE.get('footer_text', '').replace('\n', '<br>')
-    # Alert Text is unused in new layout logic, replaced by Dedicated Section
+    # RC-UX-007: Dynamic Logo Logic
+    # Check if logo exists in config (path or bytes)
+    has_logo = bool(branding_config.get('logo_path') or branding_config.get('logo_bytes'))
+    
+    if has_logo:
+        # Render Corporate Logo Block (Enterprise Specs: Max 220x80)
+        # We use width="150" as a fallback attribute for Outlook, but style handles the real constraint.
+        # User requested: max-width: 220px; max-height: 80px; height: auto; display:block; margin: 0 auto;
+        logo_block_html = f"""
+        <tr>
+            <td align="center" style="padding: 25px 40px 10px 40px; border-bottom: 0px;">
+                <img src="cid:logo_dacta" width="220" alt="{COMPANY_NAME}" 
+                     style="display:block; border:0; outline:none; text-decoration:none; max-width:220px; max-height:80px; width:auto; height:auto; margin: 0 auto;">
+            </td>
+        </tr>
+        """
+        # Reduced top padding for title since logo takes space
+        title_padding_top = "0px"
+    else:
+        # No Logo -> Empty Block
+        logo_block_html = ""
+        # Increase top padding to center title nicely in the white box
+        title_padding_top = "30px"
 
     # --- GENERACIÓN DE FILAS (PC y MÓVIL) ---
     table_rows = ""
     mobile_cards = ""
     
-    for _, row in docs_df.iterrows():
+    for idx, row in docs_df.iterrows(): # idx needed for zebra stripe simulation if not using css nth-child
         # Datos
         doc = row.get('COMPROBANTE', '')
         
@@ -124,55 +198,67 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         m_sal = f"{sim} {sal_val:,.2f}"
         
         # Regla: Detracciones SIEMPRE S/
-        # Regla Visual: Si det_val > 0, mostrar S/. Si no -
         if det_val > 0:
             m_det = f"S/ {det_val:,.2f}"
-            style_det = "color: #d9534f; fontWeight: bold;"
+            style_det_cell = "" # Standard text
         else:
             m_det = "-"
-            style_det = "color: #ccc;"
+            style_det_cell = "color: #ccc;"
 
-        estado_dt = str(row.get('ESTADO DETRACCION', ''))
-        if estado_dt.upper() == "PENDIENTE":
-            st_class = "st-pend"
-            st_text = "Pendiente"
-            style_st = "color: #d9534f; font-weight: bold;"
-        elif estado_dt.upper() == "NO APLICA":
-             st_class = "st-na"
-             st_text = "No aplica"
-             style_st = "color: #999;"
+        # Badge Logic for Status
+        estado_dt = str(row.get('ESTADO DETRACCION', '')).strip().upper()
+        if estado_dt == "PENDIENTE":
+            # Badge Amber
+            badge_html = f'<span style="background-color: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">Pendiente</span>'
+            mobile_st_text = "Pendiente"
+            mobile_style_st = "color: #d9534f; font-weight: bold;"
+        elif estado_dt == "NO APLICA":
+            # Badge Gray
+            badge_html = f'<span style="background-color: #e2e3e5; color: #383d41; padding: 4px 8px; border-radius: 4px; font-size: 11px;">No aplica</span>'
+            mobile_st_text = "No aplica"
+            mobile_style_st = "color: #999;"
         else:
-             st_class = "st-ok"
-             st_text = "Cobrado" # o el texto que venga
-             style_st = "color: #28a745;"
+            # Badge Green
+            badge_html = f'<span style="background-color: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">Cobrado</span>'
+            mobile_st_text = "Cobrado"
+            mobile_style_st = "color: #28a745;"
              
         # Regla visual: Si Saldo Dacta es 0 pero Detraccion Pendiente -> Alerta visual explícita
-        row_bg = "#ffffff"
+        # Zebra Striping Logic for Row BG
+        # Use simple toggle based on idx if needed, or CSS. CSS nth-child is better but inline support varies.
+        # We will use explicit background color for even rows for better email support.
+        # But for "Sheet" look, we want white bg mostly. We'll rely on TR border.
+        # user requested Zebra: row_bg = #f8f9fa if even.
+        if idx % 2 == 0:
+            row_bg_pc = "#ffffff"
+        else:
+            row_bg_pc = "#f9fafb"
+
         m_sal_display = m_sal
         
-        # "Saldo a DACTA: 0.00 — Solo falta detracción SUNAT"
-        if sal_val <= 0.1 and det_val > 0 and st_text == "Pendiente":
-            m_sal_display = "<span style='color:#999;'>0.00</span><br><span style='font-size:10px; color:#d9534f'>(Solo falta Detracción)</span>"
-            row_bg = "#fffcfc"
+        # "Saldo a DACTA: 0.00 — Solo falta detracción SUNAT" logic
+        if sal_val <= 0.1 and det_val > 0 and estado_dt == "PENDIENTE":
+            m_sal_display = "<span style='color:#999;'>0.00</span><br><span style='font-size:10px; color:#d9534f'>(Solo Detracción)</span>"
+            # Highlight this row specially? 
+            row_bg_pc = "#fff8f8" 
 
         # --- A) HTML TABLE ROW (PC) ---
         table_rows += f"""
-        <tr style="background-color: {row_bg};">
-            <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">{doc}</td>
-            <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">{f_emis}</td>
-            <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">{f_venc}</td>
-            <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right;">{m_imp}</td>
-            <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: {COLOR_PRIMARY};">{m_sal_display}</td>
-            <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: right; {style_det}">{m_det}</td>
-            <td style="padding: 12px 10px; border-bottom: 1px solid #eee; text-align: center; font-size: 12px; {style_st}">{st_text}</td>
+        <tr style="background-color: {row_bg_pc};">
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">{doc}</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">{f_emis}</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">{f_venc}</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px;">{m_imp}</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: {COLOR_PRIMARY}; font-size: 13px;">{m_sal_display}</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; {style_det_cell}">{m_det}</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: center;">{badge_html}</td>
         </tr>
         """
         
         # --- B) HTML CARD (MOBILE) ---
-        # Card Layout: Header (Doc, Venc) | Body (Importe) | Footer (Saldo Dacta / Detr Sunat)
-        
+        # Card Layout unchanged as per Requirement
         mobile_cards += f"""
-        <div class="mobile-card" style="display:none; background:{row_bg}; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 12px; padding: 15px;">
+        <div class="mobile-card" style="display:none; background:#fff; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 12px; padding: 15px;">
             <div style="border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; margin-bottom: 8px; font-weight: bold; color: #333;">
                 <span style="color:{COLOR_PRIMARY}">{doc}</span> 
                 <span style="float:right; font-weight:normal; font-size:12px; color:#666;">Vence: {f_venc}</span>
@@ -188,7 +274,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
             
             <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eee; font-size: 13px;">
                  <span style="color:#666;">Detracción SUNAT (S/):</span> 
-                 <span style="{style_det}">{m_det} <small>({st_text})</small></span>
+                 <span style="{mobile_style_st}">{m_det} <small>({mobile_st_text})</small></span>
             </div>
         </div>
         """
@@ -201,59 +287,52 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {{ font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: {BG_COLOR}; margin: 0; padding: 0; color: {TEXT_COLOR}; }}
-        .container {{ max-width: 720px; margin: 0 auto; background-color: #ffffff; }}
+        /* Base Reset */
+        body {{ font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: {BG_COLOR}; margin: 0; padding: 20px 0; color: {TEXT_COLOR}; -webkit-font-smoothing: antialiased; }}
         
-        /* PC Styles */
+        /* Helpers */
         .desktop-only {{ display: table; }}
         .mobile-only {{ display: none; }}
         
-        /* Header v5 (Restored Initial Model - Centered Stack) */
-        /* Adjusted padding to balance larger logo (20px top/15px bottom) */
-        .header-container {{ padding: 20px 20px 15px 20px; background-color: #ffffff; border-bottom: 1px solid #e5e7eb; }}
+        /* Body Content */
+        .content-box {{ padding: 35px 40px; }}
         
-        /* Table overrides */
-        .header-table {{ width: 100%; border-collapse: collapse; border: none; margin: 0; }}
-        .header-td-center {{ text-align: center; vertical-align: middle; padding-bottom: 5px; }}
+        /* Summary Box */
+        .summary-box {{ background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 20px; margin: 25px 0; }}
         
-        /* Logo: Dominant Presence (Increased to 90px) */
-        .header-logo img {{ max-height: 90px; width: auto; display: block; margin: 0 auto; }}
+        /* Data Table */
+        table.data-table {{ width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; }}
+        table.data-table th {{ 
+            background-color: #f1f5f9; 
+            color: #475569; 
+            font-weight: 600; 
+            text-transform: uppercase; 
+            font-size: 11px; 
+            letter-spacing: 0.05em; 
+            padding: 12px 15px; 
+            text-align: left; 
+            border-bottom: 2px solid #cbd5e1;
+        }}
         
-        /* Title: Standalone section */
-        .header-title {{ font-size: 16px; font-weight: 700; color: #111827; letter-spacing: 1px; text-transform: uppercase; margin-top: 15px; margin-bottom: 5px; }}
-        
-        /* Date: Subtle below title */
-        .header-date {{ font-size: 12px; color: #9ca3af; font-family: 'Helvetica', sans-serif; margin-bottom: 5px; }}
-        
-        .content-box {{ padding: 30px 40px; }}
-        
-        .greeting {{ font-size: 15px; margin-bottom: 15px; color: #000; font-weight: bold; }}
-        .section-title {{ font-size: 13px; font-weight: bold; color: {COLOR_PRIMARY}; text-transform: uppercase; margin-top: 25px; margin-bottom: 10px; border-bottom: 2px solid {COLOR_PRIMARY}; display: inline-block; padding-bottom: 3px; }}
-        
-        /* KPI List Refined (Formal) */
-        .kpi-list {{ list-style: none; padding: 0; margin: 0 0 20px 0; font-size: 14px; line-height: 1.8; color: #374151; }}
-        .kpi-list li {{ margin-bottom: 4px; }}
-        /* Detracción softer style: no red text, just bold amount */
-        .detr-item {{ color: #374151; }}
-        
-        /* Accounts Block */
-        .payment-methods {{ background-color: #fafafa; padding: 20px; border-radius: 4px; border: 1px solid #eee; margin-top: 30px; font-size: 12px; line-height: 1.6; color: #333; }}
-        .payment-group {{ margin-bottom: 12px; }}
-        .bank-label {{ font-weight: bold; color: #000; display: inline-block; width: 90px; }}
-        
-        /* Specific Detraccion Warning (Single location) - Premium Gray */
-        .detraccion-box {{ background-color: #f8fafc; border-left: 3px solid #d9534f; padding: 15px; margin: 25px 0; font-size: 13px; color: #333333; }}
-        
-        /* Tables */
-        table {{ width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }}
-        th {{ background-color: #f8f8f8; color: #333; padding: 10px; text-align: left; border-bottom: 2px solid #ddd; font-weight: bold; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }}
+        /* Accounts Section */
+        .accounts-grid {{ display: table; width: 100%; margin-top: 35px; border-top: 2px solid #f1f5f9; padding-top: 20px; }}
+        .account-col {{ display: table-cell; vertical-align: top; width: 48%; padding-right: 2%; }}
+        .account-title {{ font-size: 12px; font-weight: 700; color: {COLOR_PRIMARY}; text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }}
+        .account-item {{ font-size: 12px; color: #4b5563; margin-bottom: 6px; line-height: 1.5; }}
+        .bank-label {{ font-weight: 600; color: #111827; }}
         
         /* Footer */
-        .footer {{ background-color: #f4f4f4; color: #777; padding: 20px; text-align: center; font-size: 11px; line-height: 1.5; border-top: 1px solid #ddd; }}
-        
+        .footer {{ text-align: center; color: #9ca3af; font-size: 11px; padding: 20px; border-top: 1px solid #f3f4f6; background-color: #fafafa; }}
+
         /* MEDIA QUERIES (MOBILE) */
         @media only screen and (max-width: 600px) {{
-            .container {{ width: 100% !important; }}
+            /* Reset body padding for mobile */
+            body {{ padding: 0; background-color: #f4f4f4; }}
+            
+            /* Fluid Container logic handled by table width 100% on small screens naturally or max-width override */
+            .main-table-wrapper {{ width: 100% !important; }}
+            
+            /* Adjust Content Padding */
             .content-box {{ padding: 20px 15px !important; }}
             
             /* Toggle Views */
@@ -261,107 +340,129 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
             .mobile-only {{ display: block !important; }}
             .mobile-card {{ display: block !important; }}
             
-            /* Adjusted Header Mobile - Centered Stack matches PC */
-            .header-container {{ padding: 20px 15px; }}
-            .header-logo img {{ max-height: 60px; }}
+            /* Logo resizing */
+            .logo-img {{ height: 40px !important; }}
             
-            /* Adjust fonts */
-            .kpi-list {{ font-size: 13px; }}
-            .payment-methods {{ font-size: 11px; }}
+            /* Force table layout tools to behave like blocks */
+            .accounts-grid, .account-col {{ display: block; width: 100%; padding: 0; margin-bottom: 20px; }}
         }}
     </style>
     </head>
-    <body>
-        <div class="container">
-            <!-- Header V5: Centered Stack (Robust Table) -->
-            <div class="header-container">
-                <table class="header-table" width="100%" cellpadding="0" cellspacing="0" border="0">
-                    <tr>
-                        <td class="header-td-center">
-                            <img src="cid:logo_dacta" alt="{COMPANY_NAME}" class="header-logo-img" height="90" style="display:block; margin:0 auto; max-height:90px; width:auto; height:auto;">
+    <body style="margin:0; padding:20px 0; background-color:{BG_COLOR};">
+    
+        <!-- MAIN WRAPPER TABLE (GMAIL SAFE) -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; border-collapse:collapse; background-color:{BG_COLOR};">
+          <tr>
+            <td align="center" style="padding:0;">
+              
+              <!-- CENTERED CONTAINER TABLE (700px) -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="main-table-wrapper"
+                     width="700" style="width:700px; max-width:700px; background-color:#FFFFFF; border:1px solid #dce0e6; border-radius:0px; border-collapse:separate; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
+                
+                <!-- TOP BAR (BLUE ACCENT) -->
+                <tr>
+                  <td bgcolor="{COLOR_PRIMARY}" height="6" style="height:6px; line-height:6px; font-size:6px; background-color:{COLOR_PRIMARY};">&nbsp;</td>
+                </tr>
+
+                <!-- HEADER CONTENT (RC-UX-006/007: Dynamic Stacked) -->
+                <tr>
+                  <td style="padding: 0; border-bottom: 1px solid #eaeaea;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                      
+                      {logo_block_html}
+                      
+                      <tr>
+                        <!-- TITLE & DATE (CENTERED) -->
+                        <td align="center" valign="middle" style="padding: {title_padding_top} 40px 25px 40px; font-family:'Segoe UI', Arial, sans-serif; color:{TEXT_COLOR};">
+                          <div style="font-size:24px; line-height:30px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:#1f2937;">
+                            ESTADO DE CUENTA
+                          </div>
+                          <div style="font-size:14px; line-height:18px; color:#9ca3af; margin-top:4px; font-weight:500;">
+                            Al {current_date}
+                          </div>
                         </td>
-                    </tr>
-                    <tr>
-                        <td class="header-td-center">
-                            <div class="header-title">ESTADO DE CUENTA</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="header-td-center">
-                            <div class="header-date">{current_date}</div>
-                        </td>
-                    </tr>
-                </table>
-            </div>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                
+                <!-- BODY CONTENT ROW -->
+                <tr>
+                  <td style="padding:0;">
             
             <div class="content-box">
-                <div class="greeting">Estimados {client_name},</div>
-                <div style="font-size: 13px; margin-bottom: 15px;">
-                    A la fecha, el sistema de cobranzas registra los siguientes pendientes de pago:
+                <div style="font-size: 15px; margin-bottom: 25px; line-height: 1.6; color: #4b5563;">
+                    {intro_html}
                 </div>
                 
-                <ul class="kpi-list">
-                    {intro_totals_html}
-                </ul>
-                
-                <div class="section-title">Detalle de Documentos</div>
-
-                <!-- PC VIEW: TABLE -->
-                <table class="desktop-only">
-                    <thead>
-                        <tr>
-                            <th>Documento</th>
-                            <th>Emisión</th>
-                            <th>Vencimiento</th>
-                            <th style="text-align: right;">Importe</th>
-                            <th style="text-align: right;">Saldo a DACTA</th>
-                            <th style="text-align: right;">Detracción SUNAT (S/)</th>
-                            <th style="text-align: center;">Estado Detr.</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {table_rows}
-                    </tbody>
-                </table>
-                
-                <!-- MOBILE VIEW: CARDS -->
-                <div class="mobile-only">
-                    {mobile_cards}
-                </div>
-                
-                <!-- DETRACCIÓN BLOCK (Single Instance) -->
-                <div class="detraccion-box" style="background-color: #f8fafc; border-left: 3px solid #d9534f; padding: 15px; margin: 25px 0; font-size: 13px; color: #333333;">
-                    <strong>IMPORTANTE - Detracción SUNAT:</strong><br>
-                    Si el documento está afecto, el monto de detracción debe depositarse exclusivamente al 
-                    <strong>Banco de la Nación</strong>, Cuenta N°: <strong>00-005-034272</strong>.<br>
-                    <em>Nota: La detracción siempre se expresa y deposita en Soles (S/).</em>
+                <!-- SUMMARY BOX -->
+                <div class="summary-box">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size: 14px;">
+                        {summary_rows_html}
+                    </table>
                 </div>
 
-                <!-- MEDIOS DE PAGO BLOCK (Bottom) -->
-                <div class="section-title">Medios de Pago (DACTA S.A.C.)</div>
-                <div class="payment-methods">
-                    <div class="payment-group">
-                        <div style="margin-bottom:4px; font-weight:bold; color: {COLOR_PRIMARY};">CUENTAS EN SOLES (S/):</div>
-                        <div><span class="bank-label">BCP:</span> 1931472448010 &nbsp;|&nbsp; <strong>CCI:</strong> 00219300147244801019</div>
-                        <div><span class="bank-label">BBVA:</span> 001103400200230077 &nbsp;|&nbsp; <strong>CCI:</strong> 01134000020023007776</div>
-                    </div>
-                    <div class="payment-group" style="margin-top: 12px;">
-                        <div style="margin-bottom:4px; font-weight:bold; color: {COLOR_PRIMARY};">CUENTAS EN DÓLARES (US$):</div>
-                        <div><span class="bank-label">BCP:</span> 1912078776145 &nbsp;|&nbsp; <strong>CCI:</strong> 00219100207877614559</div>
+                <!-- DETRACCION BLOCK (CONDITIONAL) -->
+                {detraccion_block_html}
+
+                <!-- TABLE SECTION -->
+                <div style="margin-top: 30px;">
+                    <div style="font-size: 13px; font-weight: 700; color: #4b5563; text-transform: uppercase; margin-bottom: 10px;">Detalle de Documentos</div>
+                    
+                    <!-- PC VIEW -->
+                    <table class="data-table desktop-only">
+                        <thead>
+                            <tr>
+                                <th>Documento</th>
+                                <th>Emisión</th>
+                                <th>Vencimiento</th>
+                                <th style="text-align: right;">Importe</th>
+                                <th style="text-align: right;">Saldo a DACTA</th>
+                                <th style="text-align: right;">Detracción (S/)</th>
+                                <th style="text-align: center;">Estado Detr.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {table_rows}
+                        </tbody>
+                    </table>
+                    
+                    <!-- MOBILE VIEW -->
+                    <div class="mobile-only">
+                        {mobile_cards}
                     </div>
                 </div>
+                
+                <div style="font-size: 13px; color: #64748b; margin-top: 25px; font-style: italic;">
+                    Nota: Los montos de detracción deben depositarse exclusivamente al <strong>Banco de la Nación</strong>, Cuenta N°: <strong>00-005-034272</strong> (Siempre en Soles).
+                </div>
 
-                <div style="font-size: 12px; color: #555; margin-top: 25px;">
-                    Si ya realizó el pago recientemente, por favor omita este mensaje o envíe el comprobante para actualizar el estado.
+                <!-- ACCOUNTS FOOTER -->
+                <div class="accounts-grid">
+                    <div class="account-col">
+                        <div class="account-title">Cuentas en Soles (S/)</div>
+                        <div class="account-item"><span class="bank-label">BCP:</span> 1931472448010<br>CCI: 00219300147244801019</div>
+                        <div class="account-item"><span class="bank-label">BBVA:</span> 001103400200230077<br>CCI: 01134000020023007776</div>
+                    </div>
+                    <div class="account-col">
+                        <div class="account-title">Cuentas en Dólares (US$)</div>
+                        <div class="account-item"><span class="bank-label">BCP:</span> 1912078776145<br>CCI: 00219100207877614559</div>
+                    </div>
                 </div>
             </div>
             
-            <div class="footer">
-                <strong>{COMPANY_NAME}</strong><br>
-                Área de Cobranzas y Facturación<br>
-                RUC: {branding_config.get('company_ruc', '')}
-            </div>
-        </div>
+            <!-- FOOTER BLOCK (RC-BUG-018: Inside 700px Container) -->
+            <tr>
+              <td style="padding: 20px 40px; border-top: 1px solid #f3f4f6; background-color: #fafafa; text-align: center; color: #9ca3af; font-size: 11px; border-bottom-left-radius: 0px; border-bottom-right-radius: 0px;">
+                {footer_block_html}
+              </td>
+            </tr>
+
+        </table>
+        </td>
+      </tr>
+    </table>
+    
     </body>
     </html>
     """
@@ -597,6 +698,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                         image.add_header('Content-ID', '<logo_dacta>')
                         image.add_header('Content-Disposition', 'inline', filename='logo.png')
                         msg.attach(image)
+                        stats['log'].append(f"📎 [RunID:{run_id}] INLINE_IMAGE_ATTACHED: True (Size: {len(logo_data)} bytes)")
                     except Exception as e_img:
                          stats['log'].append(f"⚠️ [RunID:{run_id}] No se pudo adjuntar logo: {str(e_img)}")
 
@@ -622,6 +724,10 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                         if sup_email.lower() not in unique_envelope_recipients:
                             unique_envelope_recipients.append(sup_email.lower())
                             
+                        # Prepare Logo Attachment (Conditional RC-UX-007)
+                        # logo_path = logo_path  # Argument passed to function
+                        # Fallback to branding config if not passed explicitly?
+                        # Usually passed from app.py
                         # Configurar Headers (CC vs BCC)
                         if sup_mode == 'CC':
                             msg['Cc'] = sup_email

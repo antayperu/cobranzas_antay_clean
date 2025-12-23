@@ -39,7 +39,7 @@
 | **RC-BUG-003** | Consistencia Vista vs Excel (Amortizaciones = 0.00 fix) | **P0** (Critico) | Done | Antigravity | 2025-12-22 |
 | **RC-BUG-004** | Regresión export: montos numéricos restaurados | **P0** (Critico) | Done | Antigravity | 2025-12-22 |
 | **RC-UX-002** | Plantillas Email Premium (PC + Móvil) + Total Detracción | **P1** (Alto) | Done | Antigravity | 2025-12-22 |
-| **RC-UX-003** | Refinamiento Email Premium (Formalidad, Layout, Medios de Pago) | **P1** (Alto) | In Progress | Antigravity | 2025-12-22 |
+| **RC-UX-003** | Refinamiento Email Premium (Formalidad, Layout, Medios de Pago) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-DOC-001** | Reglas comunicación DACTA vs SUNAT (Detracción) | **P2** (Medio) | In Progress | Antigravity | 2025-12-22 |
 | **RC-QA-002** | Smoke Test Email (SMTP) v4.6.1 | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-SEC-001** | Seguridad Configuración JSON (Plain Text Risk) | **P1** (Alto) | Backlog | Antigravity | 2025-12-22 |
@@ -50,6 +50,7 @@
 | **RC-BUG-010** | Duplicado Persistente (Forensic Trace + UI Lock) | **P0** (Critico) | Done | Antigravity | 2025-12-23 |
 | **RC-BUG-012** | Restaurar Botón Envío (Regresión UI) | **P0** (Critico) | Done | Antigravity | 2025-12-23 |
 | **RC-BUG-013** | Solución Definitiva Duplicados (Fix Doble Ejecución) | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
+| RC-BUG-017 | Supervisor Conf No Persiste (UI/Save) | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
 | **RC-BUG-014** | Business Ledger (SQLite) Persistente | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
 | **RC-BUG-015** | Smart Ledger (TTL 10m + Reenvío Explícito) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-BUG-016** | Soporte Multi-Cliente Mismo Email (Dedup por Notif) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |

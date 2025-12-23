@@ -10,6 +10,9 @@ from utils.excel_export import generate_excel
 import utils.email_sender as es
 import utils.settings_manager as sm
 import utils.helpers as helpers
+import streamlit.components.v1 as components
+import os
+import base64
 
 # Cargar Configuración Global
 CONFIG = sm.load_settings()
@@ -1076,18 +1079,14 @@ if st.session_state['data_ready']:
                 st.markdown("##### Vista Previa (HTML)")
                 
                 if sel_emails:
-                    import utils.email_sender as es
-                    import streamlit.components.v1 as components
-                    import os
-                    import base64
-                    
-                    # Definir ruta de logo (Hardcoded relative path for now, but scalable)
-                    # Idealmente debería estar en CONFIG o ser subido
+                    # Definir ruta de logo (Stable Scope for Preview)
                     logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
                     if not os.path.exists(logo_path):
-                         # Fallback/Warning if logo doesn't exist
-                         # st.warning(f"Logo no encontrado en: {logo_path}")
                          logo_path = None
+                    else:
+                         # RC-BUG-LOGO: Inject into CONFIG so HTML generator sees it
+                         CONFIG['logo_path'] = logo_path
+                    # Convertir imagen a base64 para el preview en iframe
                     
                     for selected_label in sel_emails:
                         info_sel = email_map[selected_label]
@@ -1170,6 +1169,15 @@ if st.session_state['data_ready']:
                             # RC-BUG-007: Deduplicación explícita en el origen
                             seen_emails_batch = set()
                             
+                            # RC-BUG-LOGO: Ensure logo_path is set correctly for the batch
+                            # (It might have been set in Preview scope, but let's re-verify safe existence)
+                            batch_logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
+                            if os.path.exists(batch_logo_path):
+                                CONFIG['logo_path'] = batch_logo_path
+                            else:
+                                CONFIG['logo_path'] = None
+                                batch_logo_path = None
+                            
                             for lbl in sel_emails:
                                 info = email_map[lbl]
                                 
@@ -1232,7 +1240,7 @@ if st.session_state['data_ready']:
                                     smtp_cfg, 
                                     messages_to_send, 
                                     progress_callback=lambda i, t, m: st.toast(f"{m} ({i}/{t})"),
-                                    logo_path=logo_path,
+                                    logo_path=batch_logo_path, # Use the verified batch path
                                     force_resend=force_resend_ttl, # RC-BUG-015
                                     supervisor_config=CONFIG.get('supervisor_config', None) # RC-FEAT-011
                                 )

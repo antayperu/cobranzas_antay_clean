@@ -1,4 +1,4 @@
-# SMOKE TEST PACK - v4.6.1 (Email Stable Release)
+# SMOKE TEST CHECKLIST - v4.6.3 (Corporate Template)
 
 > **Ticket**: RC-QA-002 | **Fecha**: 2025-12-23 | **Versión**: v4.6.1-stable-email
 

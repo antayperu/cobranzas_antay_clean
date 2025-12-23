@@ -109,6 +109,21 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
         - **Anti-Spam**: Implementación de `multipart/alternative` (Texto Plano + HTML) y headers correctos.
         - **UI Mejorada**: Selector con desglose de moneda `S/ | $` y Dashboard de Resumen previo al envío.
         - **Correcciones**: Fix `st.rerun`, selección masiva con callback seguro, y visibilidad de métricas largas.
+- **Versión Actual**: v4.6.3 (Corporate Template PC)
+- **Última Actualización**: 23/12/2025
+- **Estado**: 🟢 ESTABLE (En proceso de release v5.0)
+
+## 📌 Resumen Ejecutivo
+Sprint "UX & Enterprise Standards" completado. Se han cerrado temas críticos de persistencia y se ha elevado el estándar visual del correo a nivel corporativo.
+
+### 🚀 Últimos Cambios (v4.6.3)
+- **[RC-UX-003] Template PC Premium**:
+    - Diseño tipo "Hoja Corporativa" (700px, Sombra, Membrete).
+    - Header formal con barra de marca y logo ampliado.
+    - Tabla con zebra-striping y badges de estado.
+    - Footer de pagos estructurado en grilla.
+- **[RC-FEAT-011] Supervisor Copy**: Copia oculta automática (BCC) configurable.
+- **[RC-BUG-017] Persistencia Config**: Solucionado guardado de settings JSON.
     - **v4.3 (Filtros Profesionales & KPIs Multi-Moneda)**:
         - **Diseño de Filtros "Stacked"**: Multiselección de Empresa a ancho completo para evitar problemas de layout, y filtros secundarios organizados en grid.
         - **Lógica de Filtrado**: Incorporación de filtro "Tipo Pedido" (Multi-select) y eliminación de filtros ocultos en backend.
