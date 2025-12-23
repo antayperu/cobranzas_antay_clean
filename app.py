@@ -10,6 +10,7 @@ from utils.excel_export import generate_excel
 import utils.email_sender as es
 import utils.settings_manager as sm
 import utils.helpers as helpers
+import utils.image_processor as img_proc
 import streamlit.components.v1 as components
 import os
 import base64
@@ -1080,11 +1081,19 @@ if st.session_state['data_ready']:
                 
                 if sel_emails:
                     # Definir ruta de logo (Stable Scope for Preview)
-                    logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
+                    # RC-BUG-LOGO: Prefer processed logo
+                    assets_dir = os.path.join(os.getcwd(), "assets")
+                    logo_path = os.path.join(assets_dir, "logo_dacta_processed.png")
+                    
                     if not os.path.exists(logo_path):
-                         logo_path = None
+                         # Fallback to legacy
+                         legacy_path = os.path.join(assets_dir, "logo_dacta.png")
+                         if os.path.exists(legacy_path):
+                             logo_path = legacy_path
+                         else:
+                             logo_path = None
                     else:
-                         # RC-BUG-LOGO: Inject into CONFIG so HTML generator sees it
+                         # Ensure CONFIG has it
                          CONFIG['logo_path'] = logo_path
                     # Convertir imagen a base64 para el preview en iframe
                     
@@ -1170,13 +1179,21 @@ if st.session_state['data_ready']:
                             seen_emails_batch = set()
                             
                             # RC-BUG-LOGO: Ensure logo_path is set correctly for the batch
-                            # (It might have been set in Preview scope, but let's re-verify safe existence)
-                            batch_logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
+                            # Prioritize processed logo
+                            assets_dir = os.path.join(os.getcwd(), "assets")
+                            batch_logo_path = os.path.join(assets_dir, "logo_dacta_processed.png")
+                            
                             if os.path.exists(batch_logo_path):
                                 CONFIG['logo_path'] = batch_logo_path
                             else:
-                                CONFIG['logo_path'] = None
-                                batch_logo_path = None
+                                # Fallback
+                                legacy_path = os.path.join(assets_dir, "logo_dacta.png")
+                                if os.path.exists(legacy_path):
+                                    batch_logo_path = legacy_path
+                                    CONFIG['logo_path'] = legacy_path
+                                else:
+                                    CONFIG['logo_path'] = None
+                                    batch_logo_path = None
                             
                             for lbl in sel_emails:
                                 info = email_map[lbl]
@@ -1442,19 +1459,57 @@ if st.session_state['data_ready']:
         # -------------------------------------------------------
 
         st.markdown("---")
-        st.subheader("Logo de la Empresa")
-        uploaded_logo = st.file_uploader("Subir Logo (PNG/JPG)", type=['png', 'jpg', 'jpeg'])
+        st.subheader("Logo de la Empresa (Visuals Enterprise)")
+        uploaded_logo = st.file_uploader("Subir Logo (PNG/JPG) - Se optimizará automáticamente", type=['png', 'jpg', 'jpeg'])
+        
         if uploaded_logo:
-            import os
-            assets_dir = os.path.join(os.getcwd(), "assets")
-            if not os.path.exists(assets_dir):
-                os.makedirs(assets_dir)
-            
-            logo_path = os.path.join(assets_dir, "logo_dacta.png")
-            with open(logo_path, "wb") as f:
-                f.write(uploaded_logo.getbuffer())
-            st.success("Logo actualizado correctamente!")
-            st.image(logo_path, width=200)
+             # --- RC-BUG-LOGO: Automatic Processing ---
+             raw_bytes = uploaded_logo.getbuffer()
+             
+             # 1. Process Image
+             proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
+             
+             # 2. Save Paths
+             assets_dir = os.path.join(os.getcwd(), "assets")
+             if not os.path.exists(assets_dir):
+                 os.makedirs(assets_dir)
+             
+             # Save Original (Backup)
+             filename_orig = f"logo_original_{uploaded_logo.name}"
+             path_orig = os.path.join(assets_dir, filename_orig)
+             with open(path_orig, "wb") as f:
+                 f.write(raw_bytes)
+                 
+             # Save Processed (Canonical)
+             path_proc = os.path.join(assets_dir, "logo_dacta_processed.png")
+             with open(path_proc, "wb") as f:
+                 f.write(proc_bytes)
+             
+             # 3. Update CONFIG
+             CONFIG['logo_path'] = path_proc
+             # Persist to disk in config.json? 
+             # The user asked to persist "logo_path_processed".
+             # We should update settings_manager logic or just inject it here into live config?
+             # User said: "Persistir en config.json la ruta del processed".
+             # Currently save_settings saves CONFIG. So we update CONFIG here.
+             
+             # 4. Display Diagnostics
+             st.success("✅ Logo procesado y actualizado correctamente!")
+             
+             col_l1, col_l2 = st.columns(2)
+             with col_l1:
+                 st.caption("Original")
+                 st.image(raw_bytes, width=200)
+                 st.text(f"Size: {len(raw_bytes)//1024} KB")
+                 
+             with col_l2:
+                 st.caption(f"Procesado (Enterprise: {proc_w}x{proc_h})")
+                 st.image(proc_bytes, width=300) # Preview larger
+                 st.text(f"Size: {len(proc_bytes)//1024} KB")
+                 st.info("Este logo se usará en el correo (Trim + Resize).")
+             
+             # Force save to ensure persistence
+             sm.save_settings(CONFIG)
 
 else:
     # Mensaje de bienvenida inicial cuando no hay datos

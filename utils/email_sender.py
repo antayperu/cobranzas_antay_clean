@@ -150,14 +150,13 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     has_logo = bool(branding_config.get('logo_path') or branding_config.get('logo_bytes'))
     
     if has_logo:
-        # Render Corporate Logo Block (Enterprise Specs: Max 220x80)
-        # We use width="150" as a fallback attribute for Outlook, but style handles the real constraint.
-        # User requested: max-width: 220px; max-height: 80px; height: auto; display:block; margin: 0 auto;
+        # Render Corporate Logo Block (Enterprise Standard: 360px width)
+        # RC-BUG-LOGO: Use specific inline CSS for Gmail compatibility
         logo_block_html = f"""
         <tr>
             <td align="center" style="padding: 25px 40px 10px 40px; border-bottom: 0px;">
-                <img src="cid:logo_dacta" width="220" alt="{COMPANY_NAME}" 
-                     style="display:block; border:0; outline:none; text-decoration:none; max-width:220px; max-height:80px; width:auto; height:auto; margin: 0 auto;">
+                <img src="cid:logo_dacta" width="360" alt="{COMPANY_NAME}" 
+                     style="display:block; margin: 0 auto 10px auto; width:360px; max-width:360px; height:auto; max-height:110px; border:0; outline:none; text-decoration:none;">
             </td>
         </tr>
         """
