@@ -26,6 +26,9 @@ El Smoke Test se considera **APROBADO (PASSED)** si y solo si:
 | **ET-06** | **Supervisor Copy (BCC)** | Configurar `enable_supervisor_copy=ON`. Enviar. | Cliente recibe 1. Supervisor recibe 1. Log indica envío con copia. | [ ] |
 | **ET-07** | **Config Persistence (RC-BUG-017)** | Cambiar email supervisor -> Guardar (Botón Nuevo) -> Recargar F5. | Valor persiste. Pestaña Email muestra "Copia de Supervisión ACTIVADA". | [ ] |
 | **ET-08** | **UX Validation (Toggle & Modes)** | Probar Toggle OFF (inputs grises) y ON (habilitados). Verificar textos "Recomendado". | UI responde correctamente. Inputs se bloquean. Mapeo BCC/CC es correcto en backend. | [ ] |
+| **QC-LOGO-01** | **Sin Logo** | Configurar sin logo. Enviar correo. | Header texto centrado. **Sin espacio blanco** por imagen rota. | [ ] |
+| **QC-LOGO-02** | **Con Logo** | Cargar logo PNG con aire. Verificar "Trim + Resize". Enviar. | Header muestra logo grande y cortado (360px). | [ ] |
+| **QC-LOGO-03** | **UX Logo Delete** | Usar botón "Eliminar Logo". | Estado cambia a "No hay logo". Archivo se borra (o desvincula). | [ ] |
 
 ## 3. Evidencia de Ejecución
 

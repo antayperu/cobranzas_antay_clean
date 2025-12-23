@@ -1460,23 +1460,69 @@ if st.session_state['data_ready']:
 
         st.markdown("---")
         st.subheader("Logo de la Empresa (Visuals Enterprise)")
-        uploaded_logo = st.file_uploader("Subir Logo (PNG/JPG) - Se optimizará automáticamente", type=['png', 'jpg', 'jpeg'])
+        # --- RC-BUG-LOGO: UI/UX Polished ---
         
+        # Estado Actual (desde Config/Disco)
+        current_logo_path = CONFIG.get('logo_path')
+        # Verificar si el archivo realmente existe
+        logo_exists = False
+        if current_logo_path and os.path.exists(current_logo_path):
+            logo_exists = True
+        
+        # 1. Mensaje de Estado y Preview Principal
+        if logo_exists:
+            st.success("✅ Logo activo: se usará en el correo (Trim + Resize aplicado).")
+            # Preview del logo procesado (El final)
+            col_main_preview, col_actions = st.columns([2, 1])
+            with col_main_preview:
+                st.image(current_logo_path, caption="Logo Final (Vista Previa)", width=360) 
+            
+            with col_actions:
+                 st.write("") # Spacer
+                 if st.button("🗑️ Eliminar Logo", type="primary", use_container_width=True):
+                     # Logic to delete
+                     CONFIG['logo_path'] = None
+                     # Optional: remove file from disk? Better to keep as backup or delete?
+                     # User said: "borra el archivo procesado".
+                     try:
+                         if os.path.exists(current_logo_path):
+                             os.remove(current_logo_path)
+                     except:
+                         pass
+                     sm.save_settings(CONFIG)
+                     st.rerun()
+        else:
+            st.info("ℹ️ No hay logo configurado. El correo saldrá SIN logo sin reservar espacio.")
+
+        st.markdown("---")
+        
+        # 2. Uploader (Para nuevo logo)
+        uploaded_logo = st.file_uploader("Cargar / Reemplazar Logo (PNG/JPG)", type=['png', 'jpg', 'jpeg'])
+        
+        # Recomendaciones
+        with st.expander("ℹ️ Recomendaciones para el Logo"):
+            st.markdown("""
+            *   **Formato**: PNG (fondo transparente ideal) o JPG.
+            *   **Dimensiones**: Ancho recomendado 800px - 2000px.
+            *   **Proporción**: Horizontal (aprox 3:1 a 5:1).
+            *   **Nota**: El sistema recortará automáticamente los bordes vacíos y ajustará el tamaño.
+            """)
+
         if uploaded_logo:
-             # --- RC-BUG-LOGO: Automatic Processing ---
-             import io # Import local safe
+             # Procesamiento
+             import io 
              from PIL import Image
              raw_bytes = uploaded_logo.getbuffer()
              
-             # 1. Process Image
+             # Process Image
              proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
              
-             # 2. Save Paths
+             # Save Paths
              assets_dir = os.path.join(os.getcwd(), "assets")
              if not os.path.exists(assets_dir):
                  os.makedirs(assets_dir)
              
-             # Save Original (Backup)
+             # Save Original
              filename_orig = f"logo_original_{uploaded_logo.name}"
              path_orig = os.path.join(assets_dir, filename_orig)
              with open(path_orig, "wb") as f:
@@ -1487,35 +1533,29 @@ if st.session_state['data_ready']:
              with open(path_proc, "wb") as f:
                  f.write(proc_bytes)
              
-             # 3. Update CONFIG
+             # Update CONFIG
              CONFIG['logo_path'] = path_proc
-             # Persist to disk in config.json? 
-             # The user asked to persist "logo_path_processed".
-             # We should update settings_manager logic or just inject it here into live config?
-             # User said: "Persistir en config.json la ruta del processed".
-             # Currently save_settings saves CONFIG. So we update CONFIG here.
-             
-             # 4. Display Diagnostics
-             st.success("✅ Logo procesado y actualizado correctamente!")
-             
-             col_l1, col_l2 = st.columns(2)
-             with col_l1:
-                 st.caption("Original")
-                 try:
-                     image_pil = Image.open(io.BytesIO(raw_bytes))
-                     st.image(image_pil, width=200)
-                 except Exception as e:
-                     st.warning("No se pudo previsualizar el logo original.")
-                 st.text(f"Size: {len(raw_bytes)//1024} KB")
-                 
-             with col_l2:
-                 st.caption(f"Procesado (Enterprise: {proc_w}x{proc_h})")
-                 st.image(proc_bytes, width=300) # Preview larger
-                 st.text(f"Size: {len(proc_bytes)//1024} KB")
-                 st.info("Este logo se usará en el correo (Trim + Resize).")
-             
-             # Force save to ensure persistence
              sm.save_settings(CONFIG)
+             
+             # Diagnostics (Ocultos por defecto)
+             with st.expander("🔍 Ver detalles técnicos (Original vs Procesado)", expanded=True):
+                 c1, c2 = st.columns(2)
+                 with c1:
+                     st.caption("Original")
+                     try:
+                         st.image(Image.open(io.BytesIO(raw_bytes)), width=200)
+                     except:
+                         st.warning("Preview no disponible")
+                     st.text(f"Size: {len(raw_bytes)//1024} KB")
+                 with c2:
+                     st.caption(f"Procesado ({proc_w}x{proc_h})")
+                     st.image(proc_bytes, width=300)
+                     st.text(f"Size: {len(proc_bytes)//1024} KB")
+             
+             st.success("Logo procesado y guardado. Recargando...")
+             import time
+             time.sleep(1) # Give time to read Toast/Success
+             st.rerun()
 
 else:
     # Mensaje de bienvenida inicial cuando no hay datos
