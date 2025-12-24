@@ -1171,10 +1171,19 @@ if st.session_state['data_ready']:
                              st.error("❌ Faltan credenciales SMTP. Configúralas en la pestaña 'Configuración'.")
                         else:
                             # --- Feedback Visual de Supervisión (RC-BUG-017) ---
-                            sup_cfg_active = CONFIG.get('supervisor_config', {})
-                            if sup_cfg_active.get('enabled', False):
-                                sup_mode_act = sup_cfg_active.get('mode', 'BCC')
-                                st.success(f"👮 Copia de Supervisión ACTIVADA ({sup_mode_act}): {sup_cfg_active.get('email')}")
+                            # --- Pre-flight Checks (QA & Internal Copies) RC-BUG-020 ---
+                            qa_cfg = CONFIG.get('qa_config', {})
+                            qa_enabled = qa_cfg.get('enabled', False)
+                            
+                            if qa_enabled:
+                                st.warning(f"🧪 MODO QA ACTIVO: Redirección a lista de pruebas ({len(qa_cfg.get('recipients', []))} destinos).")
+                            else:
+                                # Prod Mode Info
+                                int_copies = CONFIG.get('internal_copies', {})
+                                n_cc = len(helpers.normalize_emails(int_copies.get('cc_list', [])))
+                                n_bcc = len(helpers.normalize_emails(int_copies.get('bcc_list', [])))
+                                if n_cc > 0 or n_bcc > 0:
+                                    st.info(f"👥 En Producción: Se enviarán copias internas ({n_cc} CC, {n_bcc} CCO).")
                             
                             messages_to_send = []
                             # RC-BUG-007: Deduplicación explícita en el origen

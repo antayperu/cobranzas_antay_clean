@@ -819,7 +819,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     'Cliente': client_name,
                     'Email': recipient_ledger,
                     'Estado': '✅ Enviado',
-                    'Detalle': f'Entregado SMTP {supervisor_log_info}',
+                    'Detalle': f'Entregado SMTP {copies_log_info}',
                     'RunID': run_id
                 })
 

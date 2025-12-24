@@ -60,6 +60,7 @@
 | **RC-FEAT-013** | **Internal Copies (CC/BCC Enterprise)** | **P1** (Alto) | **In Progress** | Antigravity | 2025-12-23 |
 | **RC-BUG-018** | **Fix Invalid st.permissions Attribute** | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
 | **RC-BUG-019** | **Fix NameError supervisor_copy_target (Residual)** | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
+| **RC-BUG-020** | **Stabilize QA Mode & Remove Supervisor Residue** | **P0** (Critico) | **In Progress** | Antigravity | 2025-12-23 |
 
 ---
 
