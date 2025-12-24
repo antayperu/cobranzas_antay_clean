@@ -32,6 +32,10 @@ El Smoke Test se considera **APROBADO (PASSED)** si y solo si:
 | **LOGO-STAGE-01** | **Staging Flow** | Subir logo SIN guardar. | Muestra preview "Pendiente". NO afecta config ni email real. | [ ] |
 | **LOGO-SAVE-02** | **Commit Flow** | Click en "Guardar y Aplicar". | Se limpia uploader. Mensaje "Guardado". Email real hora usa nuevo logo. | [ ] |
 | **LOGO-LOOP-03** | **Anti-Loop** | Subir logo y no tocar nada. | La app queda estable (sin "running man"). No se recarga infinitamente. | [ ] |
+| **QA-MODE-01** | **QA OFF (Estándar)** | Desactivar toggle QA. Enviar a cliente. | Se envía al correo REAL. No hay prefijo Subject. | [ ] |
+| **QA-MODE-02** | **QA ON (Redirección)** | Activar QA con TU email. Enviar a cliente. | Te llega TI. NO llega al cliente. | [ ] |
+| **QA-MODE-03** | **QA Inyección** | Verificar contenido QA ON. | Subject: `[QA - MARCHA BLANCA]`. Body: Banner Rojo Advertencia. | [ ] |
+| **QA-MODE-04** | **QA Traceability** | Revisar log visual. | Muestra columna "Email Original" vs "Email Enviado". | [ ] |
 
 ## 3. Evidencia de Ejecución
 

@@ -56,10 +56,20 @@
 | **RC-BUG-016** | Soporte Multi-Cliente Mismo Email (Dedup por Notif) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-UX-002** | Panel de Envío Profesional (Resumen + Detalle) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-FEAT-011** | Supervisor Email Copy (BCC/CC Automatico) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
+| **RC-FEAT-012** | **QA Mode (Marcha Blanca) Safe Testing** | **P0** (Critico) | **In Progress** | Antigravity | 2025-12-23 |
 
 ---
 
 ## 4. Detalle de Tickets (Últimos 5 activos)
+
+### [RC-FEAT-012] QA Mode (Marcha Blanca) Safe Testing
+- **Descripción**: Implementar un modo de "Marcha Blanca" que permita realizar pruebas end-to-end de envío de correos masivos sin riesgo de contactar clientes reales.
+- **Alcance IN**: Toggle QA Mode, Lista de QA Recipient, Override de destinatarios, Subject/Body injection.
+- **Criterios de Aceptación**:
+    - [ ] **Safe Override**: Si QA ON, ignorar emails reales y usar lista QA.
+    - [ ] **Injection**: Subject `[QA - MARCHA BLANCA]`, Body Banner `PRUEBA INTERNA`.
+    - [ ] **Traceability**: UI muestra Email Original vs Email QA enviado.
+    - [ ] **No-Regression**: Ledger, TTL y Multi-cliente siguen funcionando igual.
 
 ### [RC-QA-001] Validar Envío PDF (Estrategia Force-Click + Loop)
 - **Descripción**: El envío de PDF en WhatsApp Web es crítico para v5.0. Se debe validar la robustez de la estrategia actual (reintentos x3, selectores estrictos y manejo de modales).

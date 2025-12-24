@@ -11,6 +11,7 @@ import utils.email_sender as es
 import utils.settings_manager as sm
 import utils.helpers as helpers
 import utils.image_processor as img_proc
+import utils.qa_mode as qa_lib
 import streamlit.components.v1 as components
 import os
 import base64
@@ -1248,8 +1249,35 @@ if st.session_state['data_ready']:
                                     'subject': subject_line,
                                     'html_body': body,
                                     'plain_body': plain_body,
-                                    'notification_key': notif_key # New Field
+                                    'html_body': body,
+                                    'plain_body': plain_body,
+                                    'notification_key': notif_key, # New Field
+                                    'original_email': info['email'] # Traceability
                                 })
+                                
+                                # --- RC-FEAT-012: QA Mode Injection ---
+                                # Override destination and content if QA Enabled
+                                qa_cfg = CONFIG.get('qa_config', {})
+                                qa_recipients, qa_status, is_qa = qa_lib.resolve_recipients(info['email'], qa_cfg)
+                                
+                                if is_qa:
+                                    # 1. Update Recipient
+                                    # send_email_batch expects string (comma sep) or list. 
+                                    # We use the list returned by resolve_recipients.
+                                    messages_to_send[-1]['email'] = qa_recipients 
+                                    
+                                    # 2. Update Subject
+                                    messages_to_send[-1]['subject'] = qa_lib.modify_subject_for_qa(subject_line)
+                                    
+                                    # 3. Update Body (Banner Injection)
+                                    # Html: Prepend banner
+                                    banner_html = qa_lib.get_qa_banner_html()
+                                    messages_to_send[-1]['html_body'] = banner_html + body
+                                    # Plain: Prepend text
+                                    messages_to_send[-1]['plain_body'] = "[PRUEBA QA] " + plain_body
+                                    
+                                    # 4. Log Trace
+                                    # We rely on 'original_email' field stored above for reporting
                             
                             # Enviar Batch con Logo
                             with st.spinner(f"Enviando con Business Lock (Fecha: {fecha_corte})..."):
@@ -1287,6 +1315,22 @@ if st.session_state['data_ready']:
                                     use_container_width=True,
                                     hide_index=True
                                 )
+                                
+                                # --- RC-FEAT-012: Traceability (Original vs Sent) ---
+                                qa_cfg_active = CONFIG.get('qa_config', {})
+                                if qa_cfg_active.get('enabled', False):
+                                    st.info("ℹ️ Modo QA Activo: Los correos mostrados arriba son los de QA. Abajo el mapeo original.")
+                                    # Rebuild mapping from messages_to_send
+                                    # msg['client_name'] -> msg['original_email']
+                                    orig_map = {m['client_name']: m['original_email'] for m in messages_to_send}
+                                    
+                                    # Add column to DF view
+                                    df_res['Email Original'] = df_res['Cliente'].map(orig_map)
+                                    st.dataframe(
+                                        df_res[['Cliente', 'Email Original', 'Email', 'Estado']],
+                                        use_container_width=True,
+                                        hide_index=True
+                                    )
                                 
                                 # Botón descarga
                                 csv = df_res.to_csv(index=False).encode('utf-8')
@@ -1456,6 +1500,61 @@ if st.session_state['data_ready']:
                 st.rerun()
             else:
                 st.error("Error guardando config.json")
+                
+        # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
+        st.markdown("---")
+        st.subheader("🧪 Modo Marcha Blanca (QA)")
+        st.warning("⚠️ Zona de Seguridad: Configura el entorno de pruebas para envíos seguros.")
+        
+        qa_cfg_defaults = CONFIG.get('qa_config', {
+            'enabled': False,
+            'mode': 'ALL', # ALL | PRIMARY
+            'recipients': ['cortega@antayperu.com', 'acamacho@integrens.com'],
+            'allowlist_domains': []
+        })
+        
+        # UI Components
+        qa_enabled = st.toggle("🚨 Activar Modo Marcha Blanca (QA)", value=qa_cfg_defaults.get('enabled', False))
+        
+        c_qa1, c_qa2 = st.columns(2)
+        with c_qa1:
+            qa_recipients_txt = st.text_area(
+                "Destinatarios QA (Separados por coma o línea)",
+                value=",\n".join(qa_cfg_defaults.get('recipients', [])),
+                height=100,
+                disabled=not qa_enabled,
+                help="Todos los correos del sistema se redirigirán a esta lista."
+            )
+        
+        with c_qa2:
+            st.write("Estrategia de Envío QA:")
+            qa_mode_sel = st.radio(
+                "Comportamiento",
+                options=["ALL", "PRIMARY"],
+                format_func=lambda x: "Enviar a TODOS los QA (Recomendado)" if x == "ALL" else "Enviar solo al PRIMERO (Rápido)",
+                index=0 if qa_cfg_defaults.get('mode', 'ALL') == 'ALL' else 1,
+                disabled=not qa_enabled
+            )
+            
+        if st.button("💾 Guardar Configuración QA", type="primary"):
+            # Parse List
+            raw_qa_list = [x.strip() for x in qa_recipients_txt.replace('\n', ',').split(',') if x.strip()]
+            
+            new_qa_config = {
+                'enabled': qa_enabled,
+                'mode': qa_mode_sel,
+                'recipients': raw_qa_list,
+                'allowlist_domains': [] # Future proof
+            }
+            
+            CONFIG['qa_config'] = new_qa_config
+            if sm.save_settings(CONFIG):
+                st.success(f"✅ Modo QA {'ACTIVADO' if qa_enabled else 'DESACTIVADO'}. Lista: {len(raw_qa_list)} destinatarios.")
+                if qa_enabled:
+                    st.toast("🚨 MODO QA ACTIVO: No saldrán correos a clientes.", icon="🧪")
+                import time
+                time.sleep(1)
+                st.rerun()
         # -------------------------------------------------------
 
         st.markdown("---")
