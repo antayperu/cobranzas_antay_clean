@@ -1303,7 +1303,7 @@ if st.session_state['data_ready']:
                                     logo_path=batch_logo_path, # Use the verified batch path
                                     force_resend=force_resend_ttl, # RC-BUG-015
                                     internal_copies_config=CONFIG.get('internal_copies', {}), # RC-FEAT-013
-                                    qa_mode_active=is_qa # RC-FEAT-012 Final
+                                    qa_settings=(qa_cfg if is_qa else None) # RC-FEAT-014: Pass full config
                                 )
                             
                             # Marcar como enviado para prevenir duplicados
@@ -1455,33 +1455,43 @@ if st.session_state['data_ready']:
         st.subheader("👥 Copias Internas (CC / CCO)")
         st.info("Configura las listas de distribución interna. Estas copias se envían con cada correo a cliente (Solo en Producción).")
         
-        # Load Config
-        curr_copies = CONFIG.get('internal_copies', {'cc_list': [], 'bcc_list': []})
-        cc_val = ", ".join(curr_copies.get('cc_list', []))
-        bcc_val = ", ".join(curr_copies.get('bcc_list', []))
-        
+        # --- State Management for Dirty Check (Internal Copies) ---
+        current_internal_copies = CONFIG.get('internal_copies', {})
+        if 'prev_internal_copies' not in st.session_state:
+            st.session_state['prev_internal_copies'] = current_internal_copies.copy()
+            
+        saved_cc = ", ".join(current_internal_copies.get('cc_list', []))
+        saved_bcc = ", ".join(current_internal_copies.get('bcc_list', []))
+
         c_copy1, c_copy2 = st.columns(2)
-        
         with c_copy1:
             st.markdown("##### CC (Copia Visible)")
-            cc_input = st.text_area("Emails visibles (separados por coma/línea)", value=cc_val, height=100, help="Estos correos aparecerán en el header 'Cc' del correo.")
+            cc_input = st.text_area("Emails visibles (separados por coma/línea)", value=saved_cc, height=100, help="Estos correos aparecerán en el header 'Cc' del correo.")
             
         with c_copy2:
             st.markdown("##### CCO (Copia Oculta)")
-            bcc_input = st.text_area("Emails ocultos (separados por coma/línea)", value=bcc_val, height=100, help="Estos correos recibirán copia pero NO aparecerán en el header.")
+            bcc_input = st.text_area("Emails ocultos (separados por coma/línea)", value=saved_bcc, height=100, help="Estos correos recibirán copia pero NO aparecerán en el header.")
             
-        # Preview / Validation Logic
+        # Preview & Diff Logic
         norm_cc = helpers.normalize_emails(cc_input)
         norm_bcc = helpers.normalize_emails(bcc_input)
         
-        if True: # Force render (Removed invalid st.permissions)
-             st.caption(f"📝 Vista Previa: Se enviarán {len(norm_cc)} copias visibles y {len(norm_bcc)} ocultas por cada correo.")
-             if norm_cc:
-                 st.caption(f"CC: {', '.join(norm_cc)}")
-             if norm_bcc:
-                 st.caption(f"CCO: {', '.join(norm_bcc)}")
+        # Calculate Changes
+        has_changes_copies = (
+            norm_cc != current_internal_copies.get('cc_list', []) or 
+            norm_bcc != current_internal_copies.get('bcc_list', [])
+        )
+        
+        if True: # Force render
+             st.caption(f"📝 Vista Previa: Se enviarán **{len(norm_cc)}** copias visibles y **{len(norm_bcc)}** ocultas por cada correo.")
+             if norm_cc or norm_bcc:
+                 p_c1, p_c2 = st.columns(2)
+                 with p_c1:
+                     if norm_cc: st.info(f"**CC**: {', '.join(norm_cc)}")
+                 with p_c2:
+                     if norm_bcc: st.warning(f"**CCO**: {', '.join(norm_bcc)}")
 
-        if st.button("💾 Guardar Copias Internas"):
+        if st.button("💾 Guardar Copias Internas", disabled=not has_changes_copies, type="primary" if has_changes_copies else "secondary"):
             new_copies_cfg = {
                 "cc_list": norm_cc,
                 "bcc_list": norm_bcc
@@ -1489,6 +1499,7 @@ if st.session_state['data_ready']:
             CONFIG['internal_copies'] = new_copies_cfg
             
             if sm.save_settings(CONFIG):
+                st.session_state['prev_internal_copies'] = new_copies_cfg # Update State
                 st.success(f"✅ Guardado: {len(norm_cc)} CCs y {len(norm_bcc)} CCOs configurados.")
                 st.toast("Listas de distribución actualizadas", icon="👥")
                 import time
@@ -1500,7 +1511,7 @@ if st.session_state['data_ready']:
         # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
         st.markdown("---")
         st.subheader("🧪 Modo Marcha Blanca (QA)")
-        st.warning("⚠️ Zona de Seguridad: Configura el entorno de pruebas para envíos seguros.")
+        st.warning("⚠️ Zona de Seguridad: Configura el entorno de pruebas para envíos seguros. Controla To, CC, BCC.")
         
         qa_cfg_defaults = CONFIG.get('qa_config', {
             'enabled': False,
@@ -1532,20 +1543,68 @@ if st.session_state['data_ready']:
                 disabled=not qa_enabled
             )
             
-        if st.button("💾 Guardar Configuración QA", type="primary"):
-            # Parse List
-            raw_qa_list = [x.strip() for x in qa_recipients_txt.replace('\n', ',').split(',') if x.strip()]
+        st.markdown("##### Copias Internas en QA")
+        c_qacc, c_qabcc = st.columns(2)
+        with c_qacc:
+            qa_cc_txt = st.text_area(
+                "CC QA (Visible)", 
+                value=",\n".join(qa_cfg_defaults.get('cc_recipients', [])),
+                height=80,
+                disabled=not qa_enabled,
+                help="Estos correos aparecerán en el header CC y recibirán copia."
+            )
+        with c_qabcc:
+            qa_bcc_txt = st.text_area(
+                "BCC QA (Oculto)", 
+                value=",\n".join(qa_cfg_defaults.get('bcc_recipients', [])),
+                height=80,
+                disabled=not qa_enabled,
+                help="Estos correos recibirán copia oculta."
+            )
             
+        # --- Dirty Check Logic QA ---
+        # Parse Lists for Preview & Diff
+        curr_qa_recipients = [x.strip() for x in qa_recipients_txt.replace('\n', ',').replace(';',',').split(',') if x.strip()]
+        curr_qa_cc = [x.strip() for x in qa_cc_txt.replace('\n', ',').replace(';',',').split(',') if x.strip()]
+        curr_qa_bcc = [x.strip() for x in qa_bcc_txt.replace('\n', ',').replace(';',',').split(',') if x.strip()]
+        
+        # Check against Saved Defaults
+        qa_changes = (
+            qa_enabled != qa_cfg_defaults.get('enabled') or
+            qa_mode_sel != qa_cfg_defaults.get('mode') or
+            curr_qa_recipients != qa_cfg_defaults.get('recipients', []) or
+            curr_qa_cc != qa_cfg_defaults.get('cc_recipients', []) or
+            curr_qa_bcc != qa_cfg_defaults.get('bcc_recipients', [])
+        )
+
+        # --- QA Live Preview ---
+        if qa_enabled:
+            st.markdown(f"""
+            <div style="background-color: #fff3cd; padding: 10px; border-radius: 5px; border: 1px solid #ffeeba; margin-bottom: 10px;">
+                <strong>📝 Vista Previa QA (Simulación):</strong><br>
+                Por cada correo enviado, se armará el siguiente esquema:<br>
+                <ul>
+                    <li><strong>To (Destino):</strong> {len(curr_qa_recipients)} correos (Lista QA)</li>
+                    <li><strong>Cc (Visible):</strong> {len(curr_qa_cc)} correos (Lista QA)</li>
+                    <li><strong>Bcc (Oculto):</strong> {len(curr_qa_bcc)} correos (Lista QA)</li>
+                </ul>
+                <small><em>* Los correos de Producción serán IGNORADOS completamente.</em></small>
+            </div>
+            """, unsafe_allow_html=True)
+
+        if st.button("💾 Guardar Configuración QA", type="primary" if qa_changes else "secondary", disabled=not qa_changes):
             new_qa_config = {
                 'enabled': qa_enabled,
                 'mode': qa_mode_sel,
-                'recipients': raw_qa_list,
+                'recipients': curr_qa_recipients,
+                'cc_recipients': curr_qa_cc,
+                'bcc_recipients': curr_qa_bcc,
                 'allowlist_domains': [] # Future proof
             }
             
             CONFIG['qa_config'] = new_qa_config
             if sm.save_settings(CONFIG):
-                st.success(f"✅ Modo QA {'ACTIVADO' if qa_enabled else 'DESACTIVADO'}. Lista: {len(raw_qa_list)} destinatarios.")
+                st.success(f"✅ Modo QA Actualizado. Destinos: {len(curr_qa_recipients)} To | {len(curr_qa_cc)} CC | {len(curr_qa_bcc)} BCC")
                 if qa_enabled:
                     st.toast("🚨 MODO QA ACTIVO: No saldrán correos a clientes.", icon="🧪")
                 import time

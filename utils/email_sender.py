@@ -521,14 +521,20 @@ def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_co
     
     return text
 
-def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, internal_copies_config=None, qa_mode_active=False):
+def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, internal_copies_config=None, qa_settings=None):
     """
     Envía lote de correos con reporte de progreso y bloqueo TTL por negocio.
     force_resend: Si True, ignora el bloqueo TTL (Reason: USER_RESEND).
     internal_copies_config: Dict opcional {'cc_list': [...], 'bcc_list': [...]}
-    qa_mode_active: Si True, aplica reglas estrictas de supervisión (solo si supervisor en recipient list).
+    qa_settings: Dict de configuración QA o None. Si está presente y enabled, se aplica lógica QA.
     """
     import smtplib
+    
+    # Resolve QA State
+    is_qa_mode = False
+    if qa_settings and qa_settings.get('enabled', False):
+        is_qa_mode = True
+
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
     from email.mime.image import MIMEImage
@@ -730,41 +736,57 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 all_recipients = all_recipients_clean
                 unique_envelope_recipients = list(set(email.lower() for email in all_recipients))
                 
-                # --- RC-FEAT-013: Internal Copies (CC/BCC) ---
+                # --- RC-FEAT-013 & 014: Internal Copies + QA Logic (Strict Separation) ---
                 copies_log_info = ""
                 
-                if not qa_mode_active:
-                    # PROD: Apply Copies
+                if not is_qa_mode:
+                    # --- [MODE=PROD] ---
+                    # Load PROD Copies
                     cfg_copies = internal_copies_config or {}
-                    norm_cc = helpers.normalize_emails(cfg_copies.get('cc_list', []))
-                    norm_bcc = helpers.normalize_emails(cfg_copies.get('bcc_list', []))
+                    prod_cc_raw = helpers.normalize_emails(cfg_copies.get('cc_list', []))
+                    prod_bcc_raw = helpers.normalize_emails(cfg_copies.get('bcc_list', []))
                     
                     # 1. Update Envelope (Add to unique recipients)
-                    # We iterate and add if not present to avoid duplicates
                     added_cc = 0
                     added_bcc = 0
                     
-                    for e in norm_cc:
+                    for e in prod_cc_raw:
                         if e.lower() not in unique_envelope_recipients:
                             unique_envelope_recipients.append(e.lower())
                             added_cc += 1
                             
-                    for e in norm_bcc:
+                    for e in prod_bcc_raw:
                         if e.lower() not in unique_envelope_recipients:
                             unique_envelope_recipients.append(e.lower())
                             added_bcc += 1
-                            
-                    if added_cc > 0 or added_bcc > 0:
-                        copies_log_info = f"[Copies Added: {added_cc} CC, {added_bcc} BCC]"
+                    
+                    # 2. Set PROD Headers
+                    if prod_cc_raw:
+                        msg['Cc'] = ", ".join(prod_cc_raw)
                         
-                    # 2. Set Headers (Only CC is visible)
-                    if norm_cc:
-                        msg['Cc'] = ", ".join(norm_cc)
+                    if added_cc > 0 or added_bcc > 0:
+                        copies_log_info = f"[MODE=PROD] Added: {added_cc} CC, {added_bcc} BCC"
+                    else:
+                        copies_log_info = "[MODE=PROD] No copies"
                         
                 else:
-                    # QA: Ignore Copies
-                    # We do not add anything to envelope. Envelope is strictly what came from 'all_recipients_clean' (QA Targets)
-                    copies_log_info = "[QA Mode: Internal Copies SKIPPED]"
+                    # --- [MODE=QA] ---
+                    # Strictly use QA Lists. Ignore Prod Copies entirely.
+                    # Envelope = QA_TO (already set) + QA_CC + QA_BCC
+                    
+                    qa_cc = helpers.normalize_emails(qa_settings.get('cc_recipients', []))
+                    qa_bcc = helpers.normalize_emails(qa_settings.get('bcc_recipients', []))
+                    
+                    # 1. Update Envelope
+                    for e in qa_cc + qa_bcc:
+                        if e.lower() not in unique_envelope_recipients:
+                            unique_envelope_recipients.append(e.lower())
+                            
+                    # 2. Set QA Headers
+                    if qa_cc:
+                        msg['Cc'] = ", ".join(qa_cc)
+                        
+                    copies_log_info = f"[MODE=QA] Strict. Targets: {len(qa_cc)} CC, {len(qa_bcc)} BCC. (Prod Ignored)"
                 
                 # --- Advanced Forensic Headers ---
                 # Identificadores de Proceso/Hilo
@@ -787,6 +809,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 stats['log'].append(f"📧 [RunID:{run_id}] Envelope Targets ({len(unique_envelope_recipients)}): {recipients_log_str} {copies_log_info}")
 
                 # Enviar con sobre explícito (Explicit Envelope)
+                # IMPORTANTE: Pasamos to_addrs explícitamente para que el Envelope incluya BCC (invisible en headers).
                 server.send_message(msg, to_addrs=unique_envelope_recipients)
 
                 # Log POST-SEND (Forensic)
@@ -794,7 +817,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 
                 # 4. Update Ledger (Confirm Sent)
                 reason = "USER_RESEND" if force_resend else "NORMAL"
-                if not qa_mode_active and copies_log_info:
+                if not is_qa_mode and copies_log_info:
                     reason += "_wCOPIES"
                 
                 try:

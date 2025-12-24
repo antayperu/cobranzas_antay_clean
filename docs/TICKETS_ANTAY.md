@@ -57,10 +57,14 @@
 | **RC-UX-002** | Panel de Envío Profesional (Resumen + Detalle) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-FEAT-011** | Supervisor Email Copy (BCC/CC Automatico) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-FEAT-012** | **QA Mode (Marcha Blanca) Safe Testing** | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
-| **RC-FEAT-013** | **Internal Copies (CC/BCC Enterprise)** | **P1** (Alto) | **In Progress** | Antigravity | 2025-12-23 |
+| **RC-FEAT-013** | **Internal Copies (CC/BCC Enterprise)** | **P1** (Alto) | **Done** | Antigravity | 2025-12-24 |
 | **RC-BUG-018** | **Fix Invalid st.permissions Attribute** | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
 | **RC-BUG-019** | **Fix NameError supervisor_copy_target (Residual)** | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
-| **RC-BUG-020** | **Stabilize QA Mode & Remove Supervisor Residue** | **P0** (Critico) | **In Progress** | Antigravity | 2025-12-23 |
+| **RC-BUG-020** | **Stabilize QA Mode & Remove Supervisor Residue** | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
+| **RC-FEAT-014** | **QA Mode CC/BCC Support (Full Control)** | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
+| **RC-BUG-021** | **Strict QA/Prod Separation (No Prod Copies in QA)** | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
+| **RC-BUG-022** | **Fix CCO (BCC) Not Sending in Production** | **P0** (Critico) | **Done** | Antigravity | 2025-12-24 |
+| **RC-UX-008** | **Enterprise Config UX (Dirty State & Preview)** | **P1** (Alto) | **Done** | Antigravity | 2025-12-24 |
 
 ---
 

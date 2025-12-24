@@ -45,11 +45,13 @@ Construir una aplicación web en Streamlit para consolidar reportes de cobranza,
     - [x] Generación de Links
 
 ## 🔄 Contexto para Próxima Sesión
-- **Estado Actual**: 
-    - **v1.0**: Terminada y funcional.
-    - **v1.1**: Se implementó lógica de "Saldo Real" y Multiselección.
-    - **v1.2**: Optimización de Fuente de Datos ("Importe Referencial" directo).
-    - **v1.3**: Automatización de "Documento Referencia".
+-### 📌 Estado Actual (2025-12-24)
+- **QA Mode Stable**: Separación estricta Prod/QA implementada. `RC-BUG-021` Fixed.
+- **BCC Fixed**: Fix crítico en `email_sender.py` para envío real de copias ocultas. `RC-BUG-022` Fixed.
+- **UX Config**: Lógica "Dirty State" y Previews implementadas en `app.py`. `RC-UX-008` Fixed.
+- **Próximos Pasos**: Pruebas de campo (Smoke Tests) y posibles ajustes menores.
+
+--- **v1.3**: Automatización de "Documento Referencia".
     - **v1.4**: Mejoras de diseño y columna Amortizaciones.
     - **v1.5**: Módulo WhatsApp actualizado (Marca "DACTA SAC", Totales Multimoneda).
     - **v1.6**: Mensaje WhatsApp Detallado (Listado completo y pie de página).
