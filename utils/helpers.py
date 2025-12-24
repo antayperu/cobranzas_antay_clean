@@ -32,3 +32,36 @@ def get_export_filename(company_name: str) -> str:
     timestamp = now.strftime("%Y%m%d_%H%M")
     
     return f"{safe_name}_ReporteCobranzas_{timestamp}.xlsx"
+
+def normalize_emails(value):
+    """
+    Normaliza una entrada de emails (str, list, tuple) a una lista plana de strings limpios.
+    Maneja:
+    - None -> []
+    - str -> split por ',' o ';' o newline
+    - list/tuple -> flatten, convert to str, strip
+    - Deduplicación preservando orden
+    """
+    if not value:
+        return []
+    
+    # 1. Unify to list
+    if isinstance(value, str):
+        # Replace common separators
+        normalized = value.replace(';', ',').replace('\n', ',')
+        items = normalized.split(',')
+    elif isinstance(value, (list, tuple, set)):
+        items = value
+    else:
+        items = [str(value)]
+        
+    # 2. Clean & Filter
+    cleaned = []
+    seen = set()
+    for item in items:
+        s = str(item).strip()
+        if s and s.lower() not in seen:
+            cleaned.append(s)
+            seen.add(s.lower())
+            
+    return cleaned

@@ -7,6 +7,7 @@ from datetime import datetime
 from email.utils import make_msgid, formatdate
 import pandas as pd
 import uuid
+import utils.helpers as helpers
 import hashlib
 import time
 import threading
@@ -548,7 +549,15 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     duplicates_count = 0
     
     for m in messages:
-        email_clean = str(m.get('email', '')).strip().lower()
+        # --- RC-FIX-QA-TYPE: Robust List Handling ---
+        raw_email_input = m.get('email', '')
+        # Normalize list/str to list[str]
+        recips_norm = helpers.normalize_emails(raw_email_input)
+        
+        # Take primary for Logic/Ledger (or 'unknown')
+        primary_email = recips_norm[0] if recips_norm else ''
+        email_clean = primary_email.lower()
+        
         if not email_clean:
             continue
             
@@ -668,7 +677,13 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 # Crear Mensaje
                 msg = MIMEMultipart('related') 
                 msg['From'] = smtp_config['user']
-                msg['To'] = msg_data['email']
+                
+                # --- RC-FIX-QA-TYPE: Ensure 'To' Header is String ---
+                # We normalize again (safe) to be sure, or rely on loop var if passed (refactor loop?)
+                # msg_data uses 'email' key which might be list.
+                all_recipients_clean = helpers.normalize_emails(msg_data['email'])
+                
+                msg['To'] = ", ".join(all_recipients_clean)
                 msg['Subject'] = msg_data['subject']
                 msg['Reply-To'] = smtp_config['user']
                 msg['Date'] = formatdate(localtime=True)
@@ -705,8 +720,8 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 stats['log'].append(f"📡 [RunID:{run_id}] SEND_CALL #{send_call_index} PREPARE -> To: {msg_data['email']} | MsgID: {msg_id}")
                 
                 # --- RC-BUG-009: Explicit Envelope Deduplication ---
-                raw_to = str(msg_data['email']).split(',')
-                all_recipients = [e.strip() for e in raw_to if e.strip()]
+                # Use normalized list from above
+                all_recipients = all_recipients_clean
                 unique_envelope_recipients = list(set(email.lower() for email in all_recipients))
                 
                 # --- RC-FEAT-011: Copia Supervisión (BCC/CC) ---
