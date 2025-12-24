@@ -794,8 +794,8 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 
                 # 4. Update Ledger (Confirm Sent)
                 reason = "USER_RESEND" if force_resend else "NORMAL"
-                if supervisor_copy_target:
-                    reason += f"_wCOPY_{supervisor_config.get('mode','BCC')}"
+                if not qa_mode_active and copies_log_info:
+                    reason += "_wCOPIES"
                 
                 try:
                     # Update State
