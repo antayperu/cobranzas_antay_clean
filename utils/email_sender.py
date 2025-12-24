@@ -521,11 +521,11 @@ def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_co
     
     return text
 
-def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, supervisor_config=None, qa_mode_active=False):
+def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, internal_copies_config=None, qa_mode_active=False):
     """
     Envía lote de correos con reporte de progreso y bloqueo TTL por negocio.
     force_resend: Si True, ignora el bloqueo TTL (Reason: USER_RESEND).
-    supervisor_config: Dict opcional {'email': '...', 'enabled': True/False, 'mode': 'BCC'/'CC'}
+    internal_copies_config: Dict opcional {'cc_list': [...], 'bcc_list': [...]}
     qa_mode_active: Si True, aplica reglas estrictas de supervisión (solo si supervisor en recipient list).
     """
     import smtplib
@@ -730,41 +730,41 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 all_recipients = all_recipients_clean
                 unique_envelope_recipients = list(set(email.lower() for email in all_recipients))
                 
-                # --- RC-FEAT-011: Copia Supervisión (BCC/CC) ---
-                supervisor_copy_target = None
-                supervisor_log_info = ""
+                # --- RC-FEAT-013: Internal Copies (CC/BCC) ---
+                copies_log_info = ""
                 
-                if supervisor_config and supervisor_config.get('enabled', False):
-                    sup_email = str(supervisor_config.get('email', '')).strip()
-                    if sup_email and '@' in sup_email:
-                        supervisor_copy_target = sup_email
-                        sup_mode = str(supervisor_config.get('mode', 'BCC')).upper()
-                        
-                        # Agregar al envelope siempre (se enviará a esta direcicón)
-                        # Agregar al envelope siempre (se enviará a esta direcicón)
-                        if sup_email.lower() not in unique_envelope_recipients:
-                            # RC-FEAT-012: QA Supervisor Rule
-                            # In QA Mode, ONLY add supervisor if they are explicitly in the QA allowed list (envelope)
-                            # Actually, if they are NOT in envelope, it means they weren't in QA_LIST in app.py
-                            if qa_mode_active:
-                                # Skip adding extra supervisor
-                                supervisor_log_info = f"[QA_SKIP_SUPERVISOR: {sup_email}]"
-                                stats['log'].append(f"ℹ️ [RunID:{run_id}] QA Mode: Supervisor {sup_email} omitido porque no está en la lista de prueba.")
-                            else:
-                                # PROD Mode: Always add supervisor
-                                unique_envelope_recipients.append(sup_email.lower())
+                if not qa_mode_active:
+                    # PROD: Apply Copies
+                    cfg_copies = internal_copies_config or {}
+                    norm_cc = helpers.normalize_emails(cfg_copies.get('cc_list', []))
+                    norm_bcc = helpers.normalize_emails(cfg_copies.get('bcc_list', []))
+                    
+                    # 1. Update Envelope (Add to unique recipients)
+                    # We iterate and add if not present to avoid duplicates
+                    added_cc = 0
+                    added_bcc = 0
+                    
+                    for e in norm_cc:
+                        if e.lower() not in unique_envelope_recipients:
+                            unique_envelope_recipients.append(e.lower())
+                            added_cc += 1
                             
-                        # Prepare Logo Attachment (Conditional RC-UX-007)
-                        # logo_path = logo_path  # Argument passed to function
-                        # Fallback to branding config if not passed explicitly?
-                        # Usually passed from app.py
-                        # Configurar Headers (CC vs BCC)
-                        if sup_mode == 'CC':
-                            msg['Cc'] = sup_email
-                            supervisor_log_info = f"[CC: {sup_email}]"
-                        else:
-                            # BCC (Default): No header, just envelope
-                            supervisor_log_info = f"[BCC: {sup_email}]"
+                    for e in norm_bcc:
+                        if e.lower() not in unique_envelope_recipients:
+                            unique_envelope_recipients.append(e.lower())
+                            added_bcc += 1
+                            
+                    if added_cc > 0 or added_bcc > 0:
+                        copies_log_info = f"[Copies Added: {added_cc} CC, {added_bcc} BCC]"
+                        
+                    # 2. Set Headers (Only CC is visible)
+                    if norm_cc:
+                        msg['Cc'] = ", ".join(norm_cc)
+                        
+                else:
+                    # QA: Ignore Copies
+                    # We do not add anything to envelope. Envelope is strictly what came from 'all_recipients_clean' (QA Targets)
+                    copies_log_info = "[QA Mode: Internal Copies SKIPPED]"
                 
                 # --- Advanced Forensic Headers ---
                 # Identificadores de Proceso/Hilo
@@ -784,7 +784,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 # Log Actual RCPT LIST
                 recipients_log_str = ", ".join(unique_envelope_recipients)
                 print(f"DEBUG_FORENSIC: [RunID:{run_id}] Thread:{thread_id} | RCPT_LIST={recipients_log_str} | LedgerKey={ledger_key}")
-                stats['log'].append(f"📧 [RunID:{run_id}] Envelope Targets ({len(unique_envelope_recipients)}): {recipients_log_str} {supervisor_log_info}")
+                stats['log'].append(f"📧 [RunID:{run_id}] Envelope Targets ({len(unique_envelope_recipients)}): {recipients_log_str} {copies_log_info}")
 
                 # Enviar con sobre explícito (Explicit Envelope)
                 server.send_message(msg, to_addrs=unique_envelope_recipients)

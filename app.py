@@ -1293,7 +1293,7 @@ if st.session_state['data_ready']:
                                     progress_callback=lambda i, t, m: st.toast(f"{m} ({i}/{t})"),
                                     logo_path=batch_logo_path, # Use the verified batch path
                                     force_resend=force_resend_ttl, # RC-BUG-015
-                                    supervisor_config=CONFIG.get('supervisor_config', None), # RC-FEAT-011
+                                    internal_copies_config=CONFIG.get('internal_copies', {}), # RC-FEAT-013
                                     qa_mode_active=is_qa # RC-FEAT-012 Final
                                 )
                             
@@ -1441,72 +1441,52 @@ if st.session_state['data_ready']:
                 else:
                     st.error("❌ Error al guardar la configuración.")
 
-        # --- SECCION INDEPENDIENTE: SUPERVISION (RC-BUG-017 & UX Feedback) ---
+        # --- SECCION INDEPENDIENTE: COPIAS INTERNAS (RC-FEAT-013) ---
         st.markdown("---")
-        st.subheader("🛠️ Supervisión de Cobranza")
-        st.info("Configuración de copia de auditoría. Estos cambios se aplican inmediatamente.")
+        st.subheader("👥 Copias Internas (CC / CCO)")
+        st.info("Configura las listas de distribución interna. Estas copias se envían con cada correo a cliente (Solo en Producción).")
         
-        # Cargar config actual
-        curr_sup_cfg = CONFIG.get('supervisor_config', sm.DEFAULT_SETTINGS['supervisor_config'])
+        # Load Config
+        curr_copies = CONFIG.get('internal_copies', {'cc_list': [], 'bcc_list': []})
+        cc_val = ", ".join(curr_copies.get('cc_list', []))
+        bcc_val = ", ".join(curr_copies.get('bcc_list', []))
         
-        # 1. Main Toggle (Control Principal)
-        sup_enabled_ui = st.toggle("✅ Activar Copia a Supervisión", value=curr_sup_cfg.get('enabled', True))
+        c_copy1, c_copy2 = st.columns(2)
         
-        # 2. Options (Disabled if Main Toggle is OFF)
-        c_sup1, c_sup2 = st.columns([2, 2])
-        
-        with c_sup1:
-            sup_email_ui = st.text_input(
-                "Email Supervisor", 
-                value=curr_sup_cfg.get('email', ''), 
-                help="Este correo recibirá copia de TODOS los envíos.",
-                disabled=not sup_enabled_ui
-            )
+        with c_copy1:
+            st.markdown("##### CC (Copia Visible)")
+            cc_input = st.text_area("Emails visibles (separados por coma/línea)", value=cc_val, height=100, help="Estos correos aparecerán en el header 'Cc' del correo.")
             
-        with c_sup2:
-            # Mapping Logic for Verbose UI
-            mode_map = {
-                "BCC": "Copia oculta (BCC) – Recomendado",
-                "CC": "Copia visible (CC)"
+        with c_copy2:
+            st.markdown("##### CCO (Copia Oculta)")
+            bcc_input = st.text_area("Emails ocultos (separados por coma/línea)", value=bcc_val, height=100, help="Estos correos recibirán copia pero NO aparecerán en el header.")
+            
+        # Preview / Validation Logic
+        norm_cc = helpers.normalize_emails(cc_input)
+        norm_bcc = helpers.normalize_emails(bcc_input)
+        
+        if st.permissions or True: # Force render
+             st.caption(f"📝 Vista Previa: Se enviarán {len(norm_cc)} copias visibles y {len(norm_bcc)} ocultas por cada correo.")
+             if norm_cc:
+                 st.caption(f"CC: {', '.join(norm_cc)}")
+             if norm_bcc:
+                 st.caption(f"CCO: {', '.join(norm_bcc)}")
+
+        if st.button("💾 Guardar Copias Internas"):
+            new_copies_cfg = {
+                "cc_list": norm_cc,
+                "bcc_list": norm_bcc
             }
-            rev_mode_map = {v: k for k, v in mode_map.items()}
+            CONFIG['internal_copies'] = new_copies_cfg
             
-            # Determine current value for UI
-            curr_mode_code = curr_sup_cfg.get('mode', 'BCC')
-            curr_mode_ui = mode_map.get(curr_mode_code, mode_map["BCC"])
-            
-            selected_mode_ui = st.selectbox(
-                "Modo de Envío", 
-                options=list(mode_map.values()),
-                index=list(mode_map.values()).index(curr_mode_ui),
-                help="BCC: El cliente NO VE a la supervisión.\nCC: El cliente SÍ VE a la supervisión.",
-                disabled=not sup_enabled_ui
-            )
-            # Resolve back to code
-            sup_mode_ui = rev_mode_map[selected_mode_ui]
-            
-        if st.button("💾 Guardar Configuración de Supervisión"):
-            # 1. Update Global Config Wrapper
-            new_sup_settings = {
-                "email": sup_email_ui,
-                "enabled": sup_enabled_ui,
-                "mode": sup_mode_ui
-            }
-            CONFIG['supervisor_config'] = new_sup_settings
-            
-            # 2. Persist to Disk
             if sm.save_settings(CONFIG):
-                status_msg = f"Copia {'ACTIVADA' if sup_enabled_ui else 'DESACTIVADA'}"
-                if sup_enabled_ui:
-                    status_msg += f" ({sup_mode_ui}) a {sup_email_ui}"
-                
-                st.success(f"✅ Guardado: {status_msg}")
-                st.toast("Configuración de supervisión actualizada", icon="👮")
+                st.success(f"✅ Guardado: {len(norm_cc)} CCs y {len(norm_bcc)} CCOs configurados.")
+                st.toast("Listas de distribución actualizadas", icon="👥")
                 import time
                 time.sleep(1)
                 st.rerun()
             else:
-                st.error("Error guardando config.json")
+                st.error("Error al guardar configuración.")
                 
         # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
         st.markdown("---")

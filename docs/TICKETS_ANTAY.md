@@ -56,7 +56,8 @@
 | **RC-BUG-016** | Soporte Multi-Cliente Mismo Email (Dedup por Notif) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-UX-002** | Panel de Envío Profesional (Resumen + Detalle) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
 | **RC-FEAT-011** | Supervisor Email Copy (BCC/CC Automatico) | **P1** (Alto) | **Done** | Antigravity | 2025-12-23 |
-| **RC-FEAT-012** | **QA Mode (Marcha Blanca) Safe Testing** | **P0** (Critico) | **In Progress** | Antigravity | 2025-12-23 |
+| **RC-FEAT-012** | **QA Mode (Marcha Blanca) Safe Testing** | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
+| **RC-FEAT-013** | **Internal Copies (CC/BCC Enterprise)** | **P1** (Alto) | **In Progress** | Antigravity | 2025-12-23 |
 
 ---
 
@@ -69,7 +70,16 @@
     - [ ] **Safe Override**: Si QA ON, ignorar emails reales y usar lista QA.
     - [ ] **Injection**: Subject `[QA - MARCHA BLANCA]`, Body Banner `PRUEBA INTERNA`.
     - [ ] **Traceability**: UI muestra Email Original vs Email QA enviado.
-    - [ ] **No-Regression**: Ledger, TTL y Multi-cliente siguen funcionando igual.
+    - [x] **Traceability**: UI muestra Email Original vs Email QA enviado.
+    - [x] **No-Regression**: Ledger, TTL y Multi-cliente siguen funcionando igual.
+
+### [RC-FEAT-013] Internal Copies (CC/BCC Enterprise)
+- **Descripción**: Reemplazar lógica simple de "Supervisor" por listas de distribución interna (CC Visible y CCO Oculto).
+- **Alcance**: UI para gestionar listas, normalización, headers SMTP y reglas QA (ignorar copias en QA).
+- **Criterios de Aceptación**:
+    - [ ] **UI**: Campos CC y CCO separados, validación de emails.
+    - [ ] **SMTP Prod**: Header `Cc` correcto, `Bcc` oculto, Envelope contiene todos.
+    - [ ] **SMTP QA**: Ignora copias internas (solo envía a QA List).
 
 ### [RC-QA-001] Validar Envío PDF (Estrategia Force-Click + Loop)
 - **Descripción**: El envío de PDF en WhatsApp Web es crítico para v5.0. Se debe validar la robustez de la estrategia actual (reintentos x3, selectores estrictos y manejo de modales).

@@ -36,7 +36,9 @@ El Smoke Test se considera **APROBADO (PASSED)** si y solo si:
 | **QA-MODE-02** | **QA ON (Redirección)** | Activar QA. Enviar a cliente. | Te llega solo a TI (y a Supervisor si está en lista QA). NO al cliente. | [ ] |
 | **QA-MODE-03** | **QA Inyección** | Verificar contenido. | Subject: `[QA...]`. Banner: Rojo con Email Real + QA List. Footer: RunID. | [ ] |
 | **QA-MODE-04** | **QA Traceability** | Revisar log visual. | Muestra columna "Email Original" vs "Email Enviado". | [ ] |
-| **QA-MODE-05** | **QA Supervisor** | Supervisor fuera de lista QA. | NO debe recibir copia (Log: Supervisor Skipped). | [ ] |
+| **QA-MODE-05** | **QA Copies** | Configurar CC/BCC. Activar QA. | NO deben llegar copias a los CC/BCC. Solo a QA List. | [ ] |
+| **PROD-COPY-01** | **CC Visible** | QA OFF. Configurar CC. Enviar 1 cliente. | Header `Cc` visible. Sobre incluye CC. | [ ] |
+| **PROD-COPY-02** | **CCO Hidden** | QA OFF. Configurar CCO. Enviar 1 cliente. | Header `Cc` SIN CCO. CCO recibe correo. | [ ] |
 
 ## 3. Evidencia de Ejecución
 
