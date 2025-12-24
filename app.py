@@ -1460,102 +1460,146 @@ if st.session_state['data_ready']:
 
         st.markdown("---")
         st.subheader("Logo de la Empresa (Visuals Enterprise)")
-        # --- RC-BUG-LOGO: UI/UX Polished ---
+        # --- RC-UX-LOGO-STD: Enterprise Staging Flow + Anti-Loop ---
         
-        # Estado Actual (desde Config/Disco)
-        current_logo_path = CONFIG.get('logo_path')
-        # Verificar si el archivo realmente existe
-        logo_exists = False
-        if current_logo_path and os.path.exists(current_logo_path):
-            logo_exists = True
-        
-        # 1. Mensaje de Estado y Preview Principal
-        if logo_exists:
-            st.success("✅ Logo activo: se usará en el correo (Trim + Resize aplicado).")
-            # Preview del logo procesado (El final)
-            col_main_preview, col_actions = st.columns([2, 1])
-            with col_main_preview:
-                st.image(current_logo_path, caption="Logo Final (Vista Previa)", width=360) 
+        # 1. Initialization & State Management
+        if 'logo_uploader_key' not in st.session_state:
+            st.session_state.logo_uploader_key = 0
             
-            with col_actions:
-                 st.write("") # Spacer
-                 if st.button("🗑️ Eliminar Logo", type="primary", use_container_width=True):
-                     # Logic to delete
-                     CONFIG['logo_path'] = None
-                     # Optional: remove file from disk? Better to keep as backup or delete?
-                     # User said: "borra el archivo procesado".
-                     try:
-                         if os.path.exists(current_logo_path):
-                             os.remove(current_logo_path)
-                     except:
-                         pass
-                     sm.save_settings(CONFIG)
-                     st.rerun()
-        else:
-            st.info("ℹ️ No hay logo configurado. El correo saldrá SIN logo sin reservar espacio.")
+        if 'logo_staged' not in st.session_state:
+            st.session_state.logo_staged = None # {bytes, w, h, name}
 
+        # 2. Display Active Logo (Current State)
+        current_logo_path = CONFIG.get('logo_path')
+        logo_active_exists = False
+        if current_logo_path and os.path.exists(current_logo_path):
+            logo_active_exists = True
+            
+        st.markdown("##### Logo Activo (En Producción)")
+        if logo_active_exists and st.session_state.logo_staged is None:
+            # Show Active only if not staging (or show both? User wants "Vista previa final" on upload)
+            # Strategy: Show Active. If Staged exists, show Staged below in "Review" section.
+            
+            c_active_img, c_active_info = st.columns([1, 2])
+            with c_active_img:
+                st.image(current_logo_path, width=200)
+            with c_active_info:
+                st.success("✅ Logo configurado y visible en correos.")
+                if st.button("🗑️ Eliminar Logo Actual", type="secondary", key="btn_del_logo"):
+                    # IMMEDIATE ACTION requested by user (Clean config + files)
+                    CONFIG['logo_path'] = None
+                    try:
+                        if os.path.exists(current_logo_path):
+                            os.remove(current_logo_path)
+                    except:
+                        pass
+                    sm.save_settings(CONFIG)
+                    st.rerun()
+        elif not logo_active_exists and st.session_state.logo_staged is None:
+             st.info("ℹ️ No hay logo configurado. El correo saldrá SIN logo.")
+
+        
         st.markdown("---")
+        st.markdown("##### Cargar Nuevo Logo (Staging Area)")
         
-        # 2. Uploader (Para nuevo logo)
-        uploaded_logo = st.file_uploader("Cargar / Reemplazar Logo (PNG/JPG)", type=['png', 'jpg', 'jpeg'])
+        # 3. Uploader (Staging Trigger)
+        # Using dynamic key to reset uploader after Save/Cancel
+        uploaded_logo = st.file_uploader(
+            "Seleccionar archivo (PNG/JPG)", 
+            type=['png', 'jpg', 'jpeg'],
+            key=f"uploader_logo_{st.session_state.logo_uploader_key}"
+        )
         
-        # Recomendaciones
-        with st.expander("ℹ️ Recomendaciones para el Logo"):
+        # Recomendaciones (Collapsed)
+        with st.expander("ℹ️ Recomendaciones Técnicas"):
             st.markdown("""
-            *   **Formato**: PNG (fondo transparente ideal) o JPG.
-            *   **Dimensiones**: Ancho recomendado 800px - 2000px.
-            *   **Proporción**: Horizontal (aprox 3:1 a 5:1).
-            *   **Nota**: El sistema recortará automáticamente los bordes vacíos y ajustará el tamaño.
+            *   **Formato**: PNG (transparente) o JPG.
+            *   **Dimensiones**: > 800px ancho.
+            *   **Proceso**: Se aplica corte de bordes (trim) y redimensionado (resize) automático.
             """)
 
+        # 4. Processing Logic (Run once per file)
         if uploaded_logo:
-             # Procesamiento
-             import io 
-             from PIL import Image
+             import hashlib
+             # Hash check to avoid loop/re-processing
              raw_bytes = uploaded_logo.getbuffer()
+             file_hash = hashlib.md5(raw_bytes).hexdigest()
              
-             # Process Image
-             proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
+             # If new file or different from last staged
+             last_hash = st.session_state.get('logo_last_hash')
              
-             # Save Paths
-             assets_dir = os.path.join(os.getcwd(), "assets")
-             if not os.path.exists(assets_dir):
-                 os.makedirs(assets_dir)
-             
-             # Save Original
-             filename_orig = f"logo_original_{uploaded_logo.name}"
-             path_orig = os.path.join(assets_dir, filename_orig)
-             with open(path_orig, "wb") as f:
-                 f.write(raw_bytes)
-                 
-             # Save Processed (Canonical)
-             path_proc = os.path.join(assets_dir, "logo_dacta_processed.png")
-             with open(path_proc, "wb") as f:
-                 f.write(proc_bytes)
-             
-             # Update CONFIG
-             CONFIG['logo_path'] = path_proc
-             sm.save_settings(CONFIG)
-             
-             # Diagnostics (Ocultos por defecto)
-             with st.expander("🔍 Ver detalles técnicos (Original vs Procesado)", expanded=True):
-                 c1, c2 = st.columns(2)
-                 with c1:
-                     st.caption("Original")
-                     try:
-                         st.image(Image.open(io.BytesIO(raw_bytes)), width=200)
-                     except:
-                         st.warning("Preview no disponible")
-                     st.text(f"Size: {len(raw_bytes)//1024} KB")
-                 with c2:
-                     st.caption(f"Procesado ({proc_w}x{proc_h})")
-                     st.image(proc_bytes, width=300)
-                     st.text(f"Size: {len(proc_bytes)//1024} KB")
-             
-             st.success("Logo procesado y guardado. Recargando...")
-             import time
-             time.sleep(1) # Give time to read Toast/Success
-             st.rerun()
+             if last_hash != file_hash:
+                 with st.spinner("Procesando logo (Trim + Resize)..."):
+                     import io
+                     from PIL import Image
+                     
+                     # Process
+                     proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
+                     
+                     # Update Staging State
+                     st.session_state.logo_staged = {
+                         'bytes': proc_bytes,
+                         'w': proc_w,
+                         'h': proc_h, 
+                         'name': uploaded_logo.name,
+                         'orig_bytes': raw_bytes
+                     }
+                     st.session_state.logo_last_hash = file_hash
+
+        # 5. Staging Review & Commit (Save)
+        if st.session_state.logo_staged:
+            st.divider()
+            st.warning("⚠️ Tienes cambios pendientes (Logo en Staging). No se usarán hasta que guardes.")
+            
+            staged = st.session_state.logo_staged
+            
+            col_rev1, col_rev2 = st.columns(2)
+            with col_rev1:
+                st.caption("Previsualización Final")
+                st.image(staged['bytes'], width=300)
+                st.caption(f"Dim: {staged['w']}x{staged['h']} px | {len(staged['bytes'])//1024} KB")
+            
+            with col_rev2:
+                st.caption("Acciones")
+                
+                # SAVE ACTION
+                if st.button("💾 GUARDAR Y APLICAR", type="primary", use_container_width=True):
+                    # Persist to Disk
+                    assets_dir = os.path.join(os.getcwd(), "assets")
+                    if not os.path.exists(assets_dir):
+                        os.makedirs(assets_dir)
+                    
+                    # Save Original
+                    fn_orig = f"logo_original_{staged['name']}"
+                    with open(os.path.join(assets_dir, fn_orig), "wb") as f:
+                        f.write(staged['orig_bytes'])
+                        
+                    # Save Processed (Canonical)
+                    path_proc = os.path.join(assets_dir, "logo_dacta_processed.png")
+                    with open(path_proc, "wb") as f:
+                        f.write(staged['bytes'])
+                    
+                    # Update Config
+                    CONFIG['logo_path'] = path_proc
+                    sm.save_settings(CONFIG)
+                    
+                    # Clear Staging & Reset Uploader
+                    st.session_state.logo_staged = None
+                    st.session_state.logo_last_hash = None
+                    st.session_state.logo_uploader_key += 1 # Forces uploader reset
+                    
+                    st.success("✅ Logo guardado correctamente.")
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+
+                st.write("")
+                # CANCEL ACTION
+                if st.button("✖️ Cancelar / Descartar", use_container_width=True):
+                    st.session_state.logo_staged = None
+                    st.session_state.logo_last_hash = None
+                    st.session_state.logo_uploader_key += 1 # Reset uploader
+                    st.rerun()
 
 else:
     # Mensaje de bienvenida inicial cuando no hay datos

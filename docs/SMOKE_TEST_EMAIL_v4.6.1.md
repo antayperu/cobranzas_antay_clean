@@ -29,6 +29,9 @@ El Smoke Test se considera **APROBADO (PASSED)** si y solo si:
 | **QC-LOGO-01** | **Sin Logo** | Configurar sin logo. Enviar correo. | Header texto centrado. **Sin espacio blanco** por imagen rota. | [ ] |
 | **QC-LOGO-02** | **Con Logo** | Cargar logo PNG con aire. Verificar "Trim + Resize". Enviar. | Header muestra logo grande y cortado (360px). | [ ] |
 | **QC-LOGO-03** | **UX Logo Delete** | Usar botón "Eliminar Logo". | Estado cambia a "No hay logo". Archivo se borra (o desvincula). | [ ] |
+| **LOGO-STAGE-01** | **Staging Flow** | Subir logo SIN guardar. | Muestra preview "Pendiente". NO afecta config ni email real. | [ ] |
+| **LOGO-SAVE-02** | **Commit Flow** | Click en "Guardar y Aplicar". | Se limpia uploader. Mensaje "Guardado". Email real hora usa nuevo logo. | [ ] |
+| **LOGO-LOOP-03** | **Anti-Loop** | Subir logo y no tocar nada. | La app queda estable (sin "running man"). No se recarga infinitamente. | [ ] |
 
 ## 3. Evidencia de Ejecución
 
