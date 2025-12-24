@@ -521,11 +521,12 @@ def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_co
     
     return text
 
-def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, supervisor_config=None):
+def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, supervisor_config=None, qa_mode_active=False):
     """
     Envía lote de correos con reporte de progreso y bloqueo TTL por negocio.
     force_resend: Si True, ignora el bloqueo TTL (Reason: USER_RESEND).
     supervisor_config: Dict opcional {'email': '...', 'enabled': True/False, 'mode': 'BCC'/'CC'}
+    qa_mode_active: Si True, aplica reglas estrictas de supervisión (solo si supervisor en recipient list).
     """
     import smtplib
     from email.mime.multipart import MIMEMultipart
@@ -614,7 +615,12 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
             send_call_index += 1
             
             client_name = msg_data.get('client_name', 'Unknown')
-            recipient_ledger = msg_data['email'].strip().lower()
+            client_name = msg_data.get('client_name', 'Unknown')
+            
+            # --- RC-FIX-QA-TYPE: Robust Ledger Recipient Extraction ---
+            # msg_data['email'] can be list in QA mode.
+            _recips = helpers.normalize_emails(msg_data['email'])
+            recipient_ledger = _recips[0].lower() if _recips else 'unknown_recipient'
             
             # --- Business Key Calculation ---
             if 'notification_key' in msg_data:
@@ -735,8 +741,18 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                         sup_mode = str(supervisor_config.get('mode', 'BCC')).upper()
                         
                         # Agregar al envelope siempre (se enviará a esta direcicón)
+                        # Agregar al envelope siempre (se enviará a esta direcicón)
                         if sup_email.lower() not in unique_envelope_recipients:
-                            unique_envelope_recipients.append(sup_email.lower())
+                            # RC-FEAT-012: QA Supervisor Rule
+                            # In QA Mode, ONLY add supervisor if they are explicitly in the QA allowed list (envelope)
+                            # Actually, if they are NOT in envelope, it means they weren't in QA_LIST in app.py
+                            if qa_mode_active:
+                                # Skip adding extra supervisor
+                                supervisor_log_info = f"[QA_SKIP_SUPERVISOR: {sup_email}]"
+                                stats['log'].append(f"ℹ️ [RunID:{run_id}] QA Mode: Supervisor {sup_email} omitido porque no está en la lista de prueba.")
+                            else:
+                                # PROD Mode: Always add supervisor
+                                unique_envelope_recipients.append(sup_email.lower())
                             
                         # Prepare Logo Attachment (Conditional RC-UX-007)
                         # logo_path = logo_path  # Argument passed to function

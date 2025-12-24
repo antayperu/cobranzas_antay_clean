@@ -13,6 +13,7 @@ import utils.helpers as helpers
 import utils.image_processor as img_proc
 import utils.qa_mode as qa_lib
 import streamlit.components.v1 as components
+from datetime import datetime
 import os
 import base64
 
@@ -1269,12 +1270,17 @@ if st.session_state['data_ready']:
                                     # 2. Update Subject
                                     messages_to_send[-1]['subject'] = qa_lib.modify_subject_for_qa(subject_line)
                                     
-                                    # 3. Update Body (Banner Injection)
-                                    # Html: Prepend banner
-                                    banner_html = qa_lib.get_qa_banner_html()
-                                    messages_to_send[-1]['html_body'] = banner_html + body
+                                    # 3. Update Body (Banner Injection + Footer)
+                                    # Html: Prepend banner & Append QA Footer
+                                    banner_html = qa_lib.get_qa_banner_html(real_email=info['email'], qa_list=qa_recipients)
+                                    
+                                    # QA Footer
+                                    qa_footer_html = f"<div style='margin-top:20px; font-size:10px; color:#aaa; border-top:1px solid #eee; padding-top:10px;'>Envío de prueba (QA) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>"
+                                    
+                                    messages_to_send[-1]['html_body'] = banner_html + body + qa_footer_html
+                                    
                                     # Plain: Prepend text
-                                    messages_to_send[-1]['plain_body'] = "[PRUEBA QA] " + plain_body
+                                    messages_to_send[-1]['plain_body'] = "[PRUEBA QA] " + plain_body + "\n\n[QA FOOTER: Envío de prueba]"
                                     
                                     # 4. Log Trace
                                     # We rely on 'original_email' field stored above for reporting
@@ -1287,7 +1293,8 @@ if st.session_state['data_ready']:
                                     progress_callback=lambda i, t, m: st.toast(f"{m} ({i}/{t})"),
                                     logo_path=batch_logo_path, # Use the verified batch path
                                     force_resend=force_resend_ttl, # RC-BUG-015
-                                    supervisor_config=CONFIG.get('supervisor_config', None) # RC-FEAT-011
+                                    supervisor_config=CONFIG.get('supervisor_config', None), # RC-FEAT-011
+                                    qa_mode_active=is_qa # RC-FEAT-012 Final
                                 )
                             
                             # Marcar como enviado para prevenir duplicados
