@@ -1465,7 +1465,7 @@ if st.session_state['data_ready']:
         norm_cc = helpers.normalize_emails(cc_input)
         norm_bcc = helpers.normalize_emails(bcc_input)
         
-        if st.permissions or True: # Force render
+        if True: # Force render (Removed invalid st.permissions)
              st.caption(f"📝 Vista Previa: Se enviarán {len(norm_cc)} copias visibles y {len(norm_bcc)} ocultas por cada correo.")
              if norm_cc:
                  st.caption(f"CC: {', '.join(norm_cc)}")
