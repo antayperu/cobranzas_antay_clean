@@ -433,8 +433,12 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         display_col = f"{col}_DISPLAY"
         df_merged[display_col] = df_merged.apply(lambda r: format_currency_cell(r, col), axis=1)
 
+    # Alias Visual (RC-REQ: Mostrar Correo en Reporte)
+    # Se usa EMAIL_FINAL como fuente (limpia), pero se expone como CORREO
+    df_merged['CORREO'] = df_merged['EMAIL_FINAL']
+
     final_cols = [
-        'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 
+        'COD CLIENTE', 'EMPRESA', 'CORREO', 'TELÉFONO', 
         'TIPO PEDIDO', 
         'COMPROBANTE', 'FECH EMIS', 'FECH VENC',
         'DÍAS MORA', 'ESTADO DEUDA',

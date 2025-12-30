@@ -143,6 +143,11 @@ Sprint "UX & Enterprise Standards" completado. Se han cerrado temas críticos de
         - **Solución Definitiva**: Implementación de técnica **JS-Force-Click** para bypass de intersección de elementos (`ElementClickInterceptedException`).
         - **Sincronización Avanzada**: Aumento de tiempo de portapapeles (3s) para garantizar integridad de datos en el pegado.
         - **Modo Estricto (Imagen)**: Eliminado fallback de texto para cumplir con el requerimiento de calidad visual 100%.
+    - **v4.6.4 (Multi-Client Email Support)**:
+        - **Nueva Funcionalidad**: Soporte oficial para múltiples destinatarios por cliente (separados por coma o punto y coma).
+        - **UX Mejorada**: Truncamiento visual inteligente en listas largas de correos para no romper el diseño.
+        - **Calidad**: Validación unitaria de normalización de correos y soporte completo en Excel Export.
+
    ### 📅 ROADMAP: WhatsApp Pro Upgrade (v5.0) - [EN PROCESO]
 Se ha decidido pivotar la estrategia de envío para maximizar profesionalismo y legibilidad:
 

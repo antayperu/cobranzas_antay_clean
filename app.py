@@ -354,7 +354,7 @@ if st.session_state['data_ready']:
             
             # 1. Definir columnas visibles y su orden experto
             view_cols = [
-                'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 
+                'COD CLIENTE', 'EMPRESA', 'CORREO', 'TELÉFONO', 
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
                 'DÍAS MORA', 'ESTADO DEUDA', # Critical Analysis
@@ -409,7 +409,7 @@ if st.session_state['data_ready']:
             # [FIX RC-BUG-004] Usar columnas NUMÉRICAS para el Excel (no strings formateados)
             # Definir columnas de exportación (misma estructura que view, pero usando valores raw)
             export_cols = [
-                'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 
+                'COD CLIENTE', 'EMPRESA', 'CORREO', 'TELÉFONO', 
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
                 'DÍAS MORA', 'ESTADO DEUDA',
@@ -988,8 +988,13 @@ if st.session_state['data_ready']:
                         s_temp = docs_cli_temp[docs_cli_temp['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
                         d_temp = docs_cli_temp[~docs_cli_temp['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
                         
-                        # Label Mejorado: EMPRESA (Email) | S/ 100 | $ 50
-                        label_parts = [f"{row['EMPRESA']} ({row['EMAIL_FINAL']})"]
+                        # Label Mejorado: EMPRESA (Email...) | S/ 100 | $ 50
+                        # RC-UX-MULTI: Visual Truncation for long lists
+                        email_display = str(row['EMAIL_FINAL'])
+                        if len(email_display) > 50:
+                            email_display = email_display[:47] + "..."
+                            
+                        label_parts = [f"{row['EMPRESA']} ({email_display})"]
                         if s_temp > 0: label_parts.append(f"S/ {s_temp:,.2f}")
                         if d_temp > 0: label_parts.append(f"$ {d_temp:,.2f}")
                         
