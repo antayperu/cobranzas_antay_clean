@@ -12,69 +12,100 @@ import utils.settings_manager as sm
 import utils.helpers as helpers
 import utils.image_processor as img_proc
 import utils.qa_mode as qa_lib
+import utils.state_manager as state_mgr # RC-FEAT-PERSISTENCE
+import utils.db_manager as dbm # RC-FEAT-LEDGER
 import streamlit.components.v1 as components
 from datetime import datetime
 import os
 import base64
 
+# ... (rest of imports)
+
 # Cargar Configuración Global
 CONFIG = sm.load_settings()
 
+# --- RC-UX-PREMIUM: Page Layout Wide & Corporate Title ---
 st.set_page_config(
-    page_title=f"{CONFIG['company_name']} | Gestión de Cobranzas",
-    page_icon="🏢",
-    layout="wide",
+    page_title=CONFIG.get('company_name', 'Antay Reportes'),
+    page_icon="📊",
+    layout="wide", # Critical Fix for "Narrow" look
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS - Branding Dinámico
-custom_css = f"""
+# --- RC-UX-PREMIUM: Enterprise CSS System ---
+# Typography: System UI for speed + clear hierarchy
+# Spacing: More padding for "breathing room"
+# Cards: Subtle shadows (Glassmorphism lite)
+st.markdown("""
 <style>
-    .main-header {{
-        background: linear-gradient(90deg, {CONFIG['primary_color']}, {CONFIG['secondary_color']});
-        color: white;
-        padding: 1.5rem;
-        border-radius: 10px;
-        text-align: center;
-        margin-bottom: 1rem;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }}
-    .stApp {{
-        --primary-color: {CONFIG['primary_color']};
-    }}
-    h1, h2, h3, h4, h5, h6 {{
-        color: {CONFIG.get('text_color', '#262730')} !important;
-    }}
-    .stButton>button {{
-        background-color: {CONFIG['primary_color']};
-        color: white;
-        border-radius: 5px;
-        border: none;
-        height: 3em;
-        width: 100%;
-    }}
-    .stButton>button:hover {{
-        background-color: {CONFIG['secondary_color']};
-        color: white;
-    }}
-    .metric-card {{
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 5px solid {CONFIG['primary_color']};
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }}
-    /* Compact Sidebar Helpers */
-    .sidebar-logo {{
-        text-align: center;
-        margin-bottom: 20px;
-    }}
-</style>
-"""
-st.markdown(custom_css, unsafe_allow_html=True)
+    /* 1. Global Scale & Font */
+    html, body, [class*="css"]  {
+        font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+        font-size: 15px; /* Slightly larger base for readability */
+    }
+    
+    /* 2. Container Width Optimization */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+        max-width: 95% !important; /* Force near-full usage */
+    }
 
-# Encabezado
-st.markdown('<div class="main-header"><h1>Gestión Centralizada de Cobranzas</h1></div>', unsafe_allow_html=True)
+    /* 3. Headers Pricing Table Style */
+    h1, h2, h3 {
+        color: #2E86AB; /* Corporate Primary */
+        font-weight: 600;
+        letter-spacing: -0.5px;
+    }
+    
+    /* 4. Custom Cards for KPIs */
+    .stCard {
+        background-color: white;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); /* Premium Shadow */
+        border: 1px solid #f0f0f0;
+    }
+    
+    /* 5. DataFrame Premium Look */
+    .stDataFrame {
+         border: 1px solid #f0f0f0;
+         border-radius: 8px;
+         overflow: hidden;
+    }
+    
+    /* 6. Sidebar Visual */
+    [data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+        border-right: 1px solid #e9ecef;
+    }
+    
+    /* 7. Tabs Premium */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 24px;
+        border-bottom: 2px solid #f0f0f0;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        border-radius: 4px 4px 0 0;
+        color: #666;
+        font-weight: 500;
+        font-size: 16px;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #2E86AB;
+        border-bottom: 2px solid #2E86AB;
+        background-color: rgba(46, 134, 171, 0.05);
+    }
+    
+    /* 8. Toast Styling */
+    div[data-baseweb="toast"] {
+        font-size: 16px;
+        font-weight: 500;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Sidebar - Logo y Carga
 with st.sidebar:
@@ -88,8 +119,35 @@ with st.sidebar:
 
     st.markdown("---")
     
+    # --- RC-FEAT-PERSISTENCE: Session Recovery ---
+    has_cache, cache_time, cache_meta = state_mgr.has_valid_session()
+    
+    if has_cache and not st.session_state.get('data_ready', False):
+        st.info(f"📂 Sesión previa encontrada: {cache_time.strftime('%d/%m %H:%M')}")
+        if st.button("🔄 Continuar Trabajo Anterior", type="primary", help="Cargar datos procesados previamente sin subir archivos"):
+            try:
+                df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
+                if df_loaded is not None:
+                    st.session_state['df_filtered'] = df_loaded
+                    st.session_state['data_ready'] = True
+                    st.session_state['df_final'] = df_loaded 
+                    
+                    # Phase 5: Restore Session TS
+                    st.session_state['session_start_ts'] = cache_ts_loaded
+                    
+                    # Restaurar archivos dummy para UI consistencia (opcional) o marcar flag
+                    st.success("✅ Sesión restaurada exitosamente.")
+                    st.rerun()
+                else:
+                    st.error("Error al leer caché. Por favor carga archivos nuevamente.")
+            except Exception as e:
+                st.error(f"Error restaurando: {e}")
+        
+        st.markdown("---")
+
     # Uploaders en Expander para limpieza visual
-    st.subheader("📂 Cargar Datos")
+    st.subheader("📂 Cargar Datos (Nueva Carga)")
+    st.warning("⚠️ **Atención:** Cargar nuevos archivos reemplazará el reporte actual y reiniciará el contador de visualización de envíos.")
     
     # Inicializar estado de archivos en sesión
     if 'uploaded_files' not in st.session_state:
@@ -122,14 +180,18 @@ with st.sidebar:
         st.success(f"✅ Archivos en memoria: {sum([1 for f in [file_ctas, file_cobranza, file_cartera] if f is not None])}/3")
         
         # Botón para limpiar archivos
-        if st.button("🗑️ Limpiar Archivos", help="Elimina los archivos cargados de la memoria"):
-            st.session_state['uploaded_files'] = {
-                'ctas': None,
-                'cobranza': None,
-                'cartera': None
-            }
-            st.session_state['data_ready'] = False
-            st.rerun()
+        col_clean, col_save = st.columns(2)
+        with col_clean:
+            if st.button("🗑️ Limpiar", help="Elimina los archivos cargados"):
+                st.session_state['uploaded_files'] = {
+                    'ctas': None,
+                    'cobranza': None,
+                    'cartera': None
+                }
+                st.session_state['data_ready'] = False
+                # Clear cache too if explicit clear? Maybe asking user is better. 
+                # For now keep simple: Clear UI files.
+                st.rerun()
     
     st.markdown("---")
     
@@ -158,6 +220,23 @@ with st.sidebar:
                         df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
                         st.session_state['df_final'] = df_final
                         st.session_state['data_ready'] = True
+                        
+                        # RC-FEAT-PERSISTENCE: Save session automatically
+                        try:
+                            meta_info = f"Archivos cargados: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+                            ok, msg = state_mgr.save_session(df_final, meta_info)
+                            
+                            # Phase 5: Initialize Session TS for Status Scoping
+                            if 'session_start_ts' not in st.session_state:
+                                st.session_state['session_start_ts'] = datetime.now() # New Session = Clean Slate
+                            
+                            if ok:
+                                st.toast("💾 Sesión guardada autom.", icon="✅")
+                            else:
+                                print(f"Warning Cache: {msg}")
+                        except Exception as e:
+                            print(f"Cache Error: {e}")
+
                         st.success("Actualizado")
                     except Exception as e:
                         st.error(f"Error Lógico: {str(e)}")
@@ -168,6 +247,15 @@ with st.sidebar:
 # --- PASO 2: VISUALIZACIÓN Y FILTROS ---
 if st.session_state['data_ready']:
     df_final = st.session_state['df_final']
+    # RC-FIX-SCOPE: Initialize df_filtered safely to avoid NameError if df_final is empty
+    df_filtered = pd.DataFrame()
+    
+    # Check Session TS
+    if 'session_start_ts' not in st.session_state:
+         # Fallback if coming from old session without TS, use Today 00:00 or Now?
+         # Logic: If restoring old session, we want to see history.
+         # Ideally load_session should provide the TS. For now, default to Today Start.
+         st.session_state['session_start_ts'] = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     
     st.markdown("---")
     
@@ -219,6 +307,11 @@ if st.session_state['data_ready']:
             
             # Buscador Global
             search_term = col_f3.text_input("Buscar Documento/Monto")
+
+            # Fila 3: Filtros de Disponibilidad (Email/Telefono)
+            col_b1, col_b2, col_b3 = st.columns(3)
+            filter_has_email = col_b1.checkbox("☑️ Solo con Correo", value=False)
+            filter_has_phone = col_b2.checkbox("☑️ Solo con Teléfono", value=False)
             
             # Aplicar filtros
             df_filtered = df_final.copy()
@@ -234,6 +327,15 @@ if st.session_state['data_ready']:
             if search_term:
                 mask = df_filtered.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
                 df_filtered = df_filtered[mask]
+            
+            # --- RC-FEAT-FILTERS: Email/Phone Availability ---
+            if filter_has_email:
+                # Filtrar donde CORREO no sea nulo ni vacio y no sea 'SIN DATOS'
+                df_filtered = df_filtered[df_filtered['CORREO'].notna() & (df_filtered['CORREO'].str.strip() != '')]
+                
+            if filter_has_phone:
+                # Filtrar donde TELEFONO no sea nulo ni vacio
+                 df_filtered = df_filtered[df_filtered['TELÉFONO'].notna() & (df_filtered['TELÉFONO'].astype(str).str.strip() != '')]
             
             # --- FILTROS AVANZADOS (Tipo Pedido & Saldo) ---
             with st.expander("⚙️ Filtros Avanzados (Tipo Pedido & Saldo Real)", expanded=False):
@@ -352,9 +454,56 @@ if st.session_state['data_ready']:
             # --- VIEW TRANSFORMATION (v4.0) ---
             # Preparar dataframe para mostrar y exportar (sin columnas numéricas crudas, usando las formateadas)
             
+            # --- RC-FEAT-LEDGER: Status Control Tower ---
+            # Calcular estado de envío para cada cliente/email
+            if 'CORREO' in df_filtered.columns:
+                unique_emails = df_filtered['CORREO'].dropna().unique().tolist()
+                unique_emails = [e for e in unique_emails if str(e).strip() != '']
+                
+                # Phase 5: Session Scoped Status (Rich Data)
+                session_ts = st.session_state.get('session_start_ts', None)
+                
+                status_map = {}
+                if unique_emails:
+                    # Consultar DB con Scope de Sesión
+                    # (Si session_ts es None, dbm usa default Today, que es seguro)
+                    status_map = dbm.get_status_map(unique_emails, min_timestamp=session_ts)
+                
+                def get_email_status_icon(email):
+                    if not email or str(email).strip() == '': return "SIN DATOS"
+                    
+                    # Check DB status
+                    email = str(email).strip()
+                    if email in status_map:
+                        s = status_map[email].get('status', 'PENDING')
+                        t = status_map[email].get('time', '')
+                        if s == 'SENT': return f"ENVIADO ({t})"
+                        if s == 'FAILED': return "FALLIDO"
+                        if s == 'BLOCKED': return f"BLOQUEADO ({t})"
+                    return "PENDIENTE"
+
+                # --- RC-FEAT-REPORT-V4 ---
+                # Rich Columns for Export/Analysis
+                def get_rich_status(email, field):
+                    if not email: return ""
+                    st_info = status_map.get(email, {})
+                    if field == 'ts':
+                        return st_info.get('ts_raw', '')
+                    if field == 'st_text':
+                        return st_info.get('status', 'PENDIENTE')
+                    return ""
+
+                df_filtered['ESTADO_EMAIL'] = df_filtered['CORREO'].apply(get_email_status_icon)
+                df_filtered['FECHA_ULTIMO_ENVIO'] = df_filtered['CORREO'].apply(lambda x: get_rich_status(x, 'ts'))
+                df_filtered['ESTADO_ENVIO_TEXTO'] = df_filtered['CORREO'].apply(lambda x: get_rich_status(x, 'st_text'))
+            else:
+                df_filtered['ESTADO_EMAIL'] = "-"
+                df_filtered['FECHA_ULTIMO_ENVIO'] = ""
+                df_filtered['ESTADO_ENVIO_TEXTO'] = "PENDIENTE"
+
             # 1. Definir columnas visibles y su orden experto
             view_cols = [
-                'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 
+                'COD CLIENTE', 'EMPRESA', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
                 'DÍAS MORA', 'ESTADO DEUDA', # Critical Analysis
@@ -400,7 +549,7 @@ if st.session_state['data_ready']:
 
             st.dataframe(
                 df_display.style.map(highlight_status, subset=['ESTADO DEUDA']),
-                use_container_width=True
+                width="stretch" # Fixed: 'stretch' is the valid replacement for use_container_width=True
             )
             
             # --- PASO 3: EXPORTAR ---
@@ -409,7 +558,7 @@ if st.session_state['data_ready']:
             # [FIX RC-BUG-004] Usar columnas NUMÉRICAS para el Excel (no strings formateados)
             # Definir columnas de exportación (misma estructura que view, pero usando valores raw)
             export_cols = [
-                'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 
+                'COD CLIENTE', 'EMPRESA', 'ESTADO_ENVIO_TEXTO', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
                 'DÍAS MORA', 'ESTADO DEUDA',
@@ -971,11 +1120,42 @@ if st.session_state['data_ready']:
                 st.markdown("##### Destinatarios")
                 
                 if 'EMAIL_FINAL' in df_filtered.columns:
+                    # RC-FIX-FILTER: Include clients with Pending Detractions even if Balance is 0
+                    
+                    # 1. Helper for aggregation (Detraccion Pendiente Amount) on the filtered view
+                    # We use a lambda to check ESTADO DETRACCION == 'PENDIENTE'
+                    df_filtered['DETR_PENDIENTE_AMOUNT'] = df_filtered.apply(
+                        lambda x: float(x['DETRACCIÓN']) if str(x['ESTADO DETRACCION']).upper().strip() == 'PENDIENTE' else 0.0, 
+                        axis=1
+                    )
+                    
                     client_group_email = df_filtered[df_filtered['EMAIL_FINAL'] != ""].groupby(
                         ['COD CLIENTE', 'EMPRESA', 'EMAIL_FINAL']
-                    )['SALDO REAL'].sum().reset_index()
+                    )[['SALDO REAL', 'DETR_PENDIENTE_AMOUNT']].sum().reset_index()
                     
-                    client_group_email = client_group_email[client_group_email['SALDO REAL'] > 0]
+                    # 2. Relaxed Filter: Balance > 0 OR Detraction > 0
+                    client_group_email = client_group_email[
+                        (client_group_email['SALDO REAL'] > 0.01) | 
+                        (client_group_email['DETR_PENDIENTE_AMOUNT'] > 0.01)
+                    ]
+                    
+                    # --- RC-FEAT-UX-EMAIL: Smart Filters & Counters (Tower Integration) ---
+                    all_emails_in_view = client_group_email['EMAIL_FINAL'].unique().tolist()
+                    status_map_tab = dbm.get_status_map(all_emails_in_view)
+                    
+                    sent_emails_today = [e for e, s in status_map_tab.items() if s['status'] == 'SENT']
+                    
+                    # KPI Bar
+                    c_stat1, c_stat2, c_ctrl = st.columns([1, 1, 2])
+                    c_stat1.metric("Pendientes de Envío", len(client_group_email) - len([e for e in client_group_email['EMAIL_FINAL'] if e in sent_emails_today]))
+                    c_stat2.metric("Enviados Hoy", len(sent_emails_today))
+                    
+                    hide_sent_today = c_ctrl.toggle("🙈 Ocultar ya enviados hoy", value=True, help="Oculta de la lista los clientes que ya recibieron correo hoy.")
+                    
+                    if hide_sent_today:
+                        client_group_email = client_group_email[~client_group_email['EMAIL_FINAL'].isin(sent_emails_today)]
+                    
+                    st.markdown("---")
                     
                     email_options = []
                     email_map = {}
@@ -988,10 +1168,20 @@ if st.session_state['data_ready']:
                         s_temp = docs_cli_temp[docs_cli_temp['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
                         d_temp = docs_cli_temp[~docs_cli_temp['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
                         
-                        # Label Mejorado: EMPRESA (Email) | S/ 100 | $ 50
-                        label_parts = [f"{row['EMPRESA']} ({row['EMAIL_FINAL']})"]
+                        # Label Mejorado: EMPRESA (Email...) | S/ 100 | $ 50
+                        # RC-UX-MULTI: Visual Truncation for long lists
+                        email_display = str(row['EMAIL_FINAL'])
+                        if len(email_display) > 50:
+                            email_display = email_display[:47] + "..."
+                            
+                        label_parts = [f"{row['EMPRESA']} ({email_display})"]
                         if s_temp > 0: label_parts.append(f"S/ {s_temp:,.2f}")
                         if d_temp > 0: label_parts.append(f"$ {d_temp:,.2f}")
+                        
+                        # RC-UX-DETR: Show detraction explicitly if Saldo is 0 or low
+                        detr_pend = row['DETR_PENDIENTE_AMOUNT']
+                        if detr_pend > 0.01:
+                             label_parts.append(f"Detr: S/ {detr_pend:,.2f}")
                         
                         label = " | ".join(label_parts)
                         
@@ -1509,6 +1699,46 @@ if st.session_state['data_ready']:
                 st.error("Error al guardar configuración.")
                 
         # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
+        # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
+        # (Header removed to avoid duplication with line 1728)
+        
+        # ... (Existing QA visual logic can remain if present, or we can just append Danger Zone after)
+        # Assuming QA logic follows. We will insert Danger Zone AFTER QA section if possible, 
+        # or just here if this is the end of the file view.
+        
+        # NOTE: View cut off at 1650. I should append. 
+        # But wait, I see "st.subheader" for QA above.
+        # Let's verify if more content exists. 
+        # Actually, let's just insert the Danger Zone BEFORE QA or AFTER copies.
+        # Safer to insert at the very end of the Tab 6 block.
+        # But since I don't see the end, I'll insert it *before* "Modo Marcha Blanca" for now, or just after Internal Copies.
+        
+        # Better: Append a new expader "Zona de Peligro" at the bottom of the config form area or independent.
+        # Let's insert it right after the Internal Copies block finishes (line 1647).
+
+        # --- RC-FEAT-LEGGER: MANTENIMIENTO ---
+        st.markdown("---")
+        # st.subheader("Gestión de Sesión") # Clean subheader or removed
+        with st.expander("⚙️ Opciones Avanzadas (Reenvío)", expanded=False):
+            # st.warning("Estas acciones afectan el historial de envíos. Úsalas con precaución.") # Removed warning if logic is safe now
+            
+            c_dang1, c_dang2 = st.columns([3, 1])
+            with c_dang1:
+                st.markdown("**Nuevo Ciclo de Envíos**")
+                st.caption("Reinicia el contador de envíos para esta sesión. Útil si deseas volver a notificar a clientes ya gestionados hoy.")
+            with c_dang2:
+                if st.button("Reiniciar Sesión", type="secondary", help="Limpia visualización de enviados"):
+                    # Phase 5: Reset Session Logic
+                    # 1. We NO LONGER delete DB records (User wants Common Sense safety)
+                    # 2. We just update the session_start_ts to NOW -> "Clean Slate"
+                    st.session_state['session_start_ts'] = datetime.now()
+                    
+                    st.success(f"Sesión reiniciada.")
+                    st.toast("Listo para reenviar", icon="🔄")
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+
         st.markdown("---")
         st.subheader("🧪 Modo Marcha Blanca (QA)")
         st.warning("⚠️ Zona de Seguridad: Configura el entorno de pruebas para envíos seguros. Controla To, CC, BCC.")
