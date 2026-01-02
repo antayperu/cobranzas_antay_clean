@@ -1,7 +1,8 @@
 import os
 from notion_client import Client
-# Credenciales y Page ID Oficiales (Antay Fábrica de Software)
-NOTION_TOKEN = "***REMOVED***"
+
+# SECURITY: Token must be provided via environment variable
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 PAGE_ID = "2377544a512b804db020d8e8b62fd00d"
 OUTPUT_FILE = "docs/ANTAY_METHODOLOGY.md"
 def get_block_content(block):
@@ -76,6 +77,12 @@ def fetch_children_recursive(client, block_id, depth=0, file_handle=None):
     except Exception as e:
         print(f"{indent}Error fetching children for {block_id}: {e}")
 def fetch_antay_methodology():
+    if not NOTION_TOKEN:
+        print("⚠️  WARNING: NOTION_TOKEN no configurado.")
+        print("   La integración con Notion está desactivada.")
+        print("   Para activarla, configura la variable de entorno NOTION_TOKEN")
+        exit(1)
+    
     print(f"Conectando a Notion (Page ID: {PAGE_ID})...")
     client = Client(auth=NOTION_TOKEN)
     
