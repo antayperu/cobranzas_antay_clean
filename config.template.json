@@ -1,0 +1,34 @@
+{
+    "company_name": "DACTA S.A.C.",
+    "company_ruc": "20375779448",
+    "phone_contact": "+51 998 080 797",
+    "primary_color": "#2e4af6",
+    "secondary_color": "#6fa3b2",
+    "email_template": {
+        "intro_text": "Le informamos que a la fecha presenta documentos pendientes de pago.\\nAgradeceremos gestionar la cancelación para mantener su servicio activo y evitar inconvenientes.",
+        "footer_text": "DACTA SOCIEDAD ANONIMA CERRADA\\nEn caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje.\\n\\nAtentamente,\\nÁrea de Cobranzas y Facturación",
+        "alert_text": "Si el documento está afecto a Detracción, debe abonarlo en nuestra cuenta del Banco de la Nación N° 00-005-034272."
+    },
+    "smtp_config": {
+        "server": "smtp.gmail.com",
+        "port": "587",
+        "user": "your-email@gmail.com"
+    },
+    "supervisor_config": {
+        "email": "supervisor@example.com",
+        "enabled": true,
+        "mode": "CC"
+    },
+    "whatsapp_template": "Estimados *{EMPRESA}*,\\n\\nAdjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\\n\\n**Detalle de Documentos:**\\n{DETALLE_DOCS}\\n\\nAgradeceremos gestionar el pago a la brevedad.\\n\\n_DACTA S.A.C. | RUC: 20375779448 Este es un mensaje automático de notificación de deuda. Consultas: +51 998 080 797_",
+    "text_color": "#003366",
+    "features": {
+        "show_analysis": false,
+        "show_sales": false
+    },
+    "internal_copies": {
+        "cc_list": [],
+        "bcc_list": [
+            "internal@example.com"
+        ]
+    }
+}
