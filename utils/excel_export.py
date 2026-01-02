@@ -106,7 +106,7 @@ def generate_excel(df: pd.DataFrame) -> bytes:
                         cell.number_format = '"S/" #,##0.00'
             
             # Ajuste de Texto para columnas con saltos de línea
-            if col_name in ["ESTADO DETRACCION", "AMORTIZACIONES"]:
+            if col_name in ["ESTADO DETRACCION", "AMORTIZACIONES", "NOTA"]:
                 cell.alignment = Alignment(wrap_text=True, vertical='top')
             
             # Resaltar Columnas Detracción

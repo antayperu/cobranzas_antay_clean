@@ -65,6 +65,9 @@
 | **RC-BUG-021** | **Strict QA/Prod Separation (No Prod Copies in QA)** | **P0** (Critico) | **Done** | Antigravity | 2025-12-23 |
 | **RC-BUG-022** | **Fix CCO (BCC) Not Sending in Production** | **P0** (Critico) | **Done** | Antigravity | 2025-12-24 |
 | **RC-UX-008** | **Enterprise Config UX (Dirty State & Preview)** | **P1** (Alto) | **Done** | Antigravity | 2025-12-24 |
+| **RC-FEAT-015** | **Multi-Client Email Support** (Comma/Semicolon) | **P0** (Critico) | **Done** | Antigravity | 2025-12-30 |
+| **RC-UX-009** | **Email List Visual Truncation** | **P1** (Alto) | **Done** | Antigravity | 2025-12-30 |
+| **RC-FEAT-016** | **New 'CORREO' Column in Report & Export** | **P1** (Alto) | **Done** | Antigravity | 2025-12-30 |
 
 ---
 

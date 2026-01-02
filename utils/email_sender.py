@@ -40,35 +40,46 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     # --- PROCESAMIENTO DE TOTALES Y KPIs ---
     sum_detr = 0.0 # Define base scope
     try:
-        mask_soles = docs_df['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
+        # RC-FIX-SLICE: Explicit copy to ensure we own the DF (fixes SettingWithCopy / silent fail)
+        df_calc = docs_df.copy() # Use a distinct name to avoid shadowing confusion
+
+        # Apply cleanup to vector (RC-FIX-STRINGS) using shared helper
+        df_calc['SALDO_REAL_CLEAN'] = df_calc['SALDO REAL'].apply(helpers.safe_clean_decimal)
+        df_calc['DETRACCION_CLEAN'] = df_calc['DETRACCIÓN'].apply(helpers.safe_clean_decimal)
+        
+        mask_soles = df_calc['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
         
         # Dataframes por moneda
-        df_sol = docs_df[mask_soles]
-        df_dol = docs_df[~mask_soles]
+        df_sol = df_calc[mask_soles]
+        df_dol = df_calc[~mask_soles]
         
         # 1. Deuda DACTA Soles
-        sum_s = df_sol['SALDO REAL'].sum()
+        sum_s = df_sol['SALDO_REAL_CLEAN'].sum()
         count_s = len(df_sol)
         kpi_dacta_s = f"S/ {sum_s:,.2f} ({count_s:02d} documentos)" if (sum_s > 0 or count_s > 0) else "S/ 0.00 (00 documentos)"
 
         # 2. Deuda DACTA Dolares
-        sum_d = df_dol['SALDO REAL'].sum()
+        sum_d = df_dol['SALDO_REAL_CLEAN'].sum()
         count_d = len(df_dol)
         kpi_dacta_d = f"US$ {sum_d:,.2f} ({count_d:02d} documentos)" if (sum_d > 0 or count_d > 0) else "US$ 0.00 (00 documentos)"
         
         # 3. Detracción SUNAT (Solo documentos afectos)
-        df_detr = docs_df[docs_df['DETRACCIÓN'] > 0]
-        
-        # Normalizar estado
-        def is_pending(val):
-            v = str(val).upper().strip()
-            return v == "PENDIENTE"
+        # 3. Detracción SUNAT (Solo documentos afectos + Pendientes)
+        # RC-FIX-KEYERROR: Consolidate filtering on df_calc directly to avoid intermediate column loss
+        try:
+            mask_d_val = df_calc['DETRACCION_CLEAN'] > 0.01
+            # Handle potential missing column or NaN in ESTADO DETRACCION
+            mask_d_st = df_calc['ESTADO DETRACCION'].astype(str).str.strip().str.upper() == 'PENDIENTE'
             
-        mask_pending_detr = df_detr['ESTADO DETRACCION'].apply(is_pending)
-        df_detr_pending = df_detr[mask_pending_detr]
-        
-        sum_detr = df_detr_pending['DETRACCIÓN'].sum()
-        count_detr = len(df_detr_pending)
+            df_detr_pending = df_calc[mask_d_val & mask_d_st]
+            
+            sum_detr = df_detr_pending['DETRACCION_CLEAN'].sum()
+            count_detr = len(df_detr_pending)
+        except Exception as e_det:
+             # Fallback if specific calculation fails (should not happen with df_calc)
+             print(f"DEBUG DETR FAIL: {e_det}")
+             sum_detr = 0.0
+             count_detr = 0
         
         # RC-UX-003: Always display Sunat line, even if 0, for consistency in "Corporate Summary"
         kpi_sunat = f"S/ {sum_detr:,.2f} ({count_detr:02d} documentos afectos)" 
@@ -91,7 +102,10 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         """
 
     except Exception as e:
-        summary_rows_html = "<tr><td colspan='2'>Error calculando totales.</td></tr>"
+        # RC-DEBUG: Expose error to UI
+        print(f"DEBUG EXCEPTION: {e}")
+        traceback.print_exc()
+        summary_rows_html = f"<tr><td colspan='2' style='color:red;'>Error calculando totales: {str(e)}</td></tr>"
 
     # --- 1. CONFIGURABLE TEXTS & SAFETY (RC-UX-004) ---
     email_config = branding_config.get('email_template', {})
@@ -521,14 +535,19 @@ def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_co
     
     return text
 
-def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, internal_copies_config=None, qa_settings=None):
+def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, internal_copies_config=None, qa_settings=None, cycle_id=None):
     """
     Envía lote de correos con reporte de progreso y bloqueo TTL por negocio.
     force_resend: Si True, ignora el bloqueo TTL (Reason: USER_RESEND).
     internal_copies_config: Dict opcional {'cc_list': [...], 'bcc_list': [...]}
     qa_settings: Dict de configuración QA o None. Si está presente y enabled, se aplica lógica QA.
+    cycle_id: ID único del ciclo de carga (para aislar TTL entre ciclos). Si None, usa 'default_cycle'.
     """
     import smtplib
+    
+    # Resolve Cycle ID
+    if not cycle_id:
+        cycle_id = 'default_cycle'
     
     # Resolve QA State
     is_qa_mode = False
@@ -631,12 +650,12 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
             # --- Business Key Calculation ---
             if 'notification_key' in msg_data:
                 notif_key = msg_data['notification_key']
-                ledger_src = f"{recipient_ledger}|{notif_key}"
+                ledger_src = f"{cycle_id}|{recipient_ledger}|{notif_key}"  # NUEVO: Incluir cycle_id
             else:
                 payload_str_ledger = str(msg_data['html_body']) + str(msg_data['subject'])
                 payload_hash_ledger = hashlib.md5(payload_str_ledger.encode()).hexdigest()
                 notif_key = f"LEGACY_HASH_{payload_hash_ledger}"
-                ledger_src = f"{recipient_ledger}|{notif_key}"
+                ledger_src = f"{cycle_id}|{recipient_ledger}|{notif_key}"  # NUEVO: Incluir cycle_id
             
             ledger_key = hashlib.sha256(ledger_src.encode()).hexdigest()
             now_ts = datetime.utcnow()
@@ -834,11 +853,13 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 except Exception as e_ins:
                      stats['log'].append(f"⚠️ [RunID:{run_id}] Ledger Write Error: {e_ins}")
                 
+                
                 stats['success'] += 1
                 stats['log'].append(f"[{i+1}/{total}] Enviado a {msg_data['client_name']} ({msg_data['email']})")
                 
                 # Detail Entry (Success)
                 stats['details'].append({
+                    'msg_id': msg_data.get('msg_id'),  # NUEVO: Para matching en app.py
                     'Cliente': client_name,
                     'Email': recipient_ledger,
                     'Estado': '✅ Enviado',

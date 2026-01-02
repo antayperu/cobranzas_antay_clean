@@ -104,9 +104,23 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     else:
         df_cartera['EMAIL_FINAL'] = ""
 
+    # Validar Columna NOTA
+    col_nota = None
+    for c in df_cartera.columns:
+        if str(c).upper().strip() == 'NOTA':
+            col_nota = c
+            break
+            
+    if col_nota:
+        df_cartera['NOTA'] = df_cartera[col_nota].astype(str)
+        # Limpiar 'nan' strings
+        df_cartera['NOTA'] = df_cartera['NOTA'].replace({'nan': '', 'nat': '', 'none': ''})
+    else:
+        df_cartera['NOTA'] = ""
+
     df_merged = pd.merge(
         df_ctas, 
-        df_cartera[['codcli_key', 'telefono', 'EMAIL_FINAL']], 
+        df_cartera[['codcli_key', 'telefono', 'EMAIL_FINAL', 'NOTA']], 
         on='codcli_key', 
         how='left'
     )
@@ -433,8 +447,17 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         display_col = f"{col}_DISPLAY"
         df_merged[display_col] = df_merged.apply(lambda r: format_currency_cell(r, col), axis=1)
 
+    # Alias Visual (RC-REQ: Mostrar Correo en Reporte)
+    # Se usa EMAIL_FINAL como fuente (limpia), pero se expone como CORREO
+    df_merged['CORREO'] = df_merged['EMAIL_FINAL']
+
+    # --- SSOT: Initialize Email Tracking Columns (ONLY 2 as per STOP THE LINE) ---
+    # These columns track email send status and should ONLY be updated after actual sends
+    df_merged['ESTADO_EMAIL'] = "PENDIENTE"  # Default status: PENDIENTE | ENVIADO | FALLIDO
+    df_merged['FECHA_ULTIMO_ENVIO'] = ""  # Empty by default, will be timestamp string after send
+
     final_cols = [
-        'COD CLIENTE', 'EMPRESA', 'TELÉFONO', 
+        'COD CLIENTE', 'EMPRESA', 'NOTA', 'CORREO', 'TELÉFONO', 
         'TIPO PEDIDO', 
         'COMPROBANTE', 'FECH EMIS', 'FECH VENC',
         'DÍAS MORA', 'ESTADO DEUDA',
@@ -447,7 +470,9 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         'ESTADO DETRACCION', 
         'AMORTIZACIONES',
         'MATCH_KEY',
-        'EMAIL_FINAL'
+        'EMAIL_FINAL',
+        'ESTADO_EMAIL',  # SSOT tracking column (1 of 2)
+        'FECHA_ULTIMO_ENVIO'  # SSOT tracking column (2 of 2)
     ]
     
     # Filtrar solo columnas existentes (por seguridad, aunque deberian estar todas)

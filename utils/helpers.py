@@ -64,4 +64,21 @@ def normalize_emails(value):
             cleaned.append(s)
             seen.add(s.lower())
             
+            
     return cleaned
+
+def safe_clean_decimal(val):
+    """
+    Convierte valores numéricos o strings con formato (moneda, comas) a float puro.
+    Ej: "S/ 1,200.50" -> 1200.50
+    """
+    import pandas as pd
+    try:
+        if pd.isna(val) or val == "": return 0.0
+        if isinstance(val, (int, float)): return float(val)
+        # Cleanup: remove spaces, currency symbols, commas
+        # Include common symbols: S/, $, US$, S/.
+        s = str(val).replace(",", "").replace("$", "").replace("S/", "").replace("S/.", "").replace("US", "").strip()
+        return float(s)
+    except:
+        return 0.0
