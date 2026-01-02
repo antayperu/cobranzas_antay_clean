@@ -6,6 +6,11 @@ import hashlib
 from utils.processing import load_data, process_data
 from utils.excel_export import generate_excel
 
+# --- FULLSCREEN VIEW DETECTION (ANTES de set_page_config) ---
+# Detectar si estamos en modo pantalla completa
+query_params = st.query_params
+is_fullscreen_view = query_params.get("view") == "full_table"
+
 # Configuración de Página
 import utils.email_sender as es
 import utils.settings_manager as sm
@@ -28,16 +33,132 @@ import base64
 CONFIG = sm.load_settings()
 
 # --- RC-UX-PREMIUM: Page Layout Wide & Corporate Title ---
-st.set_page_config(
-    page_title=CONFIG.get('company_name', 'Antay Reportes'),
-    page_icon="📊",
-    layout="wide", # Critical Fix for "Narrow" look
-    initial_sidebar_state="expanded"
-)
+if is_fullscreen_view:
+    # Vista pantalla completa: sin sidebar, layout wide
+    st.set_page_config(
+        page_title="Reporte General - Pantalla Completa",
+        page_icon="📊",
+        layout="wide",
+        initial_sidebar_state="collapsed"  # Ocultar sidebar
+    )
+else:
+    # Vista normal
+    st.set_page_config(
+        page_title=CONFIG.get('company_name', 'Antay Reportes'),
+        page_icon="📊",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
 
 # --- INYECTAR ENTERPRISE CSS ---
 styles.load_css()
 
+# --- FULLSCREEN VIEW RENDERING ---
+if is_fullscreen_view:
+    # Vista dedicada de pantalla completa
+    # Ocultar sidebar completamente con CSS
+    st.markdown("""
+    <style>
+        /* Ocultar sidebar y elementos decorativos */
+        [data-testid="stSidebar"] {
+            display: none;
+        }
+        /* Maximizar contenedor principal */
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            max-width: 100% !important;
+        }
+        /* Tabla ocupa todo el espacio */
+        .stDataFrame {
+            height: calc(100vh - 150px) !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Breadcrumb con navegación
+    st.markdown("""
+    <div style="margin-bottom: 10px; font-size: 14px; color: #666;">
+        <a href="/" style="color: #2E86AB; text-decoration: none;">🏠 Inicio</a> / 
+        <span style="color: #666;">Reporte General</span> / 
+        <span style="color: #333; font-weight: 500;">Pantalla Completa</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Header minimalista
+    col_h1, col_h2 = st.columns([10, 1])
+    with col_h1:
+        st.markdown("### 📊 Reporte General — Vista Completa (Pantalla Completa)")
+    with col_h2:
+        # Link para volver a vista normal (NO usar st.switch_page)
+        st.markdown("""
+        <a href="/" target="_self" style="
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #dc3545;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 500;
+            font-size: 14px;
+        ">
+            ✖ Cerrar
+        </a>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Intentar cargar datos desde session state o desde persistencia
+    df_final = None
+    
+    # Opción 1: Datos ya en session state de esta pestaña
+    if 'df_final' in st.session_state and st.session_state.get('data_ready', False):
+        df_final = st.session_state['df_final']
+    
+    # Opción 2: Intentar cargar desde persistencia (sesión guardada)
+    elif state_mgr.has_valid_session()[0]:
+        try:
+            df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
+            if df_loaded is not None:
+                df_final = df_loaded
+                st.session_state['df_final'] = df_loaded
+                st.session_state['data_ready'] = True
+                st.session_state['session_start_ts'] = cache_ts_loaded
+        except Exception as e:
+            pass  # Silenciar error, mostrar mensaje abajo
+    
+    # Renderizar tabla o mensaje de error
+    if df_final is not None:
+        # Aplicar los mismos filtros que en la vista normal
+        # (Por simplicidad, mostrar todo; idealmente pasar filtros via query params)
+        df_filtered = df_final.copy()
+        
+        # Renderizar tabla en modo fullscreen
+        ui_report.render_report_fullscreen(df_filtered)
+        
+    else:
+        st.warning("⚠️ No hay datos cargados. Por favor, vuelve a la vista principal y carga los archivos.")
+        st.markdown("""
+        <a href="/" target="_self" style="
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #2E86AB;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 500;
+            margin-top: 10px;
+        ">
+            🔙 Volver a Vista Principal
+        </a>
+        """, unsafe_allow_html=True)
+    
+    # Detener ejecución aquí (no renderizar el resto de la app)
+    st.stop()
+
+# --- VISTA NORMAL (resto del código) ---
 
 # --- RC-UX-PREMIUM: Enterprise CSS System ---
 # Typography: System UI for speed + clear hierarchy
@@ -114,6 +235,29 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- AUTO-RESTORE SESSION (PLAN B: Fullscreen Navigation Fix) ---
+# Si no hay datos en session_state pero existe sesión persistida válida,
+# auto-restaurar silenciosamente para preservar continuidad al volver de fullscreen
+# IMPORTANTE: NO auto-restaurar si el usuario está en proceso de cargar nuevos archivos
+if (not st.session_state.get('data_ready', False) and 
+    not st.session_state.get('loading_new_files', False)):  # FIX: No auto-restaurar si usuario está cargando archivos
+    has_session, cache_time, cache_meta = state_mgr.has_valid_session()
+    if has_session:
+        try:
+            df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
+            if df_loaded is not None and not df_loaded.empty:
+                # Auto-restaurar sesión sin requerir click del usuario
+                st.session_state['df_final'] = df_loaded
+                st.session_state['data_ready'] = True
+                st.session_state['session_start_ts'] = cache_ts_loaded
+                st.session_state['uploaded_files'] = meta_loaded.get('uploaded_files', [])
+                st.session_state['fresh_load'] = False
+                # Silencioso: no mostrar mensaje, solo restaurar estado
+        except Exception as e:
+            # Si falla la auto-restauración, continuar normalmente
+            # El usuario verá la pantalla de carga normal
+            pass
+
 # Sidebar - Logo y Carga
 with st.sidebar:
     # Logo
@@ -127,30 +271,56 @@ with st.sidebar:
     st.markdown("---")
     
     # --- RC-FEAT-PERSISTENCE: Session Recovery ---
-    has_cache, cache_time, cache_meta = state_mgr.has_valid_session()
+    # Mostrar opción de continuar trabajo anterior SOLO si:
+    # 1. No hay datos cargados actualmente (data_ready=False)
+    # 2. Existe sesión persistida válida
+    # (Si ya se auto-restauró arriba, esto no se mostrará)
+    if not st.session_state.get('data_ready', False):
+        has_session, cache_time, cache_meta = state_mgr.has_valid_session()
+        if has_session:
+            st.info(f"📂 Sesión previa encontrada ({cache_time.strftime('%d/%m %H:%M') if cache_time else 'N/A'})")
+            if st.button("🔄 Continuar Trabajo Anterior", use_container_width=True):
+                with st.spinner("Recuperando sesión..."):
+                    df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
+                    if df_loaded is not None and not df_loaded.empty:
+                        st.session_state['df_final'] = df_loaded
+                        st.session_state['data_ready'] = True
+                        st.session_state['session_start_ts'] = cache_ts_loaded
+                        st.session_state['uploaded_files'] = meta_loaded.get('uploaded_files', [])
+                        st.session_state['fresh_load'] = False
+                        st.success("✅ Sesión recuperada exitosamente")
+                        st.rerun()
+                    else:
+                        st.error("❌ No se pudo recuperar la sesión")
+            st.markdown("---")
     
-    if has_cache and not st.session_state.get('data_ready', False):
-        st.info(f"📂 Sesión previa encontrada: {cache_time.strftime('%d/%m %H:%M')}")
-        if st.button("🔄 Continuar Trabajo Anterior", type="primary", help="Cargar datos procesados previamente sin subir archivos"):
-            try:
-                df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
-                if df_loaded is not None:
-                    st.session_state['df_filtered'] = df_loaded
-                    st.session_state['data_ready'] = True
-                    st.session_state['df_final'] = df_loaded 
-                    
-                    # Phase 5: Restore Session TS
-                    st.session_state['session_start_ts'] = cache_ts_loaded
-                    
-                    # Restaurar archivos dummy para UI consistencia (opcional) o marcar flag
-                    st.success("✅ Sesión restaurada exitosamente.")
-                    st.rerun()
-                else:
-                    st.error("Error al leer caché. Por favor carga archivos nuevamente.")
-            except Exception as e:
-                st.error(f"Error restaurando: {e}")
+    # --- WIZARD DE CARGA (solo si no hay datos) ---
+    if not st.session_state.get('data_ready', False):
+        # --- RC-FEAT-PERSISTENCE: Session Recovery ---
+        has_cache, cache_time, cache_meta = state_mgr.has_valid_session()
         
-        st.markdown("---")
+        if has_cache and not st.session_state.get('data_ready', False):
+            st.info(f"📂 Sesión previa encontrada: {cache_time.strftime('%d/%m %H:%M')}")
+            if st.button("🔄 Continuar Trabajo Anterior", type="primary", help="Cargar datos procesados previamente sin subir archivos"):
+                try:
+                    df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
+                    if df_loaded is not None:
+                        st.session_state['df_filtered'] = df_loaded
+                        st.session_state['data_ready'] = True
+                        st.session_state['df_final'] = df_loaded 
+                        
+                        # Phase 5: Restore Session TS
+                        st.session_state['session_start_ts'] = cache_ts_loaded
+                        
+                        # Restaurar archivos dummy para UI consistencia (opcional) o marcar flag
+                        st.success("✅ Sesión restaurada exitosamente.")
+                        st.rerun()
+                    else:
+                        st.error("Error al leer caché. Por favor carga archivos nuevamente.")
+                except Exception as e:
+                    st.error(f"Error restaurando: {e}")
+            
+            st.markdown("---")
 
 
 
@@ -190,30 +360,57 @@ if wizard_action == "PROCESS_TRIGGERED":
             else:
                 try:
                     df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
+                    
+                    # --- CYCLE_ID: Generar ID único para este ciclo ---
+                    import uuid
+                    from datetime import datetime
+                    cycle_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    cycle_uuid = str(uuid.uuid4())[:8]
+                    cycle_id = f"{cycle_timestamp}_{cycle_uuid}"
+                    
                     st.session_state['df_final'] = df_final
                     st.session_state['data_ready'] = True
+                    
+                    # FIX: Resetear flag de carga nueva después de procesar exitosamente
+                    st.session_state['loading_new_files'] = False
+                    
+                    # Mark as fresh load (for tracking init)
+                    st.session_state['fresh_load'] = True
+                    st.session_state['cycle_id'] = cycle_id  # NUEVO: ID de ciclo
+                    
+                    # --- LIMPIEZA TTL: Purgar bloqueos del ciclo anterior ---
+                    # Limpiar DB SQLite de bloqueos TTL antiguos
+                    try:
+                        import sqlite3
+                        conn = sqlite3.connect('email_ledger.db')
+                        c = conn.cursor()
+                        # Eliminar registros de ledger_last_send (TTL state)
+                        c.execute("DELETE FROM ledger_last_send")
+                        conn.commit()
+                        conn.close()
+                        print(f"DEBUG: TTL DB limpiada para nuevo ciclo {cycle_id}")
+                    except Exception as e:
+                        print(f"WARNING: No se pudo limpiar TTL DB: {e}")
                     
                     # Persistence & Session Logic
                     try:
                         meta_info = f"Archivos cargados: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
                         ok, msg = state_mgr.save_session(df_final, meta_info)
-                        
-                        # Phase 5: Initialize Session TS for Status Scoping
-                        # Reset TS on new process = Clean Slate
-                        st.session_state['session_start_ts'] = datetime.now()
-                        
-                        # SSOT: Mark as fresh load - do NOT repopulate from DB
-                        st.session_state['fresh_load'] = True
-                        
                         if ok: st.toast("💾 Sesión guardada autom.", icon="✅")
-                        else: print(f"Warning Cache: {msg}")
+                        else: st.warning(f"⚠️ No se pudo guardar sesión: {msg}")
                     except Exception as e:
-                        print(f"Cache Error: {e}")
-
-                    st.success("✅ Datos Procesados Correctamente")
+                        st.warning(f"⚠️ Error al guardar sesión: {e}")
+                    
+                    # Mark session start
+                    st.session_state['session_start_ts'] = datetime.now()
+                    
+                    # Mark as fresh load (for tracking init)
+                    st.session_state['fresh_load'] = True
+                    
+                    st.success("✅ Datos procesados exitosamente")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Error Lógico de Negocio: {str(e)}")
+                    st.error(f"❌ Error de Procesamiento: {e}")
                     st.session_state['data_ready'] = False
 
     # Main Area Placeholder if no data
@@ -468,6 +665,7 @@ if st.session_state['data_ready']:
                         if s == 'BLOCKED': return f"BLOQUEADO ({t})"
                     return "PENDIENTE"
 
+
                 # --- RC-FEAT-REPORT-V4 ---
                 # Update SSOT Tracking Columns from Database
                 # CRITICAL: Only update from DB if NOT a fresh load (continuing previous work)
@@ -489,15 +687,14 @@ if st.session_state['data_ready']:
                         df_final['ESTADO_EMAIL'] = df_final['CORREO'].apply(get_email_status_icon)
                     if 'FECHA_ULTIMO_ENVIO' in df_final.columns:
                         df_final['FECHA_ULTIMO_ENVIO'] = df_final['CORREO'].apply(lambda x: get_rich_status(x, 'ts'))
-                    if 'ESTADO_ENVIO_TEXTO' in df_final.columns:
-                        df_final['ESTADO_ENVIO_TEXTO'] = df_final['CORREO'].apply(lambda x: get_rich_status(x, 'st_text'))
                     
                     # Update session state with the updated SSOT
                     st.session_state['df_final'] = df_final
                 else:
-                    # Fresh load - keep columns empty as initialized in processing.py
-                    # Clear the fresh_load flag so subsequent renders can update from DB if needed
-                    st.session_state['fresh_load'] = False
+                    # Fresh load - keep columns as initialized in processing.py (PENDIENTE)
+                    # FIX: NO resetear fresh_load aquí, solo después del primer envío exitoso
+                    # para evitar que en el siguiente rerun se actualice desde DB con datos del ciclo anterior
+                    pass
                 
                 # Now df_filtered will have these columns from df_final
             else:
@@ -550,7 +747,7 @@ if st.session_state['data_ready']:
             # [FIX RC-BUG-004] Usar columnas NUMÉRICAS para el Excel (no strings formateados)
             # Definir columnas de exportación (misma estructura que view, pero usando valores raw)
             export_cols = [
-                'COD CLIENTE', 'EMPRESA', 'ESTADO_ENVIO_TEXTO', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
+                'COD CLIENTE', 'EMPRESA', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
                 'DÍAS MORA', 'ESTADO DEUDA',
@@ -1111,17 +1308,20 @@ if st.session_state['data_ready']:
             with c_mail1:
                 st.markdown("##### Destinatarios")
                 
-                if 'EMAIL_FINAL' in df_final.columns:
+                if 'EMAIL_FINAL' in df_filtered.columns:
                     # RC-FIX-FILTER: Include clients with Pending Detractions even if Balance is 0
+                    # FIX E2E: Usar df_filtered (vista filtrada) en lugar de df_final (dataset completo)
+                    # para respetar los filtros aplicados en Reporte General
                     
                     # 1. Helper for aggregation (Detraccion Pendiente Amount) on the filtered view
                     # We use a lambda to check ESTADO DETRACCION == 'PENDIENTE'
-                    df_final['DETR_PENDIENTE_AMOUNT'] = df_final.apply(
+                    df_email_view = df_filtered.copy()  # Trabajar sobre vista filtrada
+                    df_email_view['DETR_PENDIENTE_AMOUNT'] = df_email_view.apply(
                         lambda x: float(x['DETRACCIÓN']) if str(x['ESTADO DETRACCION']).upper().strip() == 'PENDIENTE' else 0.0, 
                         axis=1
                     )
                     
-                    client_group_email = df_final[df_final['EMAIL_FINAL'] != ""].groupby(
+                    client_group_email = df_email_view[df_email_view['EMAIL_FINAL'] != ""].groupby(
                         ['COD CLIENTE', 'EMPRESA', 'EMAIL_FINAL']
                     )[['SALDO REAL', 'DETR_PENDIENTE_AMOUNT']].sum().reset_index()
                     
@@ -1132,20 +1332,55 @@ if st.session_state['data_ready']:
                     ]
                     
                     # --- RC-FEAT-UX-EMAIL: Smart Filters & Counters (Tower Integration) ---
-                    all_emails_in_view = client_group_email['EMAIL_FINAL'].unique().tolist()
-                    status_map_tab = dbm.get_status_map(all_emails_in_view)
+                    # FIX E2E: NO consultar DB si es fresh_load (nuevo ciclo) para evitar contaminación
+                    is_fresh_load = st.session_state.get('fresh_load', False)
                     
-                    sent_emails_today = [e for e, s in status_map_tab.items() if s['status'] == 'SENT']
+                    # --- KPIs de Envío (TAB Notificaciones Email) ---
+                    # Calcular por COD_CLIENTE único para evitar confusión con emails compartidos
+                    from datetime import date
+                    today_str = date.today().strftime('%Y-%m-%d')
                     
-                    # KPI Bar
+                    # Contar clientes enviados HOY
+                    if 'ESTADO_EMAIL' in df_final.columns and 'FECHA_ULTIMO_ENVIO' in df_final.columns:
+                        mask_enviado = df_final['ESTADO_EMAIL'] == 'ENVIADO'
+                        mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
+                        mask_enviado_hoy = mask_enviado & mask_hoy
+                        
+                        # COD_CLIENTE únicos enviados hoy
+                        clientes_enviados_hoy_count = df_final[mask_enviado_hoy]['COD CLIENTE'].nunique()
+                    else:
+                        clientes_enviados_hoy_count = 0
+                    
+                    # Total de clientes disponibles (con email y saldo/detracción pendiente)
+                    total_clientes_disponibles = len(client_group_email)
+                    pendientes_envio_count = total_clientes_disponibles
+                    
+                    # Mostrar KPIs
                     c_stat1, c_stat2, c_ctrl = st.columns([1, 1, 2])
-                    c_stat1.metric("Pendientes de Envío", len(client_group_email) - len([e for e in client_group_email['EMAIL_FINAL'] if e in sent_emails_today]))
-                    c_stat2.metric("Enviados Hoy", len(sent_emails_today))
+                    c_stat1.metric("⏳ Pendientes de Envío", pendientes_envio_count)
+                    c_stat2.metric("📧 Enviados Hoy", clientes_enviados_hoy_count)
+                    
+                    # --- Filtrar clientes disponibles ---
+                    # IMPORTANTE: Filtrar por COD_CLIENTE enviado, NO por EMAIL_FINAL
+                    # (Porque EMAIL_FINAL puede ser compartido por múltiples clientes)
                     
                     hide_sent_today = c_ctrl.toggle("🙈 Ocultar ya enviados hoy", value=True, help="Oculta de la lista los clientes que ya recibieron correo hoy.")
                     
                     if hide_sent_today:
-                        client_group_email = client_group_email[~client_group_email['EMAIL_FINAL'].isin(sent_emails_today)]
+                        # Obtener COD_CLIENTE de clientes enviados HOY desde df_final (SSOT)
+                        from datetime import date
+                        today_str = date.today().strftime('%Y-%m-%d')
+                        
+                        if 'ESTADO_EMAIL' in df_final.columns and 'FECHA_ULTIMO_ENVIO' in df_final.columns:
+                            mask_enviado = df_final['ESTADO_EMAIL'] == 'ENVIADO'
+                            mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
+                            mask_enviado_hoy = mask_enviado & mask_hoy
+                            
+                            # Obtener COD_CLIENTE únicos enviados hoy
+                            clientes_enviados_hoy = df_final[mask_enviado_hoy]['COD CLIENTE'].unique()
+                            
+                            # Filtrar: excluir clientes enviados hoy
+                            client_group_email = client_group_email[~client_group_email['COD CLIENTE'].isin(clientes_enviados_hoy)]
                     
                     st.markdown("---")
                     
@@ -1281,7 +1516,9 @@ if st.session_state['data_ready']:
                     
                     for selected_label in sel_emails:
                         info_sel = email_map[selected_label]
-                        docs_cli_mail = df_final[df_final['COD CLIENTE'] == info_sel['cod']]
+                        # FIX E2E: Usar df_email_view (vista filtrada) en lugar de df_final (dataset completo)
+                        # para que la Vista Previa HTML muestre los mismos documentos que el Reporte General filtrado
+                        docs_cli_mail = df_email_view[df_email_view['COD CLIENTE'] == info_sel['cod']]
                         
                         mask_soles_prev = docs_cli_mail['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
                         totales_s = docs_cli_mail[mask_soles_prev]['SALDO REAL'].sum()
@@ -1434,16 +1671,27 @@ if st.session_state['data_ready']:
                                 company_sender = CONFIG.get('company_name', 'DACTA S.A.C.')
                                 subject_line = f"Estado de Cuenta {company_sender} | Cliente: {info['empresa']}"
                                 
+                                # Recolectar MATCH_KEYs para este cliente (para tracking post-envío)
+                                if 'MATCH_KEY' in d_cli.columns:
+                                    match_keys_for_client = d_cli['MATCH_KEY'].tolist()
+                                else:
+                                    match_keys_for_client = []
+                                
+                                # Generar ID único para este mensaje (para matching confiable en post-send)
+                                import uuid
+                                msg_unique_id = str(uuid.uuid4())[:8]
+                                
                                 messages_to_send.append({
+                                    'msg_id': msg_unique_id,  # NUEVO: ID único para matching
                                     'email': info['email'],
                                     'client_name': info['empresa'],
+                                    'cod_cliente': info['cod'],
+                                    'match_keys': match_keys_for_client,
                                     'subject': subject_line,
                                     'html_body': body,
                                     'plain_body': plain_body,
-                                    'html_body': body,
-                                    'plain_body': plain_body,
-                                    'notification_key': notif_key, # New Field
-                                    'original_email': info['email'] # Traceability
+                                    'notification_key': notif_key,
+                                    'original_email': info['email']
                                 })
                                 
                                 # --- RC-FEAT-012: QA Mode Injection ---
@@ -1477,43 +1725,95 @@ if st.session_state['data_ready']:
                             
                             # Enviar Batch con Logo
                             with st.spinner(f"Enviando con Business Lock (Fecha: {fecha_corte})..."):
+                                # Obtener cycle_id del session_state
+                                current_cycle_id = st.session_state.get('cycle_id', 'default_cycle')
+                                
                                 results = es.send_email_batch(
                                     smtp_cfg, 
                                     messages_to_send, 
                                     progress_callback=lambda i, t, m: st.toast(f"{m} ({i}/{t})"),
-                                    logo_path=batch_logo_path, # Use the verified batch path
-                                    force_resend=force_resend_ttl, # RC-BUG-015
-                                    internal_copies_config=CONFIG.get('internal_copies', {}), # RC-FEAT-013
-                                    qa_settings=(qa_cfg if is_qa else None) # RC-FEAT-014: Pass full config
+                                    logo_path=batch_logo_path,
+                                    force_resend=force_resend_ttl,
+                                    internal_copies_config=CONFIG.get('internal_copies', {}),
+                                    qa_settings=(qa_cfg if is_qa else None),
+                                    cycle_id=current_cycle_id  # NUEVO: Pasar cycle_id para TTL scoping
                                 )
                             
                             # Marcar como enviado para prevenir duplicados
                             if results['success'] > 0:
                                  st.session_state['last_processed_batch_id'] = current_batch_id
                                  
-                                 # --- FASE 2: Update Tracking Columns in SSOT (df_final) ---
-                                 # Only update tracking for successfully sent emails
+                                 # --- FASE 2: Actualizar Columnas de Tracking en SSOT (df_final) ---
+                                 # FIX: Actualizar por MATCH_KEY (documento) en lugar de EMAIL_FINAL (email)
                                  if 'details' in results and results['details']:
                                      now_timestamp = datetime.now()
-                                     updated_count = 0
+                                     updated_match_keys = []
+                                     
+                                     # Crear mapeo de msg_id -> mensaje para lookup rápido
+                                     msg_lookup = {m.get('msg_id'): m for m in messages_to_send if m.get('msg_id')}
                                      
                                      for detail in results['details']:
-                                         if detail.get('Estado') == 'Enviado':
-                                             # Get the original email (before QA redirect)
-                                             sent_email = detail.get('Email Original', detail.get('Email'))
+                                         if detail.get('Estado') == '✅ Enviado':
+                                             # Obtener msg_id del detalle (si existe)
+                                             msg_id_sent = detail.get('msg_id')
                                              
-                                             # Update tracking in df_final for this email
-                                             mask = st.session_state['df_final']['EMAIL_FINAL'] == sent_email
-                                             st.session_state['df_final'].loc[mask, 'ESTADO_EMAIL'] = "ENVIADO"
-                                             st.session_state['df_final'].loc[mask, 'FECHA_ULTIMO_ENVIO'] = now_timestamp
-                                             st.session_state['df_final'].loc[mask, 'ESTADO_ENVIO_TEXTO'] = f"ENVIADO ({now_timestamp.strftime('%H:%M')})"
-                                             updated_count += mask.sum()
+                                             if msg_id_sent and msg_id_sent in msg_lookup:
+                                                 msg = msg_lookup[msg_id_sent]
+                                             else:
+                                                 # Fallback: buscar por nombre de cliente
+                                                 sent_client = detail.get('Cliente')
+                                                 msg = next((m for m in messages_to_send if m['client_name'] == sent_client), None)
+                                             
+                                             if msg and msg.get('match_keys'):
+                                                 # Actualizar por MATCH_KEY (estable por documento, no por email)
+                                                 for mk in msg['match_keys']:
+                                                     mask = st.session_state['df_final']['MATCH_KEY'] == mk
+                                                     num_updated = mask.sum()
+                                                     
+                                                     if num_updated > 0:
+                                                         st.session_state['df_final'].loc[mask, 'ESTADO_EMAIL'] = "ENVIADO"
+                                                         st.session_state['df_final'].loc[mask, 'FECHA_ULTIMO_ENVIO'] = now_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                                                         if 'ESTADO_ENVIO_TEXTO' in st.session_state['df_final'].columns:
+                                                             st.session_state['df_final'].loc[mask, 'ESTADO_ENVIO_TEXTO'] = f"ENVIADO ({now_timestamp.strftime('%H:%M')})"
+                                                         updated_match_keys.append(mk)
                                      
-                                     # Store update info for debug display
+                                     # Recalcular df_filtered desde df_final actualizado
+                                     # (Aplicar los mismos filtros que están actualmente activos)
+                                     df_final_updated = st.session_state['df_final']
+                                     df_filtered_new = df_final_updated.copy()
+                                     
+                                     # Reaplicar filtro de empresa si está activo
+                                     if 'filter_empresa' in st.session_state and st.session_state['filter_empresa']:
+                                         selected_empresas = st.session_state['filter_empresa']
+                                         if selected_empresas:  # Solo filtrar si hay selección
+                                             df_filtered_new = df_filtered_new[df_filtered_new['EMPRESA'].isin(selected_empresas)]
+                                     
+                                     # Reaplicar filtro "Solo con Correo" si está activo
+                                     if st.session_state.get('filter_solo_con_correo', False):
+                                         df_filtered_new = df_filtered_new[df_filtered_new['CORREO'].notna() & (df_filtered_new['CORREO'] != '')]
+                                     
+                                     # Guardar df_filtered actualizado
+                                     st.session_state['df_filtered'] = df_filtered_new
+                                     
+                                     # Guardar info de actualización para display de debug
                                      st.session_state['last_tracking_update'] = {
-                                         'count': updated_count,
-                                         'timestamp': now_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                                         'count': len(updated_match_keys),
+                                         'timestamp': now_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                                         'sample_keys': updated_match_keys[:3] if updated_match_keys else []  # Primeros 3 para debug
                                      }
+                                     
+                                     # IMPORTANTE: Marcar fresh_load=False después del primer envío exitoso
+                                     st.session_state['fresh_load'] = False
+                                     
+                                     # Guardar resultados para persistencia post-rerun
+                                     st.session_state['last_send_results'] = results
+                                     st.session_state['last_send_timestamp'] = now_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                                     
+                                     # IMPORTANTE: Forzar rerun para refrescar Reporte General
+                                     # Los resultados quedan guardados en session_state
+                                     # if len(updated_match_keys) > 0:
+                                     #     st.rerun()  # Comentado: permite renderizar reporte post-envío (líneas 1817+)
+
                             
                             # --- RC-UX-002: Panel de Resultados Amigable ---
                             st.divider()
@@ -1565,6 +1865,16 @@ if st.session_state['data_ready']:
                             # C) Log Técnico (Oculto)
                             with st.expander("🛠️ Avanzado (QA / Soporte Técnico)", expanded=False):
                                 st.write(f"RunID: {current_batch_id}")
+                                
+                                # NUEVO: Estadísticas de Tracking
+                                if 'last_tracking_update' in st.session_state:
+                                    update_info = st.session_state['last_tracking_update']
+                                    st.success(f"✅ Tracking actualizado: {update_info['count']} documentos")
+                                    st.caption(f"Timestamp: {update_info['timestamp']}")
+                                    if update_info.get('sample_keys'):
+                                        st.caption(f"MATCH_KEYs de muestra: {', '.join(str(k) for k in update_info['sample_keys'])}")
+                                
+                                st.markdown("---")
                                 for l in results['log']:
                                     st.text(l)
                                     if "535" in l:
