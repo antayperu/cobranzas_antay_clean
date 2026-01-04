@@ -3,7 +3,7 @@ import pandas as pd
 import urllib.parse
 from datetime import date, datetime
 import hashlib
-from utils.processing import load_data, process_data
+from utils.processing import load_data, process_data, calculate_email_kpis
 from utils.excel_export import generate_excel
 
 # --- FULLSCREEN VIEW DETECTION (ANTES de set_page_config) ---
@@ -1376,47 +1376,23 @@ if st.session_state['data_ready']:
                         (client_group_email['DETR_PENDIENTE_AMOUNT'] > 0.01)
                     ]
                     
-                    # --- RC-FEAT-UX-EMAIL: Smart Filters & Counters (Tower Integration) ---
-                    # FIX E2E: NO consultar DB si es fresh_load (nuevo ciclo) para evitar contaminación
-                    is_fresh_load = st.session_state.get('fresh_load', False)
+                    # --- RC-FIX-BUG-EMAIL-COUNTERS-001 (Persistence) ---
+                    # Calcular KPIs usando SSOT (df_final) via helper
+                    # Esto garantiza que los contadores sobrevivan al reload
+                    sent_count, sent_clients_list = calculate_email_kpis(df_final)
                     
-                    # --- KPIs de Envío (TAB Notificaciones Email) ---
-                    # Calcular por COD_CLIENTE único para evitar confusión con emails compartidos
-                    from datetime import date
-                    today_str = date.today().strftime('%Y-%m-%d')
-                    
-                    # Contar clientes enviados HOY
-                    if 'ESTADO_EMAIL' in df_final.columns and 'FECHA_ULTIMO_ENVIO' in df_final.columns:
-                        mask_enviado = df_final['ESTADO_EMAIL'] == 'ENVIADO'
-                        mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
-                        mask_enviado_hoy = mask_enviado & mask_hoy
-                        
-                        # COD_CLIENTE únicos enviados hoy
-                        clientes_enviados_hoy_count = df_final[mask_enviado_hoy]['COD CLIENTE'].nunique()
-                    else:
-                        clientes_enviados_hoy_count = 0
-                    
+                    # KPIs Actualizados
+                    clientes_enviados_hoy_count = sent_count
+
                     # --- Filtrar clientes disponibles (Lógica Movida ANTES de mostrar KPIs) ---
                     # Layout de columnas para KPIs y Controles
                     c_stat1, c_stat2, c_ctrl = st.columns([1, 1, 2])
                     
                     hide_sent_today = c_ctrl.toggle("🙈 Ocultar ya enviados hoy", value=True, help="Oculta de la lista los clientes que ya recibieron correo hoy.")
                     
-                    if hide_sent_today:
-                        # Obtener COD_CLIENTE de clientes enviados HOY desde df_final (SSOT)
-                        from datetime import date
-                        today_str = date.today().strftime('%Y-%m-%d')
-                        
-                        if 'ESTADO_EMAIL' in df_final.columns and 'FECHA_ULTIMO_ENVIO' in df_final.columns:
-                            mask_enviado = df_final['ESTADO_EMAIL'] == 'ENVIADO'
-                            mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
-                            mask_enviado_hoy = mask_enviado & mask_hoy
-                            
-                            # Obtener COD_CLIENTE únicos enviados hoy
-                            clientes_enviados_hoy = df_final[mask_enviado_hoy]['COD CLIENTE'].unique()
-                            
-                            # Filtrar: excluir clientes enviados hoy
-                            client_group_email = client_group_email[~client_group_email['COD CLIENTE'].isin(clientes_enviados_hoy)]
+                    if hide_sent_today and sent_clients_list:
+                        # Filtrar: excluir clientes enviados hoy usando la lista calculada (SSOT)
+                        client_group_email = client_group_email[~client_group_email['COD CLIENTE'].isin(sent_clients_list)]
                     
                     # --- Calcular KPIs con la lista FINAL filtrada ---
                     # Total de clientes disponibles (coincide con opciones del multiselect)
