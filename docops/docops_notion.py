@@ -27,11 +27,19 @@ def get_plain_text(rich_text):
 
 # 2. ACTIONS
 def query_backlog():
-    print("--- 1. BACKLOG QUERY (API) ---")
+    print("--- 1. BACKLOG QUERY ---")
     db_id = IDS["backlog_database_id"]
+    print(f"Database ID: {db_id}")
     
+    results = [] # Placeholder
+    query_success = False
+    
+    # METHOD A: SDK
     try:
-        # User requested client.databases.query
+        print("Attempting Method: SDK (client.databases.query)...")
+        if not hasattr(client.databases, 'query'):
+            raise AttributeError("client.databases.query missing")
+            
         resp = client.databases.query(
             database_id=db_id,
             filter={
@@ -43,17 +51,40 @@ def query_backlog():
             },
             page_size=1
         )
+        results = resp.get("results", [])
+        print(f"✅ Method Used: SDK. Result Count: {len(results)}")
+        query_success = True
+        
     except Exception as e:
-        print(f"❌ API FAIL: Could not query Backlog.")
-        print(f"   Database ID: {db_id}")
-        print(f"   Endpoint: databases.query")
-        print(f"   Error: {e}")
-        sys.exit(1) # RULE: Fail if API fails
+        print(f"⚠️ SDK Method Failed: {e}")
+        
+        # METHOD B: RAW FALLBACK
+        try:
+            print("Attempting Method: RAW (client.request)...")
+            resp = client.request(
+                method="POST",
+                path=f"databases/{db_id}/query",
+                body={
+                    "filter": {
+                        "or": [
+                            {"property": "Status", "status": {"equals": "Ready"}},
+                            {"property": "Estado", "status": {"equals": "Ready"}},
+                            {"property": "Estado", "select": {"equals": "Ready"}}
+                        ]
+                    },
+                    "page_size": 1
+                }
+            )
+            results = resp.get("results", [])
+            print(f"✅ Method Used: RAW. Result Count: {len(results)}")
+            query_success = True
+            
+        except Exception as e2:
+            print(f"❌ RAW Method Failed: {e2}")
+            print("❌ CRITICAL: Both Query Methods Failed.")
+            sys.exit(1) # RULE: Fail if Backlog cannot be queried
 
-    results = resp.get("results", [])
-    
     if not results:
-        # RULE: Only write "Sin Ready" if query succeeds but is empty.
         print("⚠️ No Ready cards found (Query Success).")
         return {"title": "Sin Ready", "id": ""}
     
@@ -88,27 +119,34 @@ def query_backlog():
         
     return {"title": full_text, "id": card_id}
 
+
+def find_anchor_dynamically(page_id):
+    try:
+        children = client.blocks.children.list(block_id=page_id).get("results", [])
+        for i, b in enumerate(children):
+            txt = ""
+            if "rich_text" in b.get(b["type"], {}):
+                 txt = get_plain_text(b[b["type"]]["rich_text"])
+            if "DOCOPS_ANCHOR_HANDOFF" in txt or "Handoff Automático" in txt:
+                # print(f"✅ Dynamic Anchor Found: {b['id']}")
+                return b['id'], i, children
+    except Exception as e:
+        print(f"Error scanning page: {e}")
+    return None, -1, []
+
 def update_handoff(tag, commit, gates, bugs, next_step_text):
     print("\n--- 2. UPDATE HANDOFF (SSOT) ---")
     page_id = IDS["estado_page_id"]
-    anchor_id = IDS["handoff_anchor_block_id"]
-    
-    # Get children to find block IDs relative to anchor
-    try:
-        children = client.blocks.children.list(block_id=page_id).get("results", [])
-    except Exception as e:
-        print(f"❌ API FAIL: Read Page {page_id}. Error: {e}")
-        sys.exit(1)
+    anchor_id, anchor_idx, children = find_anchor_dynamically(page_id)
 
-    # Locate Anchor Index
-    anchor_idx = -1
-    for i, b in enumerate(children):
-        if b['id'] == anchor_id:
-            anchor_idx = i
-            break
-            
     if anchor_idx == -1:
-        print("❌ CRITICAL: Anchor block not found in page.")
+        # Fallback to static ID if dynamic fails?
+        anchor_id = IDS["handoff_anchor_block_id"] 
+        # But we need children list/index. 
+        # If dynamic failed, likely read failed or content changed.
+        print("❌ CRITICAL: Anchor block not found via search.")
+        # Try raw scan with static ID? 
+        # If dynamic failed, we probably can't proceed safely.
         sys.exit(1)
 
     # Clean Updates
@@ -190,40 +228,32 @@ def update_log(tag, commit, gates, bugs, next_step_text):
 def verify_readback(tag, commit, next_step_text):
     print("\n--- 4. READBACK VALIDATION ---")
     page_id = IDS["estado_page_id"]
-    anchor_id = IDS["handoff_anchor_block_id"]
-
-    try:
-        children = client.blocks.children.list(block_id=page_id).get("results", [])
-    except:
-        print("❌ FAIL: Readback connection error.")
+    anchor_id, anchor_idx, children = find_anchor_dynamically(page_id)
+    
+    if anchor_idx == -1:
+        print("❌ FAIL: Readback anchor not found.")
         sys.exit(1)
 
-    found_anchor = False
-    
     checks = {
         "tag": {"expected": tag, "found": False},
         "commit": {"expected": commit, "found": False},
         "next": {"expected": next_step_text, "found": False}
     }
 
-    for b in children:
-        if b['id'] == anchor_id:
-            found_anchor = True
-            continue
+    for i in range(anchor_idx + 1, len(children)):
+        b = children[i]
+        if b["type"] in ["heading_1", "heading_2", "heading_3", "divider"]:
+            break
         
-        if found_anchor:
-            if b["type"] in ["heading_1", "heading_2", "heading_3", "divider"]:
-                break
-            
-            txt = ""
-            if "rich_text" in b.get(b["type"], {}):
+        txt = ""
+        if "rich_text" in b.get(b["type"], {}):
                  txt = get_plain_text(b[b["type"]]["rich_text"])
-            
-            if checks["tag"]["expected"] in txt: checks["tag"]["found"] = True
-            if checks["commit"]["expected"] in txt: checks["commit"]["found"] = True
-            if checks["next"]["expected"] in txt: checks["next"]["found"] = True
-            
-            if txt.strip(): print(f"> {txt}")
+        
+        if checks["tag"]["expected"] in txt: checks["tag"]["found"] = True
+        if checks["commit"]["expected"] in txt: checks["commit"]["found"] = True
+        if checks["next"]["expected"] in txt: checks["next"]["found"] = True
+        
+        if txt.strip(): print(f"> {txt}")
 
     failed = [k for k, v in checks.items() if not v["found"]]
     
@@ -239,8 +269,10 @@ def main():
     parser.add_argument("--commit", required=True)
     args = parser.parse_args()
     
-    # 1. Backlog
-    card_data = query_backlog()
+    # 1. Backlog (SAFE QUERY)
+    card_data = query_backlog() 
+    # If script reaches here, query succeeded (or returned empty but success)
+    
     next_step = card_data["title"]
     
     # 2. Handoff
