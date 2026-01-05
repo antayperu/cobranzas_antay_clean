@@ -28,19 +28,16 @@ def fetch_ready_card():
     print("--- FETCHING READY CARD (BACKLOG) ---")
     backlog_id = IDS["backlog_database_id"]
     try:
-        resp = client.request(
-            path=f"databases/{backlog_id}/query",
-            method="POST",
-            body={
-                "filter": {
-                    "or": [
-                        {"property": "Status", "status": {"equals": "Ready"}},
-                        {"property": "Estado", "status": {"equals": "Ready"}},
-                        {"property": "Estado", "select": {"equals": "Ready"}}
-                    ]
-                },
-                "page_size": 1
-            }
+        resp = client.databases.query(
+            database_id=backlog_id,
+            filter={
+                "or": [
+                    {"property": "Status", "status": {"equals": "Ready"}},
+                    {"property": "Estado", "status": {"equals": "Ready"}},
+                    {"property": "Estado", "select": {"equals": "Ready"}}
+                ]
+            },
+            page_size=1
         )
         
         results = resp.get("results", [])
