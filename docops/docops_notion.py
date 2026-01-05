@@ -31,32 +31,30 @@ def query_backlog():
     db_id = IDS["backlog_database_id"]
     
     try:
-        # Raw Request for robustness
-        resp = client.request(
-            path=f"databases/{db_id}/query",
-            method="POST",
-            body={
-                "filter": {
-                    "or": [
-                        {"property": "Status", "status": {"equals": "Ready"}},
-                        {"property": "Estado", "status": {"equals": "Ready"}},
-                        {"property": "Estado", "select": {"equals": "Ready"}}
-                    ]
-                },
-                # Sort: Priority Descending? User said "P0 primero". 
-                # Assuming Sort by some propery? If not specified, standard order.
-                # Adding a sort if we knew the property. For now, default order.
-                "page_size": 1
-            }
+        # User requested client.databases.query
+        resp = client.databases.query(
+            database_id=db_id,
+            filter={
+                "or": [
+                    {"property": "Status", "status": {"equals": "Ready"}},
+                    {"property": "Estado", "status": {"equals": "Ready"}},
+                    {"property": "Estado", "select": {"equals": "Ready"}}
+                ]
+            },
+            page_size=1
         )
     except Exception as e:
-        print(f"❌ API FAIL: Could not query Backlog {db_id}. Error: {e}")
+        print(f"❌ API FAIL: Could not query Backlog.")
+        print(f"   Database ID: {db_id}")
+        print(f"   Endpoint: databases.query")
+        print(f"   Error: {e}")
         sys.exit(1) # RULE: Fail if API fails
 
     results = resp.get("results", [])
     
     if not results:
-        print("⚠️ No Ready cards found.")
+        # RULE: Only write "Sin Ready" if query succeeds but is empty.
+        print("⚠️ No Ready cards found (Query Success).")
         return {"title": "Sin Ready", "id": ""}
     
     # Extract First Card
