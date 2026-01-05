@@ -1,0 +1,303 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Base Reset */
+        body { font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #F5F7FB; margin: 0; padding: 20px 0; color: #333333; -webkit-font-smoothing: antialiased; }
+        
+        /* PC Container: The "Sheet" */
+        .container { 
+            max-width: 700px; 
+            margin: 0 auto; 
+            background-color: #ffffff; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08); 
+            border: 1px solid #dce0e6; 
+            border-top: 5px solid #2E86AB; /* Brand accent top */
+        }
+        
+        /* Helpers */
+        .desktop-only { display: table; }
+        .mobile-only { display: none; }
+        
+        /* Header Section */
+        .header-content { padding: 30px 40px 20px 40px; border-bottom: 1px solid #eaeaea; }
+        .header-table { width: 100%; }
+        .header-title-text { font-size: 20px; font-weight: 700; color: #1f2937; letter-spacing: 0.5px; text-align: right; text-transform: uppercase; }
+        .header-date-text { font-size: 13px; color: #9ca3af; text-align: right; margin-top: 5px; font-weight: 500; }
+        
+        /* Body Content */
+        .content-box { padding: 35px 40px; }
+        
+        /* Summary Box */
+        .summary-box { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 20px; margin: 25px 0; }
+        
+        /* Data Table */
+        table.data-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; }
+        table.data-table th { 
+            background-color: #f1f5f9; 
+            color: #475569; 
+            font-weight: 600; 
+            text-transform: uppercase; 
+            font-size: 11px; 
+            letter-spacing: 0.05em; 
+            padding: 12px 15px; 
+            text-align: left; 
+            border-bottom: 2px solid #cbd5e1;
+        }
+        
+        /* Accounts Section */
+        .accounts-grid { display: table; width: 100%; margin-top: 35px; border-top: 2px solid #f1f5f9; padding-top: 20px; }
+        .account-col { display: table-cell; vertical-align: top; width: 48%; padding-right: 2%; }
+        .account-title { font-size: 12px; font-weight: 700; color: #2E86AB; text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+        .account-item { font-size: 12px; color: #4b5563; margin-bottom: 6px; line-height: 1.5; }
+        .bank-label { font-weight: 600; color: #111827; }
+        
+        /* Footer */
+        .footer { text-align: center; color: #9ca3af; font-size: 11px; padding: 20px; border-top: 1px solid #f3f4f6; background-color: #fafafa; }
+
+        /* MEDIA QUERIES (MOBILE) */
+        @media only screen and (max-width: 600px) {
+            /* Reset body padding for mobile */
+            body { padding: 0; background-color: #f4f4f4; }
+            
+            /* Fluid Container, No Shadow/Border on edges */
+            .container { width: 100% !important; box-shadow: none; border: none; margin: 0; max-width: none; border-top: none; }
+            
+            /* Adjust Content Padding */
+            .content-box { padding: 20px 15px !important; }
+            .header-content { padding: 20px 15px; }
+            
+            /* Toggle Views */
+            .desktop-only { display: none !important; }
+            .mobile-only { display: block !important; }
+            .mobile-card { display: block !important; }
+            
+            /* Logo resizing */
+            .logo-img { height: 50px !important; }
+            .header-title-text { font-size: 16px; }
+            
+            /* Force table layout tools to behave like blocks */
+            .accounts-grid, .account-col { display: block; width: 100%; padding: 0; margin-bottom: 20px; }
+        }
+    </style>
+    </head>
+    <body>
+        <div class="container">
+            <!-- HEADER -->
+            <div class="header-content">
+                <table class="header-table" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                        <td align="left" valign="middle">
+                            <!-- Increased Logo to 52-56px range -->
+                            <img src="cid:logo_dacta" alt="DACTA S.A.C." class="logo-img" height="52" style="display:block; height:52px; width:auto;">
+                        </td>
+                        <td align="right" valign="middle">
+                            <div class="header-title-text">Estado de Cuenta</div>
+                            <div class="header-date-text">Al 23/12/2025</div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="content-box">
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 20px; color: #111827;">Estimados Empresa Demo S.A.C.,</div>
+                <div style="font-size: 14px; margin-bottom: 20px; line-height: 1.6; color: #4b5563;">
+                    Adjuntamos el detalle actualizado de sus documentos pendientes de pago. Agradeceremos verificar la siguiente información:
+                </div>
+                
+                <!-- SUMMARY BOX -->
+                <div class="summary-box">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size: 14px;">
+                        
+            <tr>
+                <td style="padding: 6px 0; color: #555;">Deuda Total <strong>Soles</strong>:</td>
+                <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #2E86AB;">S/ 2,500.00 (03 documentos)</td>
+            </tr>
+            <tr>
+                <td style="padding: 6px 0; color: #555;">Deuda Total <strong>Dólares</strong>:</td>
+                <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #2E86AB;">US$ 500.00 (01 documentos)</td>
+            </tr>
+            <tr>
+                <td style="padding: 6px 0; color: #555;">Detracciones SUNAT Pendientes:</td>
+                <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #333;">S/ 240.00 (01 documentos afectos)</td>
+            </tr>
+        
+                    </table>
+                </div>
+
+                <!-- TABLE SECTION -->
+                <div style="margin-top: 30px;">
+                    <div style="font-size: 13px; font-weight: 700; color: #4b5563; text-transform: uppercase; margin-bottom: 10px;">Detalle de Documentos</div>
+                    
+                    <!-- PC VIEW -->
+                    <table class="data-table desktop-only">
+                        <thead>
+                            <tr>
+                                <th>Documento</th>
+                                <th>Emisión</th>
+                                <th>Vencimiento</th>
+                                <th style="text-align: right;">Importe</th>
+                                <th style="text-align: right;">Saldo a DACTA</th>
+                                <th style="text-align: right;">Detracción (S/)</th>
+                                <th style="text-align: center;">Estado Detr.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            
+        <tr style="background-color: #ffffff;">
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">F001-0001234</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">10/01/2025</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">25/01/2025</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px;">S/ 1,500.00</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: #2E86AB; font-size: 13px;">S/ 1,500.00</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; color: #ccc;">-</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: center;"><span style="background-color: #e2e3e5; color: #383d41; padding: 4px 8px; border-radius: 4px; font-size: 11px;">No aplica</span></td>
+        </tr>
+        
+        <tr style="background-color: #f9fafb;">
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">F001-0001235</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">11/01/2025</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">26/01/2025</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px;">US$ 500.00</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: #2E86AB; font-size: 13px;">US$ 500.00</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; color: #ccc;">-</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: center;"><span style="background-color: #e2e3e5; color: #383d41; padding: 4px 8px; border-radius: 4px; font-size: 11px;">No aplica</span></td>
+        </tr>
+        
+        <tr style="background-color: #fff8f8;">
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">F001-0001236</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">12/01/2025</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">27/01/2025</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px;">S/ 2,000.00</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: #2E86AB; font-size: 13px;"><span style='color:#999;'>0.00</span><br><span style='font-size:10px; color:#d9534f'>(Solo Detracción)</span></td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; ">S/ 240.00</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: center;"><span style="background-color: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">Pendiente</span></td>
+        </tr>
+        
+        <tr style="background-color: #f9fafb;">
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">F001-0001237</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">13/01/2025</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 13px;">28/01/2025</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px;">S/ 1,000.00</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold; color: #2E86AB; font-size: 13px;">S/ 1,000.00</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: right; font-size: 13px; ">S/ 120.00</td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #eee; text-align: center;"><span style="background-color: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">Cobrado</span></td>
+        </tr>
+        
+                        </tbody>
+                    </table>
+                    
+                    <!-- MOBILE VIEW -->
+                    <div class="mobile-only">
+                        
+        <div class="mobile-card" style="display:none; background:#fff; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 12px; padding: 15px;">
+            <div style="border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; margin-bottom: 8px; font-weight: bold; color: #333;">
+                <span style="color:#2E86AB">F001-0001234</span> 
+                <span style="float:right; font-weight:normal; font-size:12px; color:#666;">Vence: 25/01/2025</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px;">
+                <span style="color:#666;">Importe:</span> <span>S/ 1,500.00</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: bold; color: #2E86AB;">
+                <span>Saldo a DACTA:</span> <span>S/ 1,500.00</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eee; font-size: 13px;">
+                 <span style="color:#666;">Detracción SUNAT (S/):</span> 
+                 <span style="color: #999;">- <small>(No aplica)</small></span>
+            </div>
+        </div>
+        
+        <div class="mobile-card" style="display:none; background:#fff; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 12px; padding: 15px;">
+            <div style="border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; margin-bottom: 8px; font-weight: bold; color: #333;">
+                <span style="color:#2E86AB">F001-0001235</span> 
+                <span style="float:right; font-weight:normal; font-size:12px; color:#666;">Vence: 26/01/2025</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px;">
+                <span style="color:#666;">Importe:</span> <span>US$ 500.00</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: bold; color: #2E86AB;">
+                <span>Saldo a DACTA:</span> <span>US$ 500.00</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eee; font-size: 13px;">
+                 <span style="color:#666;">Detracción SUNAT (S/):</span> 
+                 <span style="color: #999;">- <small>(No aplica)</small></span>
+            </div>
+        </div>
+        
+        <div class="mobile-card" style="display:none; background:#fff; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 12px; padding: 15px;">
+            <div style="border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; margin-bottom: 8px; font-weight: bold; color: #333;">
+                <span style="color:#2E86AB">F001-0001236</span> 
+                <span style="float:right; font-weight:normal; font-size:12px; color:#666;">Vence: 27/01/2025</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px;">
+                <span style="color:#666;">Importe:</span> <span>S/ 2,000.00</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: bold; color: #2E86AB;">
+                <span>Saldo a DACTA:</span> <span><span style='color:#999;'>0.00</span><br><span style='font-size:10px; color:#d9534f'>(Solo Detracción)</span></span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eee; font-size: 13px;">
+                 <span style="color:#666;">Detracción SUNAT (S/):</span> 
+                 <span style="color: #d9534f; font-weight: bold;">S/ 240.00 <small>(Pendiente)</small></span>
+            </div>
+        </div>
+        
+        <div class="mobile-card" style="display:none; background:#fff; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 12px; padding: 15px;">
+            <div style="border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; margin-bottom: 8px; font-weight: bold; color: #333;">
+                <span style="color:#2E86AB">F001-0001237</span> 
+                <span style="float:right; font-weight:normal; font-size:12px; color:#666;">Vence: 28/01/2025</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px;">
+                <span style="color:#666;">Importe:</span> <span>S/ 1,000.00</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: bold; color: #2E86AB;">
+                <span>Saldo a DACTA:</span> <span>S/ 1,000.00</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eee; font-size: 13px;">
+                 <span style="color:#666;">Detracción SUNAT (S/):</span> 
+                 <span style="color: #28a745;">S/ 120.00 <small>(Cobrado)</small></span>
+            </div>
+        </div>
+        
+                    </div>
+                </div>
+                
+                <div style="font-size: 13px; color: #64748b; margin-top: 25px; font-style: italic;">
+                    Nota: Los montos de detracción deben depositarse exclusivamente al <strong>Banco de la Nación</strong>, Cuenta N°: <strong>00-005-034272</strong> (Siempre en Soles).
+                </div>
+
+                <!-- ACCOUNTS FOOTER -->
+                <div class="accounts-grid">
+                    <div class="account-col">
+                        <div class="account-title">Cuentas en Soles (S/)</div>
+                        <div class="account-item"><span class="bank-label">BCP:</span> 1931472448010<br>CCI: 00219300147244801019</div>
+                        <div class="account-item"><span class="bank-label">BBVA:</span> 001103400200230077<br>CCI: 01134000020023007776</div>
+                    </div>
+                    <div class="account-col">
+                        <div class="account-title">Cuentas en Dólares (US$)</div>
+                        <div class="account-item"><span class="bank-label">BCP:</span> 1912078776145<br>CCI: 00219100207877614559</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer">
+                <strong>DACTA S.A.C.</strong> &bull; RUC: 20601995817<br>
+                Área de Cobranzas y Facturación
+            </div>
+        </div>
+    </body>
+    </html>
+    

@@ -1,0 +1,14 @@
+
+# Secrets
+secrets.txt
+config.json
+.env
+.venv/
+env/
+__pycache__/
+*.log
+*.pyc
+
+# IDE
+.vscode/
+.idea/

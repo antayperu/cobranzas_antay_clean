@@ -1,0 +1,28 @@
+
+name: DocOps Notion Automation
+
+on:
+  push:
+    tags:
+      - "v*-stable-*"
+
+jobs:
+  docops-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Execute DocOps Script
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          python docops/docops_notion.py --tag ${{ github.ref_name }} --commit ${{ github.sha }}
