@@ -1,0 +1,119 @@
+﻿Searching for page: 'Estado Actual ÔÇö ReporteCobranzas'...
+Found page ID: 2dd7544a-512b-8023-a8ef-caec365ce966
+Scanning page children for Handoff section...
+
+>>> FOUND HANDOFF SECTION: Antigravity: SSOT (fuente ├║nica) est├í en Notion. Abre ÔÇ£Estado Actual ÔÇö ReporteCobranzasÔÇØ y lee ÔÇ£Handoff Autom├ítico ÔÇö para IAÔÇØ. Confirma: tag estable, commit relevante, gates, bugs abiertos y la tarjeta Ready del Backlog. No avances sin Gate 3 (fin-a-fin) checklist cuando aplique.
+
+--- FULL PAGE DUMP (Top Level) ---
+[divider] 
+[heading_3] Handoff Autom├ítico ÔÇö ReporteCobranzas (para IA)
+[bulleted_list_item] SSOT (fuente ├║nica): Notion ÔåÆ FRD v0.2 + Estado Actual + Log del Proyecto + Gate 3 Checklist.
+[bulleted_list_item] Repo (repositorio): antayperu/cobranzas_antay_clean.
+[bulleted_list_item] Versi├│n estable actual (tag = etiqueta): v1.5.1-stable-tracking-fix.
+[bulleted_list_item] Commit relevante (hash = c├│digo corto): 9939f09.
+[bulleted_list_item] Gates (compuertas de calidad): Gate 0 PASS, Gate 3 PASS (E2E = fin-a-fin + regresi├│n).
+[bulleted_list_item] Bugs abiertos: Ninguno.
+[bulleted_list_item] Pr├│ximo paso exacto: Ir a Notion ÔåÆ Backlog ÔÇö ReporteCobranzas ÔåÆ columna Ready ÔåÆ ejecutar QA-E2E-001 (E2E = fin-a-fin) con evidencia y registrar resultado en Log del Proyecto.
+  [bulleted_list_item] Antes de ejecutar: leer la tarjeta QA-E2E-001 y confirmar AC (criterios de aceptaci├│n = condiciones de listo).
+[bulleted_list_item] Reglas no negociables:
+  [bulleted_list_item] EMAIL_FINAL (correo normalizado) puede repetirse entre clientes.
+  [bulleted_list_item] Un cliente puede tener m├║ltiples correos destino.
+  [bulleted_list_item] No cambiar columnas: COD CLIENTE, EMPRESA, SALDO REAL, CORREO, MATCH_KEY.
+  [bulleted_list_item] KPIs de email solo en tab ÔÇ£Notificaciones EmailÔÇØ.
+  [bulleted_list_item] Todo t├®rmino t├®cnico debe incluir explicaci├│n (entre par├®ntesis).
+  [bulleted_list_item] No cerrar sesi├│n sin DOCOPS-NOTION (actualizaci├│n autom├ítica en Notion): Log del Proyecto + Estado Actual + Handoff.
+[heading_3] Prompt de arranque para Antigravity (OBLIGATORIO)
+[paragraph] Este es el prompt fijo que Antigravity debe seguir:
+[paragraph] Prompt de arranque (OBLIGATORIO):
+[paragraph] Antigravity: SSOT (fuente ├║nica) est├í en Notion. Abre ÔÇ£Estado Actual ÔÇö ReporteCobranzasÔÇØ y lee ÔÇ£Handoff Autom├ítico ÔÇö para IAÔÇØ. Confirma: tag estable, commit relevante, gates, bugs abiertos y la tarjeta Ready del Backlog. No avances sin Gate 3 (fin-a-fin) checklist cuando aplique.
+[paragraph] Prompt de cierre (OBLIGATORIO):
+[paragraph] Antigravity: ejecuta DOCOPS-NOTION (actualizaci├│n autom├ítica). Actualiza Log del Proyecto, Estado Actual y Handoff Autom├ítico. Luego confirma qu├® ticket del Backlog queda en Ready como pr├│ximo paso.
+[divider] 
+[heading_3] Estado Actual ÔÇö ReporteCobranzas
+[paragraph] SSOT (fuente ├║nica de verdad): Notion ÔåÆ FRD v0.2 ÔÇö ReporteCobranzas (Antay)
+[paragraph] Repositorio GitHub (c├│digo fuente): antayperu/cobranzas_antay_clean
+[paragraph] Tag estable (versi├│n segura actual): v1.5.1-stable-tracking-fix Ô£à
+[paragraph] Tag fallback (freeze hist├│rico): v1.5.2-stable-freeze
+[paragraph] Estado general: Ô£à Tracking + KPIs corregidos y validados (Gate 3 PASS). Listo para despliegue a Streamlit Cloud.
+[paragraph] Rama actual (branch = rama): master (release ya sellado)
+[paragraph] ├Ültimo commit relevante: 9939f09 ÔÇö fix(tracking): solve tracking persistence bug and kpi inconsistency (v1.5.1)
+[divider] 
+[heading_3] Calidad (Quality Gates = compuertas de calidad)
+[bulleted_list_item] Gate 0 (sintaxis/arranque): Ô£à PASS
+[bulleted_list_item] Gate 1 (unit tests = pruebas unitarias): PENDIENTE/NA
+[bulleted_list_item] Gate 3 (E2E + Regresi├│n): Ô£à PASS (2026-01-03)
+  [bulleted_list_item] Evidencia: gate3_report.md + capturas/videos (artifacts = entregables adjuntos)
+[divider] 
+[heading_3] Alcance actual (Scope = lo que incluye esta versi├│n)
+[bulleted_list_item] Ô£à Env├¡o Email operativo
+[bulleted_list_item] Ô£à KPI ÔÇ£­ƒôº Enviados HoyÔÇØ incrementa correctamente
+[bulleted_list_item] Ô£à Trazabilidad en Reporte General: Estado Notificaci├│n (Email) + ├Ültimo Env├¡o
+[bulleted_list_item] Ô£à Tracking persistente al alternar vistas (Ejecutiva/Completa)
+[bulleted_list_item] Ô£à Reporte post-env├¡o visible (UIX-03)
+[bulleted_list_item] Ô£à Pantalla completa del Reporte General
+[bulleted_list_item] Ô£à Reglas de ciclo nuevo / ÔÇ£no sorpresasÔÇØ
+[bulleted_list_item] ÔÅ│ WhatsApp: documentar estado actual (implementado/parcial)
+[divider] 
+[heading_3] Riesgos / puntos sensibles
+[bulleted_list_item] Emails compartidos entre clientes (EMAIL_FINAL puede repetirse) debe seguir funcionando.
+[bulleted_list_item] No modificar nombres de columnas: COD CLIENTE, EMPRESA, SALDO REAL, CORREO, MATCH_KEY.
+[bulleted_list_item] No inventar flujos: seguir FRD.
+[divider] 
+[heading_3] Reglas anti-olvido (OBLIGATORIO)
+[bulleted_list_item] Antes de programar: leer FRD v0.2 completo (SSOT).
+[bulleted_list_item] Cada sesi├│n de trabajo: registrar en Log del Proyecto:
+  [bulleted_list_item] fecha
+  [bulleted_list_item] objetivo
+  [bulleted_list_item] qu├® se toc├│
+  [bulleted_list_item] resultado Gate 3 (PASS/FAIL)
+[bulleted_list_item] Todo cambio va en branch (rama) y se hace merge (integraci├│n) solo si Gate 3 PASS.
+[bulleted_list_item] Si algo falla: rollback (volver atr├ís) a v1.5.1-stable-tracking-fix (y fallback a v1.5.2-stable-freeze si aplica).
+[bulleted_list_item] La siguiente tarea SIEMPRE se toma del Backlog ÔÇö ReporteCobranzas.
+[bulleted_list_item] Antigravity debe confirmar qu├® tarjeta est├í en Ready antes de proponer cambios.
+[bulleted_list_item] No se cierra una sesi├│n sin actualizar: Log del Proyecto + Estado Actual + Handoff Autom├ítico.
+[divider] 
+[heading_3] Siguiente objetivo (controlado por Backlog):
+[paragraph] El trabajo y la prioridad se controlan en Notion en
+[paragraph] ÔÇ£Backlog ÔÇö ReporteCobranzasÔÇØ
+[paragraph] (tablero de tareas = Kanban).
+[paragraph] Regla:
+[paragraph] solo se trabaja lo que est├í en
+[paragraph] Ready
+[divider] 
+[heading_3] Pol├¡tica de Cierre de Sesi├│n (aplica a este proyecto)
+[paragraph] Objetivo: garantizar trazabilidad (registro verificable) y continuidad entre chats y sesiones con IA, sin p├®rdida de contexto.
+[paragraph] Regla: una sesi├│n NO se considera cerrada si no se completan estos pasos:
+[numbered_list_item] Backlog (tablero de tareas = Kanban)
+  [bulleted_list_item] La sesi├│n debe estar asociada a una tarjeta con ID (ej: QA-E2E-001).
+  [bulleted_list_item] Solo se trabaja tareas en columna Ready.
+  [bulleted_list_item] Al iniciar sesi├│n: mover a In Progress.
+[numbered_list_item] GitHub (repositorio de c├│digo y versiones)
+  [bulleted_list_item] Si hubo cambios: commit (registro de cambios) obligatorio con mensaje claro.
+  [bulleted_list_item] Si aplica: tag (etiqueta de versi├│n) creado al cerrar una versi├│n estable.
+  [bulleted_list_item] Si no hubo cambios: registrar expl├¡citamente ÔÇ£Sin cambios de c├│digoÔÇØ.
+[numbered_list_item] Quality Gates (compuertas de calidad)
+  [bulleted_list_item] Gate 0 (arranque/sintaxis): PASS/FAIL registrado.
+  [bulleted_list_item] Gate 3 (E2E = fin-a-fin + regresi├│n): PASS/FAIL registrado con evidencia (capturas/video/artefactos).
+[numbered_list_item] DOCOPS-NOTION (Documentaci├│n Operativa en Notion = actualizaci├│n autom├ítica)
+  [paragraph] Antigravity debe actualizar SSOT en Notion (sin copy/paste manual del PO) con:
+  [bulleted_list_item] Log del Proyecto ÔÇö ReporteCobranzas: agregar entrada usando el formato oficial.
+  [bulleted_list_item] Estado Actual ÔÇö ReporteCobranzas: actualizar tag estable, commit relevante, gates y pr├│ximo paso exacto.
+  [bulleted_list_item] Handoff Autom├ítico ÔÇö para IA: validar que coincide con Estado Actual y Backlog.
+[numbered_list_item] Cierre formal
+  [bulleted_list_item] Marcar la tarjeta del Backlog seg├║n resultado:
+    [bulleted_list_item] Si PASS: mover a Done o a la siguiente columna correspondiente.
+    [bulleted_list_item] Si FAIL: mover a Blocked o QA / Gate 3 y registrar BUG (incidencia) con ID.
+  [bulleted_list_item] Registrar el ÔÇ£pr├│ximo paso exactoÔÇØ siempre como una tarjeta del Backlog.
+[paragraph] Resultado esperado: cualquier IA (Antigravity) puede retomar el trabajo leyendo Notion (SSOT) sin depender de handoffs manuales del usuario.
+[divider] 
+[heading_3] Checklist de Cierre ÔÇö ReporteCobranzas (OBLIGATORIO)
+[to_do] Ticket activo en Backlog con ID (ej: QA-E2E-001) y estado actualizado (Ready ÔåÆ In Progress ÔåÆ QA/Gate 3 ÔåÆ Done/Blocked).
+[to_do] GitHub: commit realizado (o ÔÇ£sin cambios de c├│digoÔÇØ documentado).
+[to_do] Tag creado si aplica (versi├│n estable).
+[to_do] Gate 0 registrado: PASS/FAIL.
+[to_do] Gate 3 registrado: PASS/FAIL con evidencia (capturas/video/artefactos).
+[to_do] Notion actualizado autom├íticamente por Antigravity:
+  [to_do] Log del Proyecto actualizado.
+  [to_do] Estado Actual actualizado.
+  [to_do] Handoff Autom├ítico consistente.
+[to_do] Pr├│ximo paso definido como ticket del Backlog (columna Ready).

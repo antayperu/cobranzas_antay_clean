@@ -1,0 +1,115 @@
+﻿Searching for page: 'Estado Actual ÔÇö ReporteCobranzas'...
+Found page ID: 2dd7544a-512b-8095-bff0-c4e2071c08bb
+Scanning page children for Handoff section...
+Handoff section explicitly NOT found in top level blocks. Dumping all blocks for manual check:
+[heading_3] Log del Proyecto ÔÇö ReporteCobranzas (Bit├ícora)
+[paragraph] Formato de registro (usar siempre):
+[paragraph] [Fecha AAAA-MM-DD | Hora] ÔÇö T├¡tulo corto del cambio
+[bulleted_list_item] Objetivo (qu├® se buscaba)
+[bulleted_list_item] Cambio aplicado (archivo/rama/tag si aplica)
+[bulleted_list_item] Gate 0: PASS/FAIL
+[bulleted_list_item] Gate 3: PASS/FAIL + evidencia (link/video)
+[bulleted_list_item] Bugs abiertos (IDs o lista)
+[bulleted_list_item] Pr├│ximo paso
+[divider] 
+[heading_2] Ejemplo (plantilla)
+[paragraph] [2026-01-03 | 10:30] ÔÇö Limpieza UI Tab Reporte General
+[bulleted_list_item] Objetivo: quitar KPIs no solicitados en Reporte General, mantenerlos en Notificaciones Email.
+[bulleted_list_item] Cambio aplicado: ux/ui-cleanup (branch).
+[bulleted_list_item] Gate 0: PASS.
+[bulleted_list_item] Gate 3: PENDIENTE.
+[bulleted_list_item] Bugs abiertos: BUG-UI-01, BUG-EMAIL-02.
+[bulleted_list_item] Pr├│ximo paso: ejecutar Gate 3 y actualizar Estado Actual.
+[divider] 
+[heading_2] Registros
+[paragraph] [2026-01-03 | 17:25] ÔÇö Gate 3 E2E (End-to-End / Fin-a-Fin) ÔÇö EJECUCI├ôN COMPLETA
+[bulleted_list_item] Objetivo: Ejecutar Gate 3 E2E (pruebas fin-a-fin) con evidencia visual (CA-1 a CA-5).
+[bulleted_list_item] Cambio aplicado: Ninguno (solo verificaci├│n).
+[bulleted_list_item] Servidor (app corriendo local): streamlit run app.py (URL local: http://localhost:8501).
+[bulleted_list_item] Gate 0 (compilaci├│n/arranque): Ô£à PASS.
+[bulleted_list_item] Gate 3 (E2E): Ô£à PASS COMPLETO (5/5 casos ejecutados con evidencia).
+[bulleted_list_item] Evidencia: 8+ capturas + 5 videos (artifacts adjuntos).
+[bulleted_list_item] Bugs abiertos: Ninguno.
+[bulleted_list_item] Pr├│ximo paso: Actualizar Estado Actual ÔåÆ ÔÇ£Ô£à UI verificada como limpia (Gate 3 PASS, 2026-01-03)ÔÇØ.
+[divider] 
+[paragraph] [2026-01-03 | 22:35] ÔÇö BUG-TRACKING-001 Fix Tracking + Gate 3 Regresi├│n + Release v1.5.1
+[bulleted_list_item] Objetivo: Corregir violaci├│n FRD (6.1 / 4.3): KPI ÔÇ£­ƒôº Enviados HoyÔÇØ no incrementaba, tracking no persist├¡a y pod├¡a reescribirse al alternar vistas (Ejecutiva/Completa).
+[bulleted_list_item] Cambio aplicado: Fix Option B (guard-rail):
+[bulleted_list_item] Gate 0: Ô£à PASS (compilaci├│n OK).
+[bulleted_list_item] Gate 3 (E2E + Regresi├│n): Ô£à PASS.
+[bulleted_list_item] Evidencia: gate3_report.md (artifact) + capturas/videos de ejecuci├│n (adjunto).
+[bulleted_list_item] Bugs abiertos: Ninguno.
+[bulleted_list_item] Release:
+[bulleted_list_item] Pr├│ximo paso: Actualizar ÔÇ£Estado ActualÔÇØ + preparar despliegue a Streamlit Cloud (seg├║n deployment_note.md).
+[divider] 
+[paragraph] [2026-01-03 | 22:45] ÔÇö Cierre de sesi├│n (servidor + artifacts)
+[bulleted_list_item] Objetivo: Cerrar sesi├│n de pruebas y dejar entregables listos.
+[bulleted_list_item] Acci├│n: Servidor Streamlit detenido (ÔÇ£StoppingÔÇªÔÇØ confirmado).
+[bulleted_list_item] Entregables: notion_updates.md, gate3_report.md, deployment_note.md.
+[bulleted_list_item] Pr├│ximo paso: PO valida actualizaci├│n en Notion y aprueba despliegue a producci├│n.
+[paragraph] ­ƒñû [Antigravity Auto-Test] Write permission verification.
+[divider] 
+[paragraph] 
+[paragraph] 
+
+--- FULL PAGE DUMP (Top Level) ---
+[heading_3] Log del Proyecto ÔÇö ReporteCobranzas (Bit├ícora)
+[paragraph] Formato de registro (usar siempre):
+[paragraph] [Fecha AAAA-MM-DD | Hora] ÔÇö T├¡tulo corto del cambio
+[bulleted_list_item] Objetivo (qu├® se buscaba)
+[bulleted_list_item] Cambio aplicado (archivo/rama/tag si aplica)
+[bulleted_list_item] Gate 0: PASS/FAIL
+[bulleted_list_item] Gate 3: PASS/FAIL + evidencia (link/video)
+[bulleted_list_item] Bugs abiertos (IDs o lista)
+[bulleted_list_item] Pr├│ximo paso
+[divider] 
+[heading_2] Ejemplo (plantilla)
+[paragraph] [2026-01-03 | 10:30] ÔÇö Limpieza UI Tab Reporte General
+[bulleted_list_item] Objetivo: quitar KPIs no solicitados en Reporte General, mantenerlos en Notificaciones Email.
+[bulleted_list_item] Cambio aplicado: ux/ui-cleanup (branch).
+[bulleted_list_item] Gate 0: PASS.
+[bulleted_list_item] Gate 3: PENDIENTE.
+[bulleted_list_item] Bugs abiertos: BUG-UI-01, BUG-EMAIL-02.
+[bulleted_list_item] Pr├│ximo paso: ejecutar Gate 3 y actualizar Estado Actual.
+[divider] 
+[heading_2] Registros
+[paragraph] [2026-01-03 | 17:25] ÔÇö Gate 3 E2E (End-to-End / Fin-a-Fin) ÔÇö EJECUCI├ôN COMPLETA
+[bulleted_list_item] Objetivo: Ejecutar Gate 3 E2E (pruebas fin-a-fin) con evidencia visual (CA-1 a CA-5).
+[bulleted_list_item] Cambio aplicado: Ninguno (solo verificaci├│n).
+[bulleted_list_item] Servidor (app corriendo local): streamlit run app.py (URL local: http://localhost:8501).
+[bulleted_list_item] Gate 0 (compilaci├│n/arranque): Ô£à PASS.
+[bulleted_list_item] Gate 3 (E2E): Ô£à PASS COMPLETO (5/5 casos ejecutados con evidencia).
+  [bulleted_list_item] CA-1 (Fresh Load): Ô£à PASS ÔÇö Tracking inicializa en 0.
+  [bulleted_list_item] CA-2 (Persistencia entre tabs): Ô£à PASS ÔÇö session_state persiste entre pesta├▒as.
+  [bulleted_list_item] CA-3 (Cliente deuda 0): Ô£à PASS ÔÇö regla de negocio correcta (incluye detracci├│n si aplica).
+  [bulleted_list_item] CA-4 (Email compartido): Ô£à PASS ÔÇö sistema maneja clientes con el mismo EMAIL_FINAL (correo normalizado) sin marcar incorrectamente a otros.
+  [bulleted_list_item] CA-5 (Post-env├¡o): Ô£à PASS ÔÇö UIX-03 (reporte post-env├¡o obligatorio) visible con resumen.
+[bulleted_list_item] Evidencia: 8+ capturas + 5 videos (artifacts adjuntos).
+[bulleted_list_item] Bugs abiertos: Ninguno.
+[bulleted_list_item] Pr├│ximo paso: Actualizar Estado Actual ÔåÆ ÔÇ£Ô£à UI verificada como limpia (Gate 3 PASS, 2026-01-03)ÔÇØ.
+[divider] 
+[paragraph] [2026-01-03 | 22:35] ÔÇö BUG-TRACKING-001 Fix Tracking + Gate 3 Regresi├│n + Release v1.5.1
+[bulleted_list_item] Objetivo: Corregir violaci├│n FRD (6.1 / 4.3): KPI ÔÇ£­ƒôº Enviados HoyÔÇØ no incrementaba, tracking no persist├¡a y pod├¡a reescribirse al alternar vistas (Ejecutiva/Completa).
+[bulleted_list_item] Cambio aplicado: Fix Option B (guard-rail):
+  [bulleted_list_item] Evitar overwrite de df_final desde DB luego del env├¡o (control con flag tipo tracking_dirty).
+  [bulleted_list_item] Refresh controlado post-env├¡o + persistencia visual del ÔÇ£Resumen del ProcesoÔÇØ.
+[bulleted_list_item] Gate 0: Ô£à PASS (compilaci├│n OK).
+[bulleted_list_item] Gate 3 (E2E + Regresi├│n): Ô£à PASS.
+  [bulleted_list_item] AC1/AC2/AC6 validados: KPI incrementa, tracking solo del cliente enviado, persiste al alternar vistas.
+  [bulleted_list_item] Regresi├│n adicional con m├║ltiples clientes: PASS (incluye caso con 2 clientes filtrados y env├¡o selectivo).
+[bulleted_list_item] Evidencia: gate3_report.md (artifact) + capturas/videos de ejecuci├│n (adjunto).
+[bulleted_list_item] Bugs abiertos: Ninguno.
+[bulleted_list_item] Release:
+  [bulleted_list_item] Commit: 9939f09 ÔÇö fix(tracking): solve tracking persistence bug and kpi inconsistency (v1.5.1)
+  [bulleted_list_item] Tag: v1.5.1-stable-tracking-fix
+[bulleted_list_item] Pr├│ximo paso: Actualizar ÔÇ£Estado ActualÔÇØ + preparar despliegue a Streamlit Cloud (seg├║n deployment_note.md).
+[divider] 
+[paragraph] [2026-01-03 | 22:45] ÔÇö Cierre de sesi├│n (servidor + artifacts)
+[bulleted_list_item] Objetivo: Cerrar sesi├│n de pruebas y dejar entregables listos.
+[bulleted_list_item] Acci├│n: Servidor Streamlit detenido (ÔÇ£StoppingÔÇªÔÇØ confirmado).
+[bulleted_list_item] Entregables: notion_updates.md, gate3_report.md, deployment_note.md.
+[bulleted_list_item] Pr├│ximo paso: PO valida actualizaci├│n en Notion y aprueba despliegue a producci├│n.
+[paragraph] ­ƒñû [Antigravity Auto-Test] Write permission verification.
+[divider] 
+[paragraph] 
+[paragraph] 

@@ -1,0 +1,18 @@
+
+--- 1. SSOT READ (Handoff Automático) ---
+HEADER FOUND: 1) Handoff Automático — ReporteCobranzas (para IA) — ÚNICO BLOQUE “VIVO”
+  > Uso: esto es lo primero que Antigravity debe leer al iniciar.
+  > Regla: aquí vive la verdad operativa (tag/commit/gates/bugs/próximo paso). No se repite en otra parte.
+  > SSOT (Single Source of Truth = fuente única de verdad): Notion → FRD v0.2 + Estado Actual + Log del Proyecto + Gate 3 Checklist (lista de pruebas fin-a-fin).
+  > Repo (repositorio = lugar del código): antayperu/cobranzas_antay_clean.
+  > Versión estable actual (tag = etiqueta de versión): v1.5.2-stable-email-kpi-fix.
+  > Commit relevante (hash = código corto del cambio): 0757108.
+  > Gates (Quality Gates = compuertas de calidad):
+  > Bugs abiertos (bugs = errores): Ninguno.
+  > Próximo paso exacto (SIEMPRE desde Backlog “Ready” = listo):
+  > Reglas NO negociables:
+
+--- 2. BACKLOG READ ---
+Found Candidate: data_source | ID: 2de7544a-512b-8041-86bf-000b155c94b1 | Title: 
+Found Candidate: page | ID: 2dd7544a-512b-80de-a302-e8045bc2bcbe | Title: Backlog / Bugs — ReporteCobranzas
+Scanning Backlog ID: 2dd7544a-512b-80de-a302-e8045bc2bcbe...
