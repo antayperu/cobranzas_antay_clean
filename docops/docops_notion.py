@@ -27,62 +27,50 @@ def get_plain_text(rich_text):
 
 # 2. ACTIONS
 def query_backlog():
-    print("--- 1. BACKLOG QUERY ---")
+    print("--- 1. BACKLOG QUERY (HTTP) ---")
     db_id = IDS["backlog_database_id"]
-    print(f"Database ID: {db_id}")
+    print(f"database_id: {db_id}")
     
-    results = [] # Placeholder
-    query_success = False
+    url = f"https://api.notion.com/v1/databases/{db_id}/query"
+    headers = {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json"
+    } 
     
-    # METHOD A: SDK
+    import urllib.request
+    import urllib.error
+    
     try:
-        print("Attempting Method: SDK (client.databases.query)...")
-        if not hasattr(client.databases, 'query'):
-            raise AttributeError("client.databases.query missing")
-            
-        resp = client.databases.query(
-            database_id=db_id,
-            filter={
+        data = json.dumps({
+            "filter": {
                 "or": [
                     {"property": "Status", "status": {"equals": "Ready"}},
                     {"property": "Estado", "status": {"equals": "Ready"}},
                     {"property": "Estado", "select": {"equals": "Ready"}}
                 ]
             },
-            page_size=1
-        )
-        results = resp.get("results", [])
-        print(f"✅ Method Used: SDK. Result Count: {len(results)}")
-        query_success = True
+            "page_size": 1
+        }).encode("utf-8")
         
-    except Exception as e:
-        print(f"⚠️ SDK Method Failed: {e}")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         
-        # METHOD B: RAW FALLBACK
-        try:
-            print("Attempting Method: RAW (client.request)...")
-            resp = client.request(
-                method="POST",
-                path=f"databases/{db_id}/query",
-                body={
-                    "filter": {
-                        "or": [
-                            {"property": "Status", "status": {"equals": "Ready"}},
-                            {"property": "Estado", "status": {"equals": "Ready"}},
-                            {"property": "Estado", "select": {"equals": "Ready"}}
-                        ]
-                    },
-                    "page_size": 1
-                }
-            )
-            results = resp.get("results", [])
-            print(f"✅ Method Used: RAW. Result Count: {len(results)}")
-            query_success = True
+        with urllib.request.urlopen(req) as response:
+            status_code = response.getcode()
+            print(f"status_code: {status_code}")
             
-        except Exception as e2:
-            print(f"❌ RAW Method Failed: {e2}")
-            print("❌ CRITICAL: Both Query Methods Failed.")
-            sys.exit(1) # RULE: Fail if Backlog cannot be queried
+            resp_body = response.read().decode("utf-8")
+            result = json.loads(resp_body)
+            results = result.get("results", [])
+            print(f"len(results): {len(results)}")
+            
+    except urllib.error.HTTPError as e:
+        print(f"❌ HTTP ERROR: {e.code}")
+        print(f"response_text: {e.read().decode('utf-8')}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ GENERIC ERROR: {e}")
+        sys.exit(1)
 
     if not results:
         print("⚠️ No Ready cards found (Query Success).")
