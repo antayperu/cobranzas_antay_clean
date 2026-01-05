@@ -479,3 +479,33 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     final_cols = [c for c in final_cols if c in df_merged.columns]
     
     return df_merged[final_cols]
+
+# --- RC-FIX-BUG-EMAIL-COUNTERS-001 ---
+def calculate_email_kpis(df):
+    """
+    Calcula KPIs de Email basados en SSOT (df_final).
+    Retorna:
+    - sent_today_count (int): Clientes únicos enviados hoy.
+    - sent_today_clients (list): Lista de COD CLIENTE enviados hoy.
+    """
+    if df is None or df.empty:
+        return 0, []
+        
+    # Validar columnas necesarias
+    required_cols = ['FECHA_ULTIMO_ENVIO', 'COD CLIENTE']
+    if not all(col in df.columns for col in required_cols):
+        return 0, []
+        
+    # Definir HOY
+    from datetime import date
+    today_str = date.today().strftime('%Y-%m-%d')
+    
+    try:
+        # Filtrar solo lo que parezca fecha válida para hoy
+        mask_today = df['FECHA_ULTIMO_ENVIO'].astype(str).str.strip().str.startswith(today_str, na=False)
+        sent_clients = df[mask_today]['COD CLIENTE'].unique().tolist()
+        return len(sent_clients), sent_clients
+        
+    except Exception as e:
+        print(f"Error calculating Email KPIs: {e}")
+        return 0, []

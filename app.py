@@ -3,7 +3,7 @@ import pandas as pd
 import urllib.parse
 from datetime import date, datetime
 import hashlib
-from utils.processing import load_data, process_data
+from utils.processing import load_data, process_data, calculate_email_kpis
 from utils.excel_export import generate_excel
 
 # --- FULLSCREEN VIEW DETECTION (ANTES de set_page_config) ---
@@ -669,10 +669,11 @@ if st.session_state['data_ready']:
                 # --- RC-FEAT-REPORT-V4 ---
                 # Update SSOT Tracking Columns from Database
                 # CRITICAL: Only update from DB if NOT a fresh load (continuing previous work)
+                # GUARD RAIL: NO overwrite if tracking_dirty=True (local changes from email send)
                 is_fresh_load = st.session_state.get('fresh_load', False)
-                
-                if not is_fresh_load:
-                    # Continuing previous work - update from DB
+                tracking_dirty = st.session_state.get('tracking_dirty', False)
+                if not is_fresh_load and not tracking_dirty:
+                    # Continuing previous work - update from DB ONLY if no local changes
                     def get_rich_status(email, field):
                         if not email: return ""
                         st_info = status_map.get(email, {})
@@ -691,7 +692,7 @@ if st.session_state['data_ready']:
                     # Update session state with the updated SSOT
                     st.session_state['df_final'] = df_final
                 else:
-                    # Fresh load - keep columns as initialized in processing.py (PENDIENTE)
+                    # Fresh load OR tracking_dirty: keep df_final as-is (don't overwrite from DB)
                     # FIX: NO resetear fresh_load aquí, solo después del primer envío exitoso
                     # para evitar que en el siguiente rerun se actualice desde DB con datos del ciclo anterior
                     pass
@@ -1303,6 +1304,50 @@ if st.session_state['data_ready']:
         st.subheader("Gestión de Correos")
         
         if not df_final.empty:
+            # --- Renderizar Reporte Post-Envío si existe en session_state ---
+            if 'last_send_results' in st.session_state and st.session_state['last_send_results']:
+                results = st.session_state['last_send_results']
+                
+                st.success("✅ Envío completado. Resultados del último proceso:")
+                
+                # --- RC-UX-002: Panel de Resultados Amigable ---
+                st.divider()
+                st.subheader("📊 Resumen del Proceso")
+                
+                # A) Resumen Ejecutivo (Métricas)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("✅ Enviados", results['success'])
+                c2.metric("❌ Fallidos", results['failed'])
+                c3.metric("🔒 Bloqueados (TTL)", results.get('blocked', 0))
+                
+                # B) Tabla de Detalles (Negocio)
+                if 'details' in results and results['details']:
+                    df_res = pd.DataFrame(results['details'])
+                    
+                    st.write("📝 **Detalle por Cliente:**")
+                    st.dataframe(
+                        df_res[['Cliente', 'Email', 'Estado', 'Detalle']], 
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # Botón descarga
+                    csv = df_res.to_csv(index=False).encode('utf-8')
+                    batch_id = st.session_state.get('last_processed_batch_id', 'unknown')
+                    st.download_button(
+                        "📄 Descargar Reporte de Envío (CSV)",
+                        data=csv,
+                        file_name=f"reporte_envio_{batch_id[:8]}.csv",
+                        mime="text/csv"
+                    )
+                
+                # Botón para cerrar el reporte
+                if st.button("✅ Cerrar Reporte"):
+                    del st.session_state['last_send_results']
+                    st.rerun()
+                
+                st.divider()
+            
             c_mail1, c_mail2 = st.columns([1, 1])
             
             with c_mail1:
@@ -1331,56 +1376,32 @@ if st.session_state['data_ready']:
                         (client_group_email['DETR_PENDIENTE_AMOUNT'] > 0.01)
                     ]
                     
-                    # --- RC-FEAT-UX-EMAIL: Smart Filters & Counters (Tower Integration) ---
-                    # FIX E2E: NO consultar DB si es fresh_load (nuevo ciclo) para evitar contaminación
-                    is_fresh_load = st.session_state.get('fresh_load', False)
+                    # --- RC-FIX-BUG-EMAIL-COUNTERS-001 (Persistence) ---
+                    # Calcular KPIs usando SSOT (df_final) via helper
+                    # Esto garantiza que los contadores sobrevivan al reload
+                    sent_count, sent_clients_list = calculate_email_kpis(df_final)
                     
-                    # --- KPIs de Envío (TAB Notificaciones Email) ---
-                    # Calcular por COD_CLIENTE único para evitar confusión con emails compartidos
-                    from datetime import date
-                    today_str = date.today().strftime('%Y-%m-%d')
-                    
-                    # Contar clientes enviados HOY
-                    if 'ESTADO_EMAIL' in df_final.columns and 'FECHA_ULTIMO_ENVIO' in df_final.columns:
-                        mask_enviado = df_final['ESTADO_EMAIL'] == 'ENVIADO'
-                        mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
-                        mask_enviado_hoy = mask_enviado & mask_hoy
-                        
-                        # COD_CLIENTE únicos enviados hoy
-                        clientes_enviados_hoy_count = df_final[mask_enviado_hoy]['COD CLIENTE'].nunique()
-                    else:
-                        clientes_enviados_hoy_count = 0
-                    
-                    # Total de clientes disponibles (con email y saldo/detracción pendiente)
-                    total_clientes_disponibles = len(client_group_email)
-                    pendientes_envio_count = total_clientes_disponibles
-                    
-                    # Mostrar KPIs
+                    # KPIs Actualizados
+                    clientes_enviados_hoy_count = sent_count
+
+                    # --- Filtrar clientes disponibles (Lógica Movida ANTES de mostrar KPIs) ---
+                    # Layout de columnas para KPIs y Controles
                     c_stat1, c_stat2, c_ctrl = st.columns([1, 1, 2])
-                    c_stat1.metric("⏳ Pendientes de Envío", pendientes_envio_count)
-                    c_stat2.metric("📧 Enviados Hoy", clientes_enviados_hoy_count)
-                    
-                    # --- Filtrar clientes disponibles ---
-                    # IMPORTANTE: Filtrar por COD_CLIENTE enviado, NO por EMAIL_FINAL
-                    # (Porque EMAIL_FINAL puede ser compartido por múltiples clientes)
                     
                     hide_sent_today = c_ctrl.toggle("🙈 Ocultar ya enviados hoy", value=True, help="Oculta de la lista los clientes que ya recibieron correo hoy.")
                     
-                    if hide_sent_today:
-                        # Obtener COD_CLIENTE de clientes enviados HOY desde df_final (SSOT)
-                        from datetime import date
-                        today_str = date.today().strftime('%Y-%m-%d')
-                        
-                        if 'ESTADO_EMAIL' in df_final.columns and 'FECHA_ULTIMO_ENVIO' in df_final.columns:
-                            mask_enviado = df_final['ESTADO_EMAIL'] == 'ENVIADO'
-                            mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
-                            mask_enviado_hoy = mask_enviado & mask_hoy
-                            
-                            # Obtener COD_CLIENTE únicos enviados hoy
-                            clientes_enviados_hoy = df_final[mask_enviado_hoy]['COD CLIENTE'].unique()
-                            
-                            # Filtrar: excluir clientes enviados hoy
-                            client_group_email = client_group_email[~client_group_email['COD CLIENTE'].isin(clientes_enviados_hoy)]
+                    if hide_sent_today and sent_clients_list:
+                        # Filtrar: excluir clientes enviados hoy usando la lista calculada (SSOT)
+                        client_group_email = client_group_email[~client_group_email['COD CLIENTE'].isin(sent_clients_list)]
+                    
+                    # --- Calcular KPIs con la lista FINAL filtrada ---
+                    # Total de clientes disponibles (coincide con opciones del multiselect)
+                    total_clientes_disponibles = len(client_group_email)
+                    pendientes_envio_count = total_clientes_disponibles
+                    
+                    # Mostrar KPIs (Ahora sí sincronizados con el multiselect)
+                    c_stat1.metric("⏳ Pendientes de Envío", pendientes_envio_count)
+                    c_stat2.metric("📧 Enviados Hoy", clientes_enviados_hoy_count)
                     
                     st.markdown("---")
                     
@@ -1723,6 +1744,10 @@ if st.session_state['data_ready']:
                                     # 4. Log Trace
                                     # We rely on 'original_email' field stored above for reporting
                             
+                            # --- GUARD RAIL: Guardar COD CLIENTE seleccionados para tracking preciso ---
+                            selected_cod_clientes = [email_map[lbl]['cod'] for lbl in sel_emails]
+                            st.session_state['last_send_selected_cod'] = selected_cod_clientes
+                            
                             # Enviar Batch con Logo
                             with st.spinner(f"Enviando con Business Lock (Fecha: {fecha_corte})..."):
                                 # Obtener cycle_id del session_state
@@ -1765,17 +1790,22 @@ if st.session_state['data_ready']:
                                                  msg = next((m for m in messages_to_send if m['client_name'] == sent_client), None)
                                              
                                              if msg and msg.get('match_keys'):
-                                                 # Actualizar por MATCH_KEY (estable por documento, no por email)
-                                                 for mk in msg['match_keys']:
-                                                     mask = st.session_state['df_final']['MATCH_KEY'] == mk
-                                                     num_updated = mask.sum()
+                                                # Actualizar por MATCH_KEY (estable por documento, no por email)
+                                                # GUARD RAIL: También filtrar por COD CLIENTE para evitar updates masivos
+                                                cod_cliente_msg = msg.get('cod_cliente')
+                                                
+                                                for mk in msg['match_keys']:
+                                                    # Filtro doble: MATCH_KEY + COD CLIENTE
+                                                    mask = (st.session_state['df_final']['MATCH_KEY'] == mk) & \
+                                                        (st.session_state['df_final']['COD CLIENTE'] == cod_cliente_msg)
+                                                    num_updated = mask.sum()
                                                      
-                                                     if num_updated > 0:
-                                                         st.session_state['df_final'].loc[mask, 'ESTADO_EMAIL'] = "ENVIADO"
-                                                         st.session_state['df_final'].loc[mask, 'FECHA_ULTIMO_ENVIO'] = now_timestamp.strftime('%Y-%m-%d %H:%M:%S')
-                                                         if 'ESTADO_ENVIO_TEXTO' in st.session_state['df_final'].columns:
-                                                             st.session_state['df_final'].loc[mask, 'ESTADO_ENVIO_TEXTO'] = f"ENVIADO ({now_timestamp.strftime('%H:%M')})"
-                                                         updated_match_keys.append(mk)
+                                                    if num_updated > 0:
+                                                        st.session_state['df_final'].loc[mask, 'ESTADO_EMAIL'] = "ENVIADO"
+                                                        st.session_state['df_final'].loc[mask, 'FECHA_ULTIMO_ENVIO'] = now_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                                                        if 'ESTADO_ENVIO_TEXTO' in st.session_state['df_final'].columns:
+                                                            st.session_state['df_final'].loc[mask, 'ESTADO_ENVIO_TEXTO'] = f"ENVIADO ({now_timestamp.strftime('%H:%M')})"
+                                                        updated_match_keys.append(mk)
                                      
                                      # Recalcular df_filtered desde df_final actualizado
                                      # (Aplicar los mismos filtros que están actualmente activos)
@@ -1804,15 +1834,16 @@ if st.session_state['data_ready']:
                                      
                                      # IMPORTANTE: Marcar fresh_load=False después del primer envío exitoso
                                      st.session_state['fresh_load'] = False
-                                     
+                                     # GUARD RAIL: Marcar que hay cambios locales de tracking
+                                     st.session_state['tracking_dirty'] = True
                                      # Guardar resultados para persistencia post-rerun
                                      st.session_state['last_send_results'] = results
                                      st.session_state['last_send_timestamp'] = now_timestamp.strftime('%Y-%m-%d %H:%M:%S')
                                      
-                                     # IMPORTANTE: Forzar rerun para refrescar Reporte General
-                                     # Los resultados quedan guardados en session_state
-                                     # if len(updated_match_keys) > 0:
-                                     #     st.rerun()  # Comentado: permite renderizar reporte post-envío (líneas 1817+)
+                                     # IMPORTANTE: Forzar rerun para refrescar KPIs
+                                     # Los resultados quedan guardados en session_state para renderizar post-rerun
+                                     if len(updated_match_keys) > 0:
+                                         st.rerun()  # Refresca KPIs + mantiene Reporte Post-Envío vía session_state
 
                             
                             # --- RC-UX-002: Panel de Resultados Amigable ---
