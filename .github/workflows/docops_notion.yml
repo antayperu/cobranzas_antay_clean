@@ -23,12 +23,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install notion-client
 
-      - name: Bootstrap IDs
-        env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        run: |
-          python docops/bootstrap_ids.py
-
       - name: Run DocOps Script
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}

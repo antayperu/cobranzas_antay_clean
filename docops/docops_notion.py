@@ -6,20 +6,18 @@ import argparse
 from datetime import datetime
 from notion_client import Client
 
-# Load Config
+# 1. LOAD CONFIG
+ID_FILE = "docops/notion_ids.json"
 try:
-    with open("docops/notion_ids.json", "r", encoding="utf-8") as f:
+    with open(ID_FILE, "r", encoding="utf-8") as f:
         IDS = json.load(f)
 except FileNotFoundError:
-    print("❌ docops/notion_ids.json not found.")
-    IDS = {}
-    # We can try to proceed if we have basic IDs hardcoded? No, failure.
-    # sys.exit(1)
+    print(f"❌ CRITICAL: {ID_FILE} missing.")
+    sys.exit(1)
 
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
 if not NOTION_TOKEN:
-    print("❌ NOTION_TOKEN env var missing.")
-    # For local test w/o env, try args?
+    print("❌ CRITICAL: NOTION_TOKEN env var missing.")
     sys.exit(1)
 
 client = Client(auth=NOTION_TOKEN)
@@ -27,174 +25,215 @@ client = Client(auth=NOTION_TOKEN)
 def get_plain_text(rich_text):
     return "".join([t.get("plain_text", "") for t in rich_text])
 
-def fetch_ready_card():
-    print("--- FETCHING READY CARD (BACKLOG) ---")
-    backlog_id = IDS.get("backlog_database_id", "2de7544a-512b-80de-b980-fecb94b6e5ee")
+# 2. ACTIONS
+def query_backlog():
+    print("--- 1. BACKLOG QUERY (API) ---")
+    db_id = IDS["backlog_database_id"]
+    
     try:
-        # Fallback to pure search if ID is suspect? 
-        # But we must use the ID provided.
-        # Try Query
-        resp = client.databases.query(
-            database_id=backlog_id,
-            filter={
-                "or": [
-                    {"property": "Status", "status": {"equals": "Ready"}},
-                    {"property": "Estado", "status": {"equals": "Ready"}},
-                    {"property": "Estado", "select": {"equals": "Ready"}}
-                ]
-            },
-            page_size=1
+        # Raw Request for robustness
+        resp = client.request(
+            path=f"databases/{db_id}/query",
+            method="POST",
+            body={
+                "filter": {
+                    "or": [
+                        {"property": "Status", "status": {"equals": "Ready"}},
+                        {"property": "Estado", "status": {"equals": "Ready"}},
+                        {"property": "Estado", "select": {"equals": "Ready"}}
+                    ]
+                },
+                # Sort: Priority Descending? User said "P0 primero". 
+                # Assuming Sort by some propery? If not specified, standard order.
+                # Adding a sort if we knew the property. For now, default order.
+                "page_size": 1
+            }
         )
-        
-        results = resp.get("results", [])
-        if results:
-            props = results[0]["properties"]
-            title = "Untitled"
-            for k,v in props.items():
-                if v["type"] == "title":
-                    title = get_plain_text(v["title"])
-            
-            p_id = "N/A"
-            for k,v in props.items():
-                if k.lower() in ["id", "ticket id"]:
-                     if v["type"] == "unique_id": p_id = f"{v['unique_id'].get('prefix','')}-{v['unique_id'].get('number','')}"
-            
-            print(f"✅ FOUND READY CARD: {title} ({p_id})")
-            return {"title": title, "id": p_id}
-        else:
-            print("⚠️ No Ready cards found.")
-            return {"title": "Selección de siguiente tarjeta Ready (Backlog)", "id": "N/A"}
-            
     except Exception as e:
-        print(f"❌ Query Failed: {e}")
-        # Return Placeholder so automation continues
-        return {"title": "MANUAL CHECK REQUIRED (Backlog API Error)", "id": "API-ERR"}
+        print(f"❌ API FAIL: Could not query Backlog {db_id}. Error: {e}")
+        sys.exit(1) # RULE: Fail if API fails
 
-def find_anchor_dynamically(page_id):
+    results = resp.get("results", [])
+    
+    if not results:
+        print("⚠️ No Ready cards found.")
+        return {"title": "Sin Ready", "id": ""}
+    
+    # Extract First Card
+    page = results[0]
+    props = page["properties"]
+    
+    # Title
+    title = "Untitled"
+    for k, v in props.items():
+        if v["type"] == "title":
+            title = get_plain_text(v["title"])
+            
+    # ID (Flexible)
+    card_id = ""
+    for k, v in props.items():
+        k_lower = k.lower()
+        if "id" in k_lower or "ticket" in k_lower:
+            if v["type"] == "unique_id":
+                uid = v["unique_id"]
+                card_id = f"{uid.get('prefix','')}-{uid.get('number','')}"
+            elif v["type"] == "rich_text":
+                card_id = get_plain_text(v["rich_text"])
+            elif v["type"] == "number":
+                card_id = str(v.get("number", ""))
+
+    print(f"✅ READY CARD: {title} ({card_id})")
+    
+    full_text = title
+    if card_id:
+        full_text = f"{card_id} {title}"
+        
+    return {"title": full_text, "id": card_id}
+
+def update_handoff(tag, commit, gates, bugs, next_step_text):
+    print("\n--- 2. UPDATE HANDOFF (SSOT) ---")
+    page_id = IDS["estado_page_id"]
+    anchor_id = IDS["handoff_anchor_block_id"]
+    
+    # Get children to find block IDs relative to anchor
     try:
         children = client.blocks.children.list(block_id=page_id).get("results", [])
-        for i, b in enumerate(children):
-            txt = ""
-            if "rich_text" in b.get(b["type"], {}):
-                 txt = get_plain_text(b[b["type"]]["rich_text"])
-            if "DOCOPS_ANCHOR_HANDOFF" in txt or "Handoff Automático" in txt:
-                print(f"✅ Dynamic Anchor Found: {b['id']}")
-                return b['id'], i, children
     except Exception as e:
-        print(f"Error scanning page: {e}")
-    return None, -1, []
+        print(f"❌ API FAIL: Read Page {page_id}. Error: {e}")
+        sys.exit(1)
 
-def update_handoff(tag, commit, gates, bugs, next_step):
-    print("\n--- UPDATING HANDOFF (IN-PLACE) ---")
-    
-    page_id = IDS.get("estado_page_id", "2dd7544a512b8023a8efcaec365ce966")
-    anchor_id, anchor_idx, children = find_anchor_dynamically(page_id)
-    
+    # Locate Anchor Index
+    anchor_idx = -1
+    for i, b in enumerate(children):
+        if b['id'] == anchor_id:
+            anchor_idx = i
+            break
+            
     if anchor_idx == -1:
-        print("❌ Anchor block not found.")
-        return
+        print("❌ CRITICAL: Anchor block not found in page.")
+        sys.exit(1)
 
+    # Clean Updates
     keys = {
         "versión": f"Versión estable actual (tag): {tag}",
         "commit": f"Commit relevante (hash): {commit}",
         "gates": f"Gates (calidad): {gates}",
         "bugs": f"Bugs Abiertos: {bugs}",
-        "próximo paso": f"Próximo paso exacto: {next_step}"
+        "próximo paso": f"Próximo paso exacto: {next_step_text}"
     }
-    
+
     found_keys = set()
-    updates = 0
     
+    # Scan only the section below anchor
     for i in range(anchor_idx + 1, len(children)):
         b = children[i]
+        
+        # Boundary Check
         if b["type"] in ["heading_1", "heading_2", "heading_3", "divider"]:
             break
             
         b_type = b["type"]
         txt = ""
+        # Handle text extraction for update
         if "rich_text" in b.get(b_type, {}):
              txt = get_plain_text(b[b_type]["rich_text"]).lower()
         
         if not txt.strip(): continue
 
-        for k, new_text in keys.items():
+        for k, new_val in keys.items():
             if k in txt:
                 if k in found_keys:
+                    # DUPLICATE -> DELETE
                     try:
                         client.blocks.delete(block_id=b['id'])
-                        print(f"Deleted duplicate '{k}'")
+                        print(f"  [DELETE] Duplicate '{k}'")
                     except: pass
                 else:
+                    # UPDATE
                     found_keys.add(k)
-                    client.blocks.update(
-                        block_id=b['id'],
-                        **{b_type: {"rich_text": [{"text": {"content": new_text}}]}}
-                    )
-                    print(f"Updated '{k}' -> {new_text}")
-                    updates += 1
+                    try:
+                        client.blocks.update(
+                            block_id=b['id'],
+                            **{b_type: {"rich_text": [{"text": {"content": new_val}}]}}
+                        )
+                        print(f"  [UPDATE] '{k}' -> {new_val}")
+                    except Exception as e:
+                        print(f"❌ FAIL: Update block {b['id']}: {e}")
+                        sys.exit(1)
                 break
 
-def update_log(tag, commit, gates, bugs, next_step):
-    print("\n--- UPDATING LOG ---")
-    log_id = IDS.get("log_page_id", "2dd7544a512b8095bff0c4e2071c08bb")
+def update_log(tag, commit, gates, bugs, next_step_text):
+    print("\n--- 3. UPDATE LOG ---")
+    page_id = IDS["log_page_id"]
     repo_url = f"https://github.com/antayperu/cobranzas_antay_clean/tree/{tag}/artifacts/gate3"
+    
     now_str = datetime.now().strftime("%Y-%m-%d | %H:%M")
-    entry_text = f"[{now_str}] — Automación DocOps — {tag} — {commit} — {gates} — Bugs: {bugs} — Next: {next_step}"
+    log_msg = f"[{now_str}] — Automación DocOps — {tag} — {commit} — {gates} — Bugs: {bugs} — Next: {next_step_text}"
     
     try:
         client.blocks.children.append(
-            block_id=log_id,
+            block_id=page_id,
             children=[{
                 "object": "block",
                 "type": "bulleted_list_item",
                 "bulleted_list_item": {
                     "rich_text": [
-                        {"text": {"content": entry_text}},
+                        {"text": {"content": log_msg}},
                         {"text": {"content": " [Evidencia]", "link": {"url": repo_url}}}
                     ]
                 }
             }]
         )
-        print("Log entry appended.")
+        print("✅ Log appended.")
     except Exception as e:
-        print(f"Log Error: {e}")
+        print(f"❌ FAIL: Log append error: {e}")
+        sys.exit(1)
 
-def readback(tag, commit, next_step):
-    print("\n--- SSOT READBACK ---")
-    page_id = IDS.get("estado_page_id", "2dd7544a512b8023a8efcaec365ce966")
-    anchor_id, anchor_idx, children = find_anchor_dynamically(page_id)
-    
-    if anchor_idx == -1: return
+def verify_readback(tag, commit, next_step_text):
+    print("\n--- 4. READBACK VALIDATION ---")
+    page_id = IDS["estado_page_id"]
+    anchor_id = IDS["handoff_anchor_block_id"]
 
-    capturing = True # Start capturing from the anchor check
-    
-    data = {"tag": False, "commit": False, "next": False}
-    
-    # Check anchor content + siblings
-    for i in range(anchor_idx + 1, len(children)):
-        b = children[i]
-        if b["type"] in ["heading_1", "heading_2", "heading_3", "divider"]:
-            break
-        
-        txt = ""
-        if "rich_text" in b.get(b["type"], {}):
-                txt = get_plain_text(b[b["type"]]["rich_text"])
-        
-        if tag in txt: data["tag"] = True
-        if commit in txt: data["commit"] = True
-        if next_step in txt: data["next"] = True
-        
-        if txt.strip(): print(f"> {txt}")
+    try:
+        children = client.blocks.children.list(block_id=page_id).get("results", [])
+    except:
+        print("❌ FAIL: Readback connection error.")
+        sys.exit(1)
 
-    if all(data.values()):
-        print("✅ READBACK VERIFIED: CONSISTENT.")
+    found_anchor = False
+    
+    checks = {
+        "tag": {"expected": tag, "found": False},
+        "commit": {"expected": commit, "found": False},
+        "next": {"expected": next_step_text, "found": False}
+    }
+
+    for b in children:
+        if b['id'] == anchor_id:
+            found_anchor = True
+            continue
+        
+        if found_anchor:
+            if b["type"] in ["heading_1", "heading_2", "heading_3", "divider"]:
+                break
+            
+            txt = ""
+            if "rich_text" in b.get(b["type"], {}):
+                 txt = get_plain_text(b[b["type"]]["rich_text"])
+            
+            if checks["tag"]["expected"] in txt: checks["tag"]["found"] = True
+            if checks["commit"]["expected"] in txt: checks["commit"]["found"] = True
+            if checks["next"]["expected"] in txt: checks["next"]["found"] = True
+            
+            if txt.strip(): print(f"> {txt}")
+
+    failed = [k for k, v in checks.items() if not v["found"]]
+    
+    if failed:
+        print(f"❌ READBACK FAILED. Missing: {failed}")
+        sys.exit(1)
     else:
-        print(f"❌ READBACK FAILED: {data}")
-        # Don't exit 1 if API error on next step was expected
-        if "API-ERR" in next_step and data["tag"] and data["commit"]:
-             print("⚠️ Partial Success (Backlog API Error acknowledged).")
-        else:
-             sys.exit(1)
+        print("✅ READBACK SUCCESS: All fields match SSOT.")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -202,15 +241,22 @@ def main():
     parser.add_argument("--commit", required=True)
     args = parser.parse_args()
     
+    # 1. Backlog
+    card_data = query_backlog()
+    next_step = card_data["title"]
+    
+    # 2. Handoff
     commit_short = args.commit[:7]
-    card = fetch_ready_card()
-    next_step = card["title"]
-    if card["id"] not in ["N/A", "ERROR", "API-ERR"]:
-        next_step = f"{card['id']} {card['title']}"
-
-    update_handoff(args.tag, commit_short, "Gate 0 PASS, Gate 3 PASS", "0", next_step)
-    update_log(args.tag, commit_short, "Gate 0 PASS, Gate 3 PASS", "0", next_step)
-    readback(args.tag, commit_short, next_step)
+    gates = "Gate 0 PASS, Gate 3 PASS (E2E)"
+    bugs = "0"
+    
+    update_handoff(args.tag, commit_short, gates, bugs, next_step)
+    
+    # 3. Log
+    update_log(args.tag, commit_short, gates, bugs, next_step)
+    
+    # 4. Readback
+    verify_readback(args.tag, commit_short, next_step)
 
 if __name__ == "__main__":
     main()
