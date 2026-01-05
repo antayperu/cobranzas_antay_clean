@@ -13,7 +13,8 @@ if not NOTION_TOKEN:
 # Known IDs (public/safe)
 ESTADO_ACTUAL_ID = "2dd7544a512b8023a8efcaec365ce966"
 LOG_PAGE_ID = "2dd7544a512b8095bff0c4e2071c08bb"
-BACKLOG_DB_ID = "2de7544a-512b-80de-a302-e257ebc9735e"
+# ID derived from User URL: https://exciting-guitar-bc0.notion.site/2de7544a512b80deb980fecb94b6e5ee
+BACKLOG_DB_ID = "2de7544a-512b-80de-b980-fecb94b6e5ee"
 
 client = Client(auth=NOTION_TOKEN)
 
