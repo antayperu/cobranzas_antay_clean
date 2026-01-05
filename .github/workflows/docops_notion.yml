@@ -25,4 +25,13 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         run: |
-          python docops/docops_notion.py --tag ${{ github.ref_name }} --commit ${{ github.sha }}
+          python docops/docops_notion.py --tag ${{ github.ref_name }} --commit ${{ github.sha }} > docops_run.log 2>&1 || true
+          cat docops_run.log
+          if grep -q "CRITICAL" docops_run.log; then exit 1; fi
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: docops-logs
+          path: docops_run.log
