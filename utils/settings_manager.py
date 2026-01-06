@@ -10,9 +10,10 @@ DEFAULT_SETTINGS = {
     "primary_color": "#2E86AB",
     "secondary_color": "#A23B72",
     "email_template": {
-        "intro_text": "Le informamos que a la fecha presenta documentos pendientes de pago.\nAgradeceremos gestionar la cancelación para mantener su servicio activo y evitar inconvenientes.",
+        "intro_text": "Estimado {CLIENTE},\nLe informamos que a la fecha presenta documentos pendientes de pago.\nAgradeceremos gestionar la cancelación para mantener su servicio activo y evitar inconvenientes.",
         "footer_text": "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje.\n\nAtentamente,\nÁrea de Cobranzas y Facturación",
-        "alert_text": "Si el documento está afecto a Detracción, debe abonarlo en nuestra cuenta del Banco de la Nación N° 00-058-420913."
+        "alert_text": "Si el documento está afecto a Detracción, debe abonarlo en nuestra cuenta del Banco de la Nación N° 00-058-420913.",
+        "voucher_text": "Si ya canceló, debe enviar los vouchers al siguiente correo: ncamacho@integrens.com"
     },
     "smtp_config": {
         "server": "smtp.gmail.com",
