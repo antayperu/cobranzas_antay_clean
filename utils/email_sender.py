@@ -125,9 +125,9 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         # Default with {cliente} placeholder support
         raw_intro = "Estimado cliente {cliente},\nAdjuntamos el detalle actualizado de sus documentos pendientes de pago. Agradeceremos verificar la siguiente información:"
     
-    # Process Intro: Safe render + Client Name injection
+    # Process Intro: Safe render + Client Name injection (case-insensitive)
     safe_cliente = html.escape(str(client_name))
-    intro_html = nl2br_safe(raw_intro).replace("{cliente}", safe_cliente)
+    intro_html = nl2br_safe(raw_intro).replace("{CLIENTE}", safe_cliente).replace("{cliente}", safe_cliente)
 
     # B. Footer Text (RC-BUG-018: Exclusive Logic)
     # If custom text is present, we use IT ALONE (replacing the default signature).
@@ -156,6 +156,17 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                 {alert_content_html}
             </div>
             """
+
+    # D. Voucher/Bank Note Block (Configurable - RC-HOTFIX-HTML-001)
+    voucher_block_html = ""
+    raw_voucher = email_config.get('voucher_text', '').strip()
+    if raw_voucher:
+        voucher_content_html = nl2br_safe(raw_voucher)
+        voucher_block_html = f"""
+        <div style="font-size: 13px; color: #64748b; margin-top: 25px; font-style: italic;">
+            {voucher_content_html}
+        </div>
+        """
 
     # Header Compacto
     current_date = datetime.now().strftime("%d/%m/%Y")
@@ -447,9 +458,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                     </div>
                 </div>
                 
-                <div style="font-size: 13px; color: #64748b; margin-top: 25px; font-style: italic;">
-                    Nota: Los montos de detracción deben depositarse exclusivamente al <strong>Banco de la Nación</strong>, Cuenta N°: <strong>00-005-034272</strong> (Siempre en Soles).
-                </div>
+                {voucher_block_html}
 
                 <!-- ACCOUNTS FOOTER -->
                 <div class="accounts-grid">

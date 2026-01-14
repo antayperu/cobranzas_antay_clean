@@ -1984,9 +1984,10 @@ if st.session_state['data_ready']:
             st.markdown("---")
             st.subheader("Plantilla de Correo")
             col_t1, col_t2 = st.columns(2)
-            new_intro = col_t1.text_area("Texto Introductorio", value=CONFIG['email_template']['intro_text'], height=150, help="Texto antes de la tabla de deuda.")
+            new_intro = col_t1.text_area("Texto Introductorio", value=CONFIG['email_template']['intro_text'], height=150, help="Texto antes de la tabla de deuda. Usa {CLIENTE} para insertar el nombre del cliente.")
             new_footer = col_t2.text_area("Texto Pie de Página", value=CONFIG['email_template']['footer_text'], height=150, help="Texto después de los totales.")
             new_alert = st.text_area("Texto Alerta Detracción", value=CONFIG['email_template']['alert_text'], help="Mensaje resaltado sobre cuentas de detracción.")
+            new_voucher = st.text_area("Texto Nota (Vouchers)", value=CONFIG['email_template'].get('voucher_text', ''), help="Texto al final del correo (ej: instrucciones de envío de vouchers). Deja vacío para no mostrar.")
 
             submitted = st.form_submit_button("Guardar Configuración")
             
@@ -2005,7 +2006,8 @@ if st.session_state['data_ready']:
                     "email_template": {
                         "intro_text": new_intro,
                         "footer_text": new_footer,
-                        "alert_text": new_alert
+                        "alert_text": new_alert,
+                        "voucher_text": new_voucher
                     },
                     "smtp_config": {
                         "server": new_smtp_server,
