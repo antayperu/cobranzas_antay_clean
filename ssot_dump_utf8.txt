@@ -1,0 +1,58 @@
+--- FULL PAGE DUMP START ---
+[0] divider: 
+[1] paragraph: DOCOPS_ANCHOR_HANDOFF
+[2] heading_2: 1) Handoff Automático — ReporteCobranzas (para IA) — ÚNICO BLOQUE “VIVO”
+[3] paragraph: Uso: esto es lo primero que Antigravity debe leer al iniciar (arranque = inicio del trabajo).
+[4] bulleted_list_item: SSOT (fuente única de verdad): Notion → FRD v0.2 + Estado Actual + Log del Proyecto + Backlog (tablero).
+[5] bulleted_list_item: Repo (repositorio = donde vive el código): antayperu/cobranzas_antay_clean.
+[6] bulleted_list_item: Versión estable actual (tag = etiqueta de versión segura): v1.5.2-stable-email-kpi-fix
+[7] bulleted_list_item: Commit relevante (hash = código corto del cambio): 0757108
+[8] bulleted_list_item: Gates (compuertas de calidad):
+[9] bulleted_list_item: Bugs abiertos (errores pendientes): 0
+[10] bulleted_list_item: Próximo paso exacto (tomado del Backlog en columna “Ready”):
+[11] bulleted_list_item: Reglas NO negociables:
+[12] divider: 
+[13] heading_2: 2) Prompt fijo para Antigravity (OBLIGATORIO)
+[14] heading_3: Prompt de arranque (OBLIGATORIO)
+[15] paragraph: Antigravity: SSOT (fuente única) está en Notion. Abre esta página “Estado Actual — ReporteCobranzas” y lee la sección “Handoff Automático — para IA”.
+[16] paragraph: Confirma textualmente: tag (etiqueta), commit (código corto), gates (compuertas de calidad), bugs abiertos y la tarjeta en Ready (listo) del Backlog.
+[17] paragraph: No avances sin checklist Gate 3 (fin-a-fin) cuando aplique.
+[18] heading_3: Prompt de cierre (OBLIGATORIO)
+[19] paragraph: Antigravity: ejecuta DOCOPS-NOTION (actualización automática).
+[20] paragraph: Actualiza Backlog, Log del Proyecto y Handoff.
+[21] paragraph: Luego ejecuta SSOT READBACK (relectura de SSOT = releer Notion) y pega aquí el texto final del Handoff (tag/commit/gates/bugs/próximo paso).
+[22] divider: 
+[23] heading_2: 3) Estado Actual — ReporteCobranzas (PARA HUMANOS)
+[24] paragraph: Nota: tag/commit/gates/bugs/próximo paso no van aquí. Eso vive solo en el Handoff (arriba).
+[25] heading_3: Estado general
+[26] paragraph: ✅ Tracking (trazabilidad = estado/fecha/conteo) y KPIs (indicadores) corregidos y validados.
+[27] paragraph: El trabajo se controla por Backlog (tablero Kanban = tablero por columnas).
+[28] heading_3: Calidad (Quality Gates = compuertas de calidad)
+[29] bulleted_list_item: Gate 0 (arranque/sintaxis): ver Handoff (arriba)
+[30] bulleted_list_item: Gate 1 (unit tests = pruebas unitarias): PENDIENTE/NA
+[31] bulleted_list_item: Gate 3 (E2E = fin-a-fin + regresión): ver Handoff (arriba) + evidencia en Log del Proyecto (bitácora)
+[32] heading_3: Alcance actual (Scope = lo que incluye esta versión)
+[33] bulleted_list_item: ✅ Envío Email operativo
+[34] bulleted_list_item: ✅ KPI “📧 Enviados Hoy” incrementa correctamente (persistente al reiniciar sesión)
+[35] bulleted_list_item: ✅ KPI “⏳ Pendientes de Envío” resta correctamente (según enviados hoy)
+[36] bulleted_list_item: ✅ Filtro “Ocultar ya enviados hoy” funciona tras cerrar y reabrir sesión
+[37] bulleted_list_item: ✅ Trazabilidad en Reporte General: Estado Notificación (Email) + Último Envío
+[38] bulleted_list_item: ✅ Tracking persistente al alternar vistas (Ejecutiva/Completa)
+[39] bulleted_list_item: ✅ Reporte post-envío visible (UIX-03 = requisito de interfaz)
+[40] bulleted_list_item: ✅ Pantalla completa del Reporte General
+[41] bulleted_list_item: ✅ Reglas de ciclo nuevo / “no sorpresas”
+[42] bulleted_list_item: ⏳ WhatsApp: documentar estado actual (implementado/parcial)
+[43] heading_3: Riesgos / puntos sensibles
+[44] bulleted_list_item: Emails compartidos entre clientes (EMAIL_FINAL repetible) debe seguir funcionando.
+[45] bulleted_list_item: No modificar nombres de columnas: COD CLIENTE, EMPRESA, SALDO REAL, CORREO, MATCH_KEY.
+[46] bulleted_list_item: No inventar flujos: seguir FRD v0.2 (documento de requisitos).
+[47] heading_3: Control del siguiente paso
+[48] paragraph: El siguiente paso siempre se toma del Backlog — ReporteCobranzas (tablero Kanban = tablero por columnas).
+[49] paragraph: Regla: solo se trabaja lo que está en Ready (listo).
+[50] divider: 
+[51] heading_2: 4) Estándar de cierre (OBLIGATORIO)
+[52] paragraph: El estándar DOCOPS-NOTION (Documentación Operativa en Notion = actualización automática) vive en:
+[53] paragraph: Documentación Oficial (SSOT) → Parte XI — DOCOPS-NOTION — Estándar de Cierre.
+[54] paragraph: Aquí solo se aplica, no se duplica.
+[55] bulleted_list_item: [2026-01-04 | 17:09] — Fix DOCOPS Recovery — v1.5.2-stable-email-kpi-fix — 0757108 — Gate 0 PASS, Gate 3 PASS (E2E)
+--- FULL PAGE DUMP END ---

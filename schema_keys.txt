@@ -1,0 +1,1 @@
+['Evidencia', 'Gate 0', 'Estado', 'Prioridad', 'Fecha', 'Tipo', 'ID', 'Gate 3', 'AC (Criterios de aceptación)', 'Owner', 'Descripción', 'Commit/Tag', 'Módulo', 'Tarea']

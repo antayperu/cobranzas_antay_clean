@@ -1,0 +1,36 @@
+--- DOCOPS REAL READBACK (EVIDENCE) ---
+
+1. [BACKLOG] Querying Database Schema & Initial Data...
+   Database Found: 'backlog_reporte_cobranzas.csv' (ID: 2de7544a-512b-80de-b980-fecb94b6e5ee)
+   Using Schema: Status='Estado' (Text), Title='Tarea'
+   STATS INITIAL: Total=5 | Ready=1
+   Ready > 0. Continuity Rule Not Triggered.
+   Top Ready Card: 'QA-E2E-001 — Pruebas E2E completas antes de publicar' (ID: 2e17544a-512b-81ba-9c28-f2859689a4ef)
+   HOTFIX-HTML-001 Status: Done
+
+4. [UPDATE] Refreshing Handoff with new 'Next Step'...
+   Updated Next Step to: QA-E2E-001 — Pruebas E2E completas antes de publicar
+
+============== FINAL READBACK ==============
+
+[A] HANDOFF:
+HEADER: 1) Handoff Automático — ReporteCobranzas (para IA) — ÚNICO BLOQUE “VIVO”
+ - Uso: esto es lo primero que Antigravity debe leer al iniciar (arranque = inicio del trabajo).
+ - SSOT (fuente única de verdad): Notion → FRD v0.2 + Estado Actual + Log del Proyecto + Backlog (tablero).
+ - Repo (repositorio = donde vive el código): antayperu/cobranzas_antay_clean
+ - Versión estable actual (tag = etiqueta de versión segura): v1.5.3-stable-html-preview-hotfix
+ - Commit relevante (hash = código corto del cambio): 8785ab7
+ - Gates (compuertas de calidad): Gate 0 PASS, Gate 3 Light PASS
+ - Bugs abiertos (errores pendientes): 0
+ - Próximo paso exacto (tomado del Backlog en columna “Ready”): QA-E2E-001 — Pruebas E2E completas antes de publicar
+ - Reglas NO negociables:
+ - 
+
+[B] LOG (Last 3 entries):
+ - Fix HTML Preview ({CLIENTE} + Vouchers) | Commit: 8785ab7 | Tag: v1.5.3-stable-html-preview-hotfix | Gate 3 Light PASS
+
+[C] BACKLOG:
+ - Total Cards: 5
+ - Ready Count: 1
+ - Top Ready: QA-E2E-001 — Pruebas E2E completas antes de publicar
+============================================
