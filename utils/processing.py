@@ -118,9 +118,24 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     else:
         df_cartera['NOTA'] = ""
 
+    # Validar Columna ENVIAR EMAIL (RC-FEAT-EMAIL-FILTER)
+    col_enviar_email = None
+    for c in df_cartera.columns:
+        if str(c).strip() == 'Enviar Email':
+            col_enviar_email = c
+            break
+            
+    if col_enviar_email:
+        df_cartera['Enviar Email'] = df_cartera[col_enviar_email].astype(str)
+        # Limpiar 'nan' strings
+        df_cartera['Enviar Email'] = df_cartera['Enviar Email'].replace({'nan': '', 'nat': '', 'none': ''})
+    else:
+        # Si no existe la columna, crear con valor por defecto
+        df_cartera['Enviar Email'] = "SIN CONFIGURAR"
+
     df_merged = pd.merge(
         df_ctas, 
-        df_cartera[['codcli_key', 'telefono', 'EMAIL_FINAL', 'NOTA']], 
+        df_cartera[['codcli_key', 'telefono', 'EMAIL_FINAL', 'NOTA', 'Enviar Email']], 
         on='codcli_key', 
         how='left'
     )
@@ -457,7 +472,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     df_merged['FECHA_ULTIMO_ENVIO'] = ""  # Empty by default, will be timestamp string after send
 
     final_cols = [
-        'COD CLIENTE', 'EMPRESA', 'NOTA', 'CORREO', 'TELÉFONO', 
+        'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'NOTA', 'CORREO', 'TELÉFONO', 
         'TIPO PEDIDO', 
         'COMPROBANTE', 'FECH EMIS', 'FECH VENC',
         'DÍAS MORA', 'ESTADO DEUDA',

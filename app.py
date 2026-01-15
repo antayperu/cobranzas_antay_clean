@@ -520,8 +520,8 @@ if st.session_state['data_ready']:
                 # Filtrar donde TELEFONO no sea nulo ni vacio
                  df_filtered = df_filtered[df_filtered['TELÉFONO'].notna() & (df_filtered['TELÉFONO'].astype(str).str.strip() != '')]
             
-            # --- FILTROS AVANZADOS (Tipo Pedido & Saldo) ---
-            with st.expander("⚙️ Filtros Avanzados (Tipo Pedido & Saldo Real)", expanded=False):
+            # --- FILTROS AVANZADOS (Tipo Pedido & Saldo & Enviar Email) ---
+            with st.expander("⚙️ Filtros Avanzados (Tipo Pedido, Saldo Real & Enviar Email)", expanded=False):
                 # Layout interno del expander
                 c_adv1, c_adv2, c_adv3 = st.columns([2, 1, 1])
                 
@@ -540,20 +540,39 @@ if st.session_state['data_ready']:
                 with c_adv3:
                     monto_ref = st.number_input("Monto Referencia", value=0.0, step=10.0)
                 
+                # Filtro ENVIAR EMAIL (nueva fila)
+                if 'Enviar Email' in df_final.columns:
+                    valores_enviar = sorted(df_final['Enviar Email'].astype(str).unique().tolist())
+                    # Por defecto: excluir "NO" y "SIN CONFIGURAR"
+                    default_enviar = [v for v in valores_enviar if v.upper() not in ['NO', 'SIN CONFIGURAR']]
+                    sel_enviar_email = st.multiselect(
+                        "Enviar Email (por defecto excluye 'NO' y 'SIN CONFIGURAR')", 
+                        valores_enviar, 
+                        default=default_enviar,
+                        help="Filtra por el campo 'Enviar Email'. Por defecto excluye registros con valor 'NO' o 'SIN CONFIGURAR'."
+                    )
+                else:
+                    sel_enviar_email = None
+                
                 # Aplicar Filtros Avanzados
                 if sel_tipo_pedido:
                     df_filtered = df_filtered[df_filtered['TIPO PEDIDO'].astype(str).isin(sel_tipo_pedido)]
                 
+                # Aplicar filtro Saldo Real (con redondeo a 2 decimales para consistencia con Excel)
                 if opcion_saldo == "Mayor que":
-                    df_filtered = df_filtered[df_filtered['SALDO REAL'] > monto_ref]
+                    df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) > monto_ref]
                 elif opcion_saldo == "Mayor o igual que":
-                    df_filtered = df_filtered[df_filtered['SALDO REAL'] >= monto_ref]
+                    df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) >= monto_ref]
                 elif opcion_saldo == "Menor que":
-                    df_filtered = df_filtered[df_filtered['SALDO REAL'] < monto_ref]
+                    df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) < monto_ref]
                 elif opcion_saldo == "Menor o igual que":
-                    df_filtered = df_filtered[df_filtered['SALDO REAL'] <= monto_ref]
+                    df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) <= monto_ref]
                 elif opcion_saldo == "Igual a":
-                    df_filtered = df_filtered[df_filtered['SALDO REAL'] == monto_ref]
+                    df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) == monto_ref]
+                
+                # Aplicar filtro Enviar Email
+                if sel_enviar_email and 'Enviar Email' in df_filtered.columns:
+                    df_filtered = df_filtered[df_filtered['Enviar Email'].astype(str).isin(sel_enviar_email)]
             
             # --- KPI DASHBOARD (Separación de Monedas & Conteo) ---
             # Calcular totales separados
@@ -704,7 +723,7 @@ if st.session_state['data_ready']:
 
             # 1. Definir columnas visibles y su orden experto
             view_cols = [
-                'COD CLIENTE', 'EMPRESA', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
+                'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
                 'DÍAS MORA', 'ESTADO DEUDA', # Critical Analysis
@@ -748,7 +767,7 @@ if st.session_state['data_ready']:
             # [FIX RC-BUG-004] Usar columnas NUMÉRICAS para el Excel (no strings formateados)
             # Definir columnas de exportación (misma estructura que view, pero usando valores raw)
             export_cols = [
-                'COD CLIENTE', 'EMPRESA', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
+                'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
                 'DÍAS MORA', 'ESTADO DEUDA',
