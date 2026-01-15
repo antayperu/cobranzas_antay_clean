@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 import urllib.parse
 from datetime import date, datetime
@@ -11,7 +11,7 @@ from utils.excel_export import generate_excel
 query_params = st.query_params
 is_fullscreen_view = query_params.get("view") == "full_table"
 
-# Configuraci├│n de P├ígina
+# Configuración de Página
 import utils.email_sender as es
 import utils.settings_manager as sm
 import utils.helpers as helpers
@@ -29,7 +29,7 @@ import base64
 
 # ... (rest of imports)
 
-# Cargar Configuraci├│n Global
+# Cargar Configuración Global
 CONFIG = sm.load_settings()
 
 # --- RC-UX-PREMIUM: Page Layout Wide & Corporate Title ---
@@ -37,7 +37,7 @@ if is_fullscreen_view:
     # Vista pantalla completa: sin sidebar, layout wide
     st.set_page_config(
         page_title="Reporte General - Pantalla Completa",
-        page_icon="­ƒôè",
+        page_icon="📊",
         layout="wide",
         initial_sidebar_state="collapsed"  # Ocultar sidebar
     )
@@ -45,7 +45,7 @@ else:
     # Vista normal
     st.set_page_config(
         page_title=CONFIG.get('company_name', 'Antay Reportes'),
-        page_icon="­ƒôè",
+        page_icon="📊",
         layout="wide",
         initial_sidebar_state="expanded"
     )
@@ -78,10 +78,10 @@ if is_fullscreen_view:
     </style>
     """, unsafe_allow_html=True)
     
-    # Breadcrumb con navegaci├│n
+    # Breadcrumb con navegación
     st.markdown("""
     <div style="margin-bottom: 10px; font-size: 14px; color: #666;">
-        <a href="/" style="color: #2E86AB; text-decoration: none;">­ƒÅá Inicio</a> / 
+        <a href="/" style="color: #2E86AB; text-decoration: none;">🏠 Inicio</a> / 
         <span style="color: #666;">Reporte General</span> / 
         <span style="color: #333; font-weight: 500;">Pantalla Completa</span>
     </div>
@@ -90,7 +90,7 @@ if is_fullscreen_view:
     # Header minimalista
     col_h1, col_h2 = st.columns([10, 1])
     with col_h1:
-        st.markdown("### ­ƒôè Reporte General ÔÇö Vista Completa (Pantalla Completa)")
+        st.markdown("### 📊 Reporte General — Vista Completa (Pantalla Completa)")
     with col_h2:
         # Link para volver a vista normal (NO usar st.switch_page)
         st.markdown("""
@@ -104,7 +104,7 @@ if is_fullscreen_view:
             font-weight: 500;
             font-size: 14px;
         ">
-            Ô£û Cerrar
+            ✖ Cerrar
         </a>
         """, unsafe_allow_html=True)
     
@@ -113,11 +113,11 @@ if is_fullscreen_view:
     # Intentar cargar datos desde session state o desde persistencia
     df_final = None
     
-    # Opci├│n 1: Datos ya en session state de esta pesta├▒a
+    # Opción 1: Datos ya en session state de esta pestaña
     if 'df_final' in st.session_state and st.session_state.get('data_ready', False):
         df_final = st.session_state['df_final']
     
-    # Opci├│n 2: Intentar cargar desde persistencia (sesi├│n guardada)
+    # Opción 2: Intentar cargar desde persistencia (sesión guardada)
     elif state_mgr.has_valid_session()[0]:
         try:
             df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
@@ -139,7 +139,7 @@ if is_fullscreen_view:
         ui_report.render_report_fullscreen(df_filtered)
         
     else:
-        st.warning("ÔÜá´©Å No hay datos cargados. Por favor, vuelve a la vista principal y carga los archivos.")
+        st.warning("⚠️ No hay datos cargados. Por favor, vuelve a la vista principal y carga los archivos.")
         st.markdown("""
         <a href="/" target="_self" style="
             display: inline-block;
@@ -151,14 +151,14 @@ if is_fullscreen_view:
             font-weight: 500;
             margin-top: 10px;
         ">
-            ­ƒöÖ Volver a Vista Principal
+            🔙 Volver a Vista Principal
         </a>
         """, unsafe_allow_html=True)
     
-    # Detener ejecuci├│n aqu├¡ (no renderizar el resto de la app)
+    # Detener ejecución aquí (no renderizar el resto de la app)
     st.stop()
 
-# --- VISTA NORMAL (resto del c├│digo) ---
+# --- VISTA NORMAL (resto del código) ---
 
 # --- RC-UX-PREMIUM: Enterprise CSS System ---
 # Typography: System UI for speed + clear hierarchy
@@ -236,17 +236,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- AUTO-RESTORE SESSION (PLAN B: Fullscreen Navigation Fix) ---
-# Si no hay datos en session_state pero existe sesi├│n persistida v├ílida,
+# Si no hay datos en session_state pero existe sesión persistida válida,
 # auto-restaurar silenciosamente para preservar continuidad al volver de fullscreen
-# IMPORTANTE: NO auto-restaurar si el usuario est├í en proceso de cargar nuevos archivos
+# IMPORTANTE: NO auto-restaurar si el usuario está en proceso de cargar nuevos archivos
 if (not st.session_state.get('data_ready', False) and 
-    not st.session_state.get('loading_new_files', False)):  # FIX: No auto-restaurar si usuario est├í cargando archivos
+    not st.session_state.get('loading_new_files', False)):  # FIX: No auto-restaurar si usuario está cargando archivos
     has_session, cache_time, cache_meta = state_mgr.has_valid_session()
     if has_session:
         try:
             df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
             if df_loaded is not None and not df_loaded.empty:
-                # Auto-restaurar sesi├│n sin requerir click del usuario
+                # Auto-restaurar sesión sin requerir click del usuario
                 st.session_state['df_final'] = df_loaded
                 st.session_state['data_ready'] = True
                 st.session_state['session_start_ts'] = cache_ts_loaded
@@ -254,8 +254,8 @@ if (not st.session_state.get('data_ready', False) and
                 st.session_state['fresh_load'] = False
                 # Silencioso: no mostrar mensaje, solo restaurar estado
         except Exception as e:
-            # Si falla la auto-restauraci├│n, continuar normalmente
-            # El usuario ver├í la pantalla de carga normal
+            # Si falla la auto-restauración, continuar normalmente
+            # El usuario verá la pantalla de carga normal
             pass
 
 # Sidebar - Logo y Carga
@@ -271,16 +271,16 @@ with st.sidebar:
     st.markdown("---")
     
     # --- RC-FEAT-PERSISTENCE: Session Recovery ---
-    # Mostrar opci├│n de continuar trabajo anterior SOLO si:
+    # Mostrar opción de continuar trabajo anterior SOLO si:
     # 1. No hay datos cargados actualmente (data_ready=False)
-    # 2. Existe sesi├│n persistida v├ílida
-    # (Si ya se auto-restaur├│ arriba, esto no se mostrar├í)
+    # 2. Existe sesión persistida válida
+    # (Si ya se auto-restauró arriba, esto no se mostrará)
     if not st.session_state.get('data_ready', False):
         has_session, cache_time, cache_meta = state_mgr.has_valid_session()
         if has_session:
-            st.info(f"­ƒôé Sesi├│n previa encontrada ({cache_time.strftime('%d/%m %H:%M') if cache_time else 'N/A'})")
-            if st.button("­ƒöä Continuar Trabajo Anterior", use_container_width=True):
-                with st.spinner("Recuperando sesi├│n..."):
+            st.info(f"📂 Sesión previa encontrada ({cache_time.strftime('%d/%m %H:%M') if cache_time else 'N/A'})")
+            if st.button("🔄 Continuar Trabajo Anterior", use_container_width=True):
+                with st.spinner("Recuperando sesión..."):
                     df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
                     if df_loaded is not None and not df_loaded.empty:
                         st.session_state['df_final'] = df_loaded
@@ -288,10 +288,10 @@ with st.sidebar:
                         st.session_state['session_start_ts'] = cache_ts_loaded
                         st.session_state['uploaded_files'] = meta_loaded.get('uploaded_files', [])
                         st.session_state['fresh_load'] = False
-                        st.success("Ô£à Sesi├│n recuperada exitosamente")
+                        st.success("✅ Sesión recuperada exitosamente")
                         st.rerun()
                     else:
-                        st.error("ÔØî No se pudo recuperar la sesi├│n")
+                        st.error("❌ No se pudo recuperar la sesión")
             st.markdown("---")
     
     # --- WIZARD DE CARGA (solo si no hay datos) ---
@@ -300,8 +300,8 @@ with st.sidebar:
         has_cache, cache_time, cache_meta = state_mgr.has_valid_session()
         
         if has_cache and not st.session_state.get('data_ready', False):
-            st.info(f"­ƒôé Sesi├│n previa encontrada: {cache_time.strftime('%d/%m %H:%M')}")
-            if st.button("­ƒöä Continuar Trabajo Anterior", type="primary", help="Cargar datos procesados previamente sin subir archivos"):
+            st.info(f"📂 Sesión previa encontrada: {cache_time.strftime('%d/%m %H:%M')}")
+            if st.button("🔄 Continuar Trabajo Anterior", type="primary", help="Cargar datos procesados previamente sin subir archivos"):
                 try:
                     df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
                     if df_loaded is not None:
@@ -313,10 +313,10 @@ with st.sidebar:
                         st.session_state['session_start_ts'] = cache_ts_loaded
                         
                         # Restaurar archivos dummy para UI consistencia (opcional) o marcar flag
-                        st.success("Ô£à Sesi├│n restaurada exitosamente.")
+                        st.success("✅ Sesión restaurada exitosamente.")
                         st.rerun()
                     else:
-                        st.error("Error al leer cach├®. Por favor carga archivos nuevamente.")
+                        st.error("Error al leer caché. Por favor carga archivos nuevamente.")
                 except Exception as e:
                     st.error(f"Error restaurando: {e}")
             
@@ -350,18 +350,18 @@ if wizard_action == "PROCESS_TRIGGERED":
     file_cartera = st.session_state['uploaded_files']['cartera']
     
     if file_ctas and file_cobranza and file_cartera:
-        with st.spinner("­ƒÜÇ Procesando Motor de Datos..."):
+        with st.spinner("🚀 Procesando Motor de Datos..."):
             # Reuse EXACT Core Logic
             df_ctas_raw, df_cartera_raw, df_cobranza_raw, error = load_data(file_ctas, file_cartera, file_cobranza)
             
             if error:
-                st.error(f"ÔØî Error de Carga: {error}")
+                st.error(f"❌ Error de Carga: {error}")
                 st.session_state['data_ready'] = False
             else:
                 try:
                     df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
                     
-                    # --- CYCLE_ID: Generar ID ├║nico para este ciclo ---
+                    # --- CYCLE_ID: Generar ID único para este ciclo ---
                     import uuid
                     from datetime import datetime
                     cycle_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -371,7 +371,7 @@ if wizard_action == "PROCESS_TRIGGERED":
                     st.session_state['df_final'] = df_final
                     st.session_state['data_ready'] = True
                     
-                    # FIX: Resetear flag de carga nueva despu├®s de procesar exitosamente
+                    # FIX: Resetear flag de carga nueva después de procesar exitosamente
                     st.session_state['loading_new_files'] = False
                     
                     # Mark as fresh load (for tracking init)
@@ -396,10 +396,10 @@ if wizard_action == "PROCESS_TRIGGERED":
                     try:
                         meta_info = f"Archivos cargados: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
                         ok, msg = state_mgr.save_session(df_final, meta_info)
-                        if ok: st.toast("­ƒÆ¥ Sesi├│n guardada autom.", icon="Ô£à")
-                        else: st.warning(f"ÔÜá´©Å No se pudo guardar sesi├│n: {msg}")
+                        if ok: st.toast("💾 Sesión guardada autom.", icon="✅")
+                        else: st.warning(f"⚠️ No se pudo guardar sesión: {msg}")
                     except Exception as e:
-                        st.warning(f"ÔÜá´©Å Error al guardar sesi├│n: {e}")
+                        st.warning(f"⚠️ Error al guardar sesión: {e}")
                     
                     # Mark session start
                     st.session_state['session_start_ts'] = datetime.now()
@@ -407,27 +407,27 @@ if wizard_action == "PROCESS_TRIGGERED":
                     # Mark as fresh load (for tracking init)
                     st.session_state['fresh_load'] = True
                     
-                    st.success("Ô£à Datos procesados exitosamente")
+                    st.success("✅ Datos procesados exitosamente")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"ÔØî Error de Procesamiento: {e}")
+                    st.error(f"❌ Error de Procesamiento: {e}")
                     st.session_state['data_ready'] = False
 
     # Main Area Placeholder if no data
     if not st.session_state.get('data_ready', False):
-        st.info("­ƒæê Utiliza el panel lateral para cargar tus archivos y comenzar.")
+        st.info("👈 Utiliza el panel lateral para cargar tus archivos y comenzar.")
         st.markdown(
             """
             <div style='text-align: center; color: #aaa; margin-top: 50px;'>
-                <h3>­ƒÅó Cobranzas Antay</h3>
-                <p>Sistema de Gesti├│n SaaS v1.4</p>
+                <h3>🏢 Cobranzas Antay</h3>
+                <p>Sistema de Gestión SaaS v1.4</p>
                 <br>
-                <div style='font-size: 40px;'>­ƒôé Ô×í´©Å ­ƒôè Ô×í´©Å ­ƒôº</div>
+                <div style='font-size: 40px;'>📂 ➡️ 📊 ➡️ 📧</div>
             </div>
             """, unsafe_allow_html=True
         )
 
-# --- PASO 2: VISUALIZACI├ôN Y FILTROS ---
+# --- PASO 2: VISUALIZACIÓN Y FILTROS ---
 if st.session_state['data_ready']:
     df_final = st.session_state['df_final']
     # RC-FIX-SCOPE: Initialize df_filtered safely to avoid NameError if df_final is empty
@@ -442,17 +442,17 @@ if st.session_state['data_ready']:
     
     st.markdown("---")
     
-    # DEFINIR TABS DIN├üMICAMENTE
+    # DEFINIR TABS DINÁMICAMENTE
     tab_list = ["Reporte General"]
     
     # Feature Flags
     show_analysis = CONFIG.get("features", {}).get("show_analysis", False)
     show_sales = CONFIG.get("features", {}).get("show_sales", False)
     
-    if show_analysis: tab_list.append("2. An├ílisis")
+    if show_analysis: tab_list.append("2. Análisis")
     if show_sales: tab_list.append("3. Ventas")
     
-    tab_list.extend(["4. Marketing WhatsApp", "5. Notificaciones Email", "6. Configuraci├│n"])
+    tab_list.extend(["4. Marketing WhatsApp", "5. Notificaciones Email", "6. Configuración"])
     
     tabs = st.tabs(tab_list)
     
@@ -464,10 +464,10 @@ if st.session_state['data_ready']:
         st.subheader("Reporte General")
     
         if not df_final.empty:
-            # --- DISE├æO DE FILTROS V4.3 (Profesional Stacked) ---
-            # Fila 1: Filtro Principal (Empresa) - Full Width para evitar desalineaci├│n visual
+            # --- DISEÑO DE FILTROS V4.3 (Profesional Stacked) ---
+            # Fila 1: Filtro Principal (Empresa) - Full Width para evitar desalineación visual
             # Esto permite que el multiselect crezca hacia abajo sin romper la fila de selectbox
-            st.markdown("###### ­ƒÅó Filtro Principal")
+            st.markdown("###### 🏢 Filtro Principal")
             empresas = sorted(df_final['EMPRESA'].astype(str).unique().tolist())
             sel_empresa = st.multiselect(
                 "Seleccione Empresa(s)", 
@@ -477,12 +477,12 @@ if st.session_state['data_ready']:
             )
 
             # Fila 2: Filtros Secundarios (Grid limpio)
-            # st.markdown("###### ­ƒöì Filtros Detallados")
+            # st.markdown("###### 🔍 Filtros Detallados")
             col_f1, col_f2, col_f3 = st.columns(3)
             
             # Filtro Estado Detraccion
             estados_dt = ["Todos"] + sorted(df_final['ESTADO DETRACCION'].astype(str).unique().tolist())
-            sel_estado = col_f1.selectbox("Estado Detracci├│n", estados_dt)
+            sel_estado = col_f1.selectbox("Estado Detracción", estados_dt)
             
             # Filtro Moneda
             monedas = ["Todos"] + sorted(df_final['MONEDA'].astype(str).unique().tolist())
@@ -493,8 +493,8 @@ if st.session_state['data_ready']:
 
             # Fila 3: Filtros de Disponibilidad (Email/Telefono)
             col_b1, col_b2, col_b3 = st.columns(3)
-            filter_has_email = col_b1.checkbox("Ôÿæ´©Å Solo con Correo", value=False)
-            filter_has_phone = col_b2.checkbox("Ôÿæ´©Å Solo con Tel├®fono", value=False)
+            filter_has_email = col_b1.checkbox("☑️ Solo con Correo", value=False)
+            filter_has_phone = col_b2.checkbox("☑️ Solo con Teléfono", value=False)
             
             # Aplicar filtros
             df_filtered = df_final.copy()
@@ -518,10 +518,10 @@ if st.session_state['data_ready']:
                 
             if filter_has_phone:
                 # Filtrar donde TELEFONO no sea nulo ni vacio
-                 df_filtered = df_filtered[df_filtered['TEL├ëFONO'].notna() & (df_filtered['TEL├ëFONO'].astype(str).str.strip() != '')]
+                 df_filtered = df_filtered[df_filtered['TELÉFONO'].notna() & (df_filtered['TELÉFONO'].astype(str).str.strip() != '')]
             
             # --- FILTROS AVANZADOS (Tipo Pedido & Saldo & Enviar Email) ---
-            with st.expander("ÔÜÖ´©Å Filtros Avanzados (Tipo Pedido, Saldo Real & Enviar Email)", expanded=False):
+            with st.expander("⚙️ Filtros Avanzados (Tipo Pedido, Saldo Real & Enviar Email)", expanded=False):
                 # Layout interno del expander
                 c_adv1, c_adv2, c_adv3 = st.columns([2, 1, 1])
                 
@@ -533,7 +533,7 @@ if st.session_state['data_ready']:
                 
                 with c_adv2:
                     opcion_saldo = st.selectbox(
-                        "Condici├│n Saldo Real", 
+                        "Condición Saldo Real", 
                         ["Todos", "Mayor que", "Mayor o igual que", "Menor que", "Menor o igual que", "Igual a"],
                         index=0
                     )
@@ -574,7 +574,7 @@ if st.session_state['data_ready']:
                 if sel_enviar_email and 'Enviar Email' in df_filtered.columns:
                     df_filtered = df_filtered[df_filtered['Enviar Email'].astype(str).isin(sel_enviar_email)]
             
-            # --- KPI DASHBOARD (Separaci├│n de Monedas & Conteo) ---
+            # --- KPI DASHBOARD (Separación de Monedas & Conteo) ---
             # Calcular totales separados
             def safe_sum(df, col): return df[col].sum() if col in df.columns else 0.0
             
@@ -587,13 +587,13 @@ if st.session_state['data_ready']:
             t_sal_s = safe_sum(df_sol, 'SALDO')
             # REGLA DE NEGOCIO: Detracciones SIEMPRE suman en Soles, sin importar moneda del doc.
             # Agrupamos todas las detracciones del filtro actual.
-            t_detru_global_s = safe_sum(df_filtered, 'DETRACCI├ôN') 
+            t_detru_global_s = safe_sum(df_filtered, 'DETRACCIÓN') 
             t_real_s = safe_sum(df_sol, 'SALDO REAL')
             count_s = len(df_sol)
             
-            # Totales D├│lares
+            # Totales Dólares
             t_sal_d = safe_sum(df_dol, 'SALDO')
-            # t_det_d = safe_sum(df_dol, 'DETRACCI├ôN') # Eliminado: Detracci├│n NO existe en D├│lares
+            # t_det_d = safe_sum(df_dol, 'DETRACCIÓN') # Eliminado: Detracción NO existe en Dólares
             t_real_d = safe_sum(df_dol, 'SALDO REAL')
             count_d = len(df_dol)
             
@@ -602,13 +602,13 @@ if st.session_state['data_ready']:
             
             def kpi_card(label, val_s, val_d, color="#2E86AB", is_currency=True, force_single_s=False):
                 if is_currency:
-                    # L├│gica de visualizaci├│n: Solo mostrar lo que tiene valor > 0
+                    # Lógica de visualización: Solo mostrar lo que tiene valor > 0
                     # Si ambos 0, mostrar S/ 0.00
                     s_visible = abs(val_s) > 0.01
                     d_visible = abs(val_d) > 0.01
                     
                     if force_single_s:
-                        # Caso especial Detracci├│n: Solo mostrar l├¡nea S/
+                        # Caso especial Detracción: Solo mostrar línea S/
                         lines = [f"<div style='font-size:16px; color:#333; font-weight:bold; margin-top:5px;'>S/ {val_s:,.2f}</div>"]
                     elif not s_visible and not d_visible:
                         lines = [f"<div style='font-size:16px; color:#333; font-weight:bold; margin-top:5px;'>S/ 0.00</div>"]
@@ -617,7 +617,7 @@ if st.session_state['data_ready']:
                         if s_visible:
                              lines.append(f"<div style='font-size:16px; color:#333; font-weight:bold; margin-top:5px;'>S/ {val_s:,.2f}</div>")
                         if d_visible:
-                             # Si dolar es el ├║nico, lo ponemos grande, si es segundo, un poco dif
+                             # Si dolar es el único, lo ponemos grande, si es segundo, un poco dif
                              style = "font-size:16px; color:#333; font-weight:bold; margin-top:5px;" if not s_visible else "font-size:14px; color:#555;"
                              lines.append(f"<div style='{style}'>$ {val_d:,.2f}</div>")
                     
@@ -646,7 +646,7 @@ if st.session_state['data_ready']:
                 return html
 
             with kpi1: st.markdown(kpi_card("Total Saldo", t_sal_s, t_sal_d, "#17a2b8"), unsafe_allow_html=True)
-            with kpi2: st.markdown(kpi_card("Total Detracci├│n", t_detru_global_s, 0, "#dc3545", force_single_s=True), unsafe_allow_html=True)
+            with kpi2: st.markdown(kpi_card("Total Detracción", t_detru_global_s, 0, "#dc3545", force_single_s=True), unsafe_allow_html=True)
             with kpi3: st.markdown(kpi_card("Total Saldo Real", t_real_s, t_real_d, "#28a745"), unsafe_allow_html=True)
             with kpi4: st.markdown(kpi_card("Documentos", count_s, count_d, "#6c757d", is_currency=False), unsafe_allow_html=True)
 
@@ -654,10 +654,10 @@ if st.session_state['data_ready']:
             
             # --- FIX INDICE DINAMICO (Empieza en 1) ---
             # --- VIEW TRANSFORMATION (v4.0) ---
-            # Preparar dataframe para mostrar y exportar (sin columnas num├®ricas crudas, usando las formateadas)
+            # Preparar dataframe para mostrar y exportar (sin columnas numéricas crudas, usando las formateadas)
             
             # --- RC-FEAT-LEDGER: Status Control Tower ---
-            # Calcular estado de env├¡o para cada cliente/email
+            # Calcular estado de envío para cada cliente/email
             if 'CORREO' in df_filtered.columns:
                 unique_emails = df_filtered['CORREO'].dropna().unique().tolist()
                 unique_emails = [e for e in unique_emails if str(e).strip() != '']
@@ -667,7 +667,7 @@ if st.session_state['data_ready']:
                 
                 status_map = {}
                 if unique_emails:
-                    # Consultar DB con Scope de Sesi├│n
+                    # Consultar DB con Scope de Sesión
                     # (Si session_ts es None, dbm usa default Today, que es seguro)
                     status_map = dbm.get_status_map(unique_emails, min_timestamp=session_ts)
                 
@@ -712,7 +712,7 @@ if st.session_state['data_ready']:
                     st.session_state['df_final'] = df_final
                 else:
                     # Fresh load OR tracking_dirty: keep df_final as-is (don't overwrite from DB)
-                    # FIX: NO resetear fresh_load aqu├¡, solo despu├®s del primer env├¡o exitoso
+                    # FIX: NO resetear fresh_load aquí, solo después del primer envío exitoso
                     # para evitar que en el siguiente rerun se actualice desde DB con datos del ciclo anterior
                     pass
                 
@@ -723,13 +723,13 @@ if st.session_state['data_ready']:
 
             # 1. Definir columnas visibles y su orden experto
             view_cols = [
-                'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TEL├ëFONO', 
+                'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
-                'D├ìAS MORA', 'ESTADO DEUDA', # Critical Analysis
+                'DÍAS MORA', 'ESTADO DEUDA', # Critical Analysis
                 'MONEDA', 'TIPO CAMBIO',
                 'MONT EMIT_DISPLAY', 
-                'DETRACCI├ôN_DISPLAY', 'ESTADO DETRACCION',
+                'DETRACCIÓN_DISPLAY', 'ESTADO DETRACCION',
                 'AMORTIZACIONES',
                 'SALDO_DISPLAY', 
                 'SALDO REAL_DISPLAY', # Key Result (Moved here)
@@ -740,11 +740,11 @@ if st.session_state['data_ready']:
             view_cols = [c for c in view_cols if c in df_filtered.columns]
             
             # --- RC-UX-PREMIUM: ENTERPRISE REPORT TABLE ---
-            # Delegamos visualizaci├│n a ui_report (Maneja Toggles y Estilos)
+            # Delegamos visualización a ui_report (Maneja Toggles y Estilos)
             ui_report.render_report(df_filtered)
             
             # --- DEBUG TOGGLE (QA Only) ---
-            with st.expander("­ƒöº Debug: Tracking Stats (QA)", expanded=False):
+            with st.expander("🔧 Debug: Tracking Stats (QA)", expanded=False):
                 if 'ESTADO_EMAIL' in df_final.columns:
                     total_records = len(df_final)
                     total_enviados = (df_final['ESTADO_EMAIL'] == "ENVIADO").sum()
@@ -752,32 +752,32 @@ if st.session_state['data_ready']:
                     
                     col_d1, col_d2, col_d3 = st.columns(3)
                     col_d1.metric("Total Registros", total_records)
-                    col_d2.metric("Ô£à Enviados", total_enviados)
-                    col_d3.metric("ÔÅ│ Pendientes", total_pendientes)
+                    col_d2.metric("✅ Enviados", total_enviados)
+                    col_d3.metric("⏳ Pendientes", total_pendientes)
                     
                     # Show last update info if available
                     if 'last_tracking_update' in st.session_state:
-                        st.caption(f"├Ültima actualizaci├│n: {st.session_state['last_tracking_update'].get('count', 0)} registros a las {st.session_state['last_tracking_update'].get('timestamp', 'N/A')}")
+                        st.caption(f"Última actualización: {st.session_state['last_tracking_update'].get('count', 0)} registros a las {st.session_state['last_tracking_update'].get('timestamp', 'N/A')}")
                 else:
                     st.warning("Columnas de tracking no encontradas en df_final")
             
             # --- PASO 3: EXPORTAR ---
             st.subheader("Exportar Reporte")
             
-            # [FIX RC-BUG-004] Usar columnas NUM├ëRICAS para el Excel (no strings formateados)
-            # Definir columnas de exportaci├│n (misma estructura que view, pero usando valores raw)
+            # [FIX RC-BUG-004] Usar columnas NUMÉRICAS para el Excel (no strings formateados)
+            # Definir columnas de exportación (misma estructura que view, pero usando valores raw)
             export_cols = [
-                'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TEL├ëFONO', 
+                'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 'NOTA', 'CORREO', 'TELÉFONO', 
                 'TIPO PEDIDO', 'COMPROBANTE', 
                 'FECH EMIS', 'FECH VENC',
-                'D├ìAS MORA', 'ESTADO DEUDA',
+                'DÍAS MORA', 'ESTADO DEUDA',
                 'MONEDA', 'TIPO CAMBIO',
-                'MONT EMIT', # Num├®rico
-                'DETRACCI├ôN', # Num├®rico
+                'MONT EMIT', # Numérico
+                'DETRACCIÓN', # Numérico
                 'ESTADO DETRACCION',
                 'AMORTIZACIONES',
-                'SALDO', # Num├®rico
-                'SALDO REAL', # Num├®rico
+                'SALDO', # Numérico
+                'SALDO REAL', # Numérico
                 'MATCH_KEY'
             ]
             # Filtrar existentes
@@ -789,10 +789,10 @@ if st.session_state['data_ready']:
             df_export.reset_index(drop=True, inplace=True)
             df_export.index = df_export.index + 1
             
-            # Generar Excel con datos num├®ricos (excel_export se encarga del formato visual)
+            # Generar Excel con datos numéricos (excel_export se encarga del formato visual)
             excel_data = generate_excel(df_export)
             
-            # [FIX RC-UX-001] Nombre din├ímico (Empresa + Timestamp)
+            # [FIX RC-UX-001] Nombre dinámico (Empresa + Timestamp)
             company = CONFIG.get('company_name', 'Empresa_No_Definida')
             export_fname = helpers.get_export_filename(company)
             
@@ -807,17 +807,17 @@ if st.session_state['data_ready']:
              st.info("No hay datos cargados en el Reporte.")
 
     # --- TABS CONDICIONALES ---
-    if show_analysis and "2. An├ílisis" in tab_map:
-        with tab_map["2. An├ílisis"]:
-            st.info("Pr├│ximamente: An├ílisis en Profundidad")
+    if show_analysis and "2. Análisis" in tab_map:
+        with tab_map["2. Análisis"]:
+            st.info("Próximamente: Análisis en Profundidad")
             
     if show_sales and "3. Ventas" in tab_map:
         with tab_map["3. Ventas"]:
-            st.info("Pr├│ximamente: Reporte de Ventas")
+            st.info("Próximamente: Reporte de Ventas")
 
     # --- TAB 4: WHATSAPP ---
     with tab_map["4. Marketing WhatsApp"]:
-        st.subheader("Gesti├│n de WhatsApp")
+        st.subheader("Gestión de WhatsApp")
 
         if not df_filtered.empty:
             c1, c2 = st.columns([1, 1])
@@ -832,31 +832,31 @@ if st.session_state['data_ready']:
                     "**Detalle de Documentos:**\n"
                     "{DETALLE_DOCS}\n\n"
                     "Agradeceremos gestionar el pago a la brevedad.\n\n"
-                    "_DACTA S.A.C. | RUC: 20375779448 Este es un mensaje autom├ítico de notificaci├│n de deuda. Consultas: +51 998 080 797_"
+                    "_DACTA S.A.C. | RUC: 20375779448 Este es un mensaje automático de notificación de deuda. Consultas: +51 998 080 797_"
                 ))
                 
                 template = st.text_area("Plantilla del Mensaje", value=saved_template, height=350)
                 
-                # --- BOT├ôN GUARDAR PLANTILLA ---
-                if st.button("­ƒÆ¥ Guardar como Plantilla Predeterminada"):
+                # --- BOTÓN GUARDAR PLANTILLA ---
+                if st.button("💾 Guardar como Plantilla Predeterminada"):
                     new_config = CONFIG.copy()
                     new_config['whatsapp_template'] = template
                     if sm.save_settings(new_config):
-                        st.success("Ô£à Plantilla guardada correctamente.")
-                        # Actualizamos CONFIG local para la sesi├│n actual
+                        st.success("✅ Plantilla guardada correctamente.")
+                        # Actualizamos CONFIG local para la sesión actual
                         CONFIG['whatsapp_template'] = template
                     else:
-                        st.error("ÔØî No se pudo guardar la plantilla.")
+                        st.error("❌ No se pudo guardar la plantilla.")
                 
                 st.caption("Variables: `{EMPRESA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
 
             with c2:
                 st.markdown("##### Enviar Mensajes")
                 
-                # Selecci├│n de Clientes (Basado en lo filtrado)
-                # Agrupar datos por cliente para la lista de selecci├│n
-                client_group = df_filtered.groupby(['COD CLIENTE', 'EMPRESA', 'TEL├ëFONO'])['SALDO REAL'].sum().reset_index()
-                # Filtrar solo clientes con deuda positiva (opcional, pero l├│gico para cobrar)
+                # Selección de Clientes (Basado en lo filtrado)
+                # Agrupar datos por cliente para la lista de selección
+                client_group = df_filtered.groupby(['COD CLIENTE', 'EMPRESA', 'TELÉFONO'])['SALDO REAL'].sum().reset_index()
+                # Filtrar solo clientes con deuda positiva (opcional, pero lógico para cobrar)
                 client_group = client_group[client_group['SALDO REAL'] > 0]
 
                 # Crear lista de opciones formateada
@@ -878,52 +878,52 @@ if st.session_state['data_ready']:
                 if col_sel2.button("Seleccionar Todos"):
                     selected_labels = client_options
 
-                st.info(f"Se generar├ín enlaces para **{len(selected_labels)}** clientes seleccionados.")
+                st.info(f"Se generarán enlaces para **{len(selected_labels)}** clientes seleccionados.")
                 
-                # ========== NUEVO: SELECTOR DE MODO DE ENV├ìO v5.0 ==========
+                # ========== NUEVO: SELECTOR DE MODO DE ENVÍO v5.0 ==========
                 st.markdown("---")
-                st.markdown("### ÔÜÖ´©Å Configuraci├│n de Env├¡o WhatsApp")
+                st.markdown("### ⚙️ Configuración de Envío WhatsApp")
                 
-                # Informaci├│n general
-                st.info("­ƒÆí **v5.0 Pro Upgrade**: Elige c├│mo enviar tus notificaciones de cobranza")
+                # Información general
+                st.info("💡 **v5.0 Pro Upgrade**: Elige cómo enviar tus notificaciones de cobranza")
                 
                 # Selector de modo simplificado
                 send_mode_options = [
-                    ("texto", "­ƒôØ Solo Texto (Estable)", "Mensaje de texto plano sin archivos adjuntos")
+                    ("texto", "📝 Solo Texto (Estable)", "Mensaje de texto plano sin archivos adjuntos")
                 ]
                 
                 send_mode_index = st.radio(
-                    "**Modo de Env├¡o:**",
+                    "**Modo de Envío:**",
                     range(len(send_mode_options)),
                     format_func=lambda x: send_mode_options[x][1],
                     index=0,  # Default: Texto
-                    help="Elige c├│mo se enviar├ín los mensajes a tus clientes"
+                    help="Elige cómo se enviarán los mensajes a tus clientes"
                 )
                 
                 # Bloque informativo de mantenimiento
-                st.info("Ôä╣´©Å **Nota:** Los modos *Tarjeta Ejecutiva* y *PDF* se encuentran en mantenimiento por actualizaci├│n a v5.0. Estar├ín disponibles pr├│ximamente.")
+                st.info("ℹ️ **Nota:** Los modos *Tarjeta Ejecutiva* y *PDF* se encuentran en mantenimiento por actualización a v5.0. Estarán disponibles próximamente.")
                 send_mode_value = send_mode_options[send_mode_index][0]
                 
-                # Mostrar descripci├│n del modo seleccionado con colores
+                # Mostrar descripción del modo seleccionado con colores
                 selected_description = send_mode_options[send_mode_index][2]
                 if send_mode_value == "texto":
-                    st.warning(f"­ƒÆ¼ {selected_description}")
+                    st.warning(f"💬 {selected_description}")
                 elif send_mode_value == "imagen_ejecutiva":
-                    st.success(f"­ƒÄ┤ {selected_description}")
+                    st.success(f"🎴 {selected_description}")
                 else:
-                    st.info(f"­ƒôè {selected_description}")
+                    st.info(f"📊 {selected_description}")
                 
                 # ========== FIN SELECTOR DE MODO ==========
                 
                 # BOTON PROCESAR
-                # --- L├ôGICA DE GENERACI├ôN DE MENSAJES (PREVIEW) ---
+                # --- LÓGICA DE GENERACIÓN DE MENSAJES (PREVIEW) ---
                 contacts_to_send = []
                 
                 if selected_labels:
                     st.markdown("##### Vista Previa")
                     
-                    # SOLUCI├ôN 1: Cargar logo en scope global (antes del loop)
-                    # Esto garantiza que logo_b64 est├® disponible tanto para preview como para env├¡o
+                    # SOLUCIÓN 1: Cargar logo en scope global (antes del loop)
+                    # Esto garantiza que logo_b64 esté disponible tanto para preview como para envío
                     import base64
                     import os
                     logo_path = os.path.join(os.getcwd(), "assets", "logo_dacta.png")
@@ -941,9 +941,9 @@ if st.session_state['data_ready']:
                         
                         if docs_cli.empty: continue
 
-                        # Datos B├ísicos
+                        # Datos Básicos
                         empresa = docs_cli['EMPRESA'].iloc[0]
-                        telefono = docs_cli['TEL├ëFONO'].iloc[0]
+                        telefono = docs_cli['TELÉFONO'].iloc[0]
 
                         # 1. Totales por Moneda
                         currency_stats = docs_cli.groupby('MONEDA')['SALDO REAL'].agg(['count', 'sum'])
@@ -979,7 +979,7 @@ if st.session_state['data_ready']:
                             monto_emit = f"{mon_sym}{doc['MONT EMIT']:,.2f}"
                             saldo_fmt = f"{mon_sym}{saldo_doc_real:,.2f}"
                             
-                            det_val = doc['DETRACCI├ôN']
+                            det_val = doc['DETRACCIÓN']
                             det_estado = doc['ESTADO DETRACCION']
                             
                             if det_estado == "Pendiente": estado_str = "Pendiente"
@@ -990,18 +990,18 @@ if st.session_state['data_ready']:
                             if det_val > 0:
                                 det_info = f" | Detr: S/{det_val:,.2f} ({estado_str})"
                             
-                            # --- DISE├æO SMART ---
+                            # --- DISEÑO SMART ---
                             venc_short = pd.to_datetime(doc['FECH VENC']).strftime('%d/%m')
                             
-                            line1 = f"­ƒôä *{comprobante}* (Venc: {venc_short})"
-                            line2 = f"­ƒÆ░ Imp: {monto_emit}  ┬╗  Saldo: *{saldo_fmt}*"
+                            line1 = f"📄 *{comprobante}* (Venc: {venc_short})"
+                            line2 = f"💰 Imp: {monto_emit}  »  Saldo: *{saldo_fmt}*"
                             
                             line3 = ""
                             if det_val > 0:
-                                icon_det = "ÔÜá´©Å" if det_estado == "Pendiente" else "Ôä╣´©Å"
+                                icon_det = "⚠️" if det_estado == "Pendiente" else "ℹ️"
                                 line3 = f"\n{icon_det} Detr: S/ {det_val:,.2f} ({estado_str})"
 
-                            block = f"{line1}\n{line2}{line3}\nÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ"
+                            block = f"{line1}\n{line2}{line3}\n────────────────"
                             docs_lines.append(block)
                         
                         txt_detalle = "\n".join(docs_lines)
@@ -1046,11 +1046,11 @@ if st.session_state['data_ready']:
                         
                         # Mostrar Preview
                         # Mostrar Preview (Rich HTML Card)
-                        with st.expander(f"­ƒô¿ {empresa} ({telefono})", expanded=False):
+                        with st.expander(f"📨 {empresa} ({telefono})", expanded=False):
                             # --- v4.4 PREMIUM PREVIEW (Dynamic Branding) ---
                             import streamlit.components.v1 as components
                             
-                            # 1. Colors (logo_b64 ya est├í cargado en scope global)
+                            # 1. Colors (logo_b64 ya está cargado en scope global)
                             primary_col = CONFIG.get('primary_color', '#007bff')
                             secondary_col = CONFIG.get('secondary_color', '#00d4ff')
                             
@@ -1066,8 +1066,8 @@ if st.session_state['data_ready']:
                                     m_emit = f"{sym}{row['MONT EMIT']:,.2f}"
                                     m_saldo = f"{sym}{row['SALDO REAL']:,.2f}"
                                     
-                                    # Detracci├│n (Solo Soles)
-                                    det_val = row.get('DETRACCI├ôN', 0)
+                                    # Detracción (Solo Soles)
+                                    det_val = row.get('DETRACCIÓN', 0)
                                     det_fmt = f"S/ {det_val:,.2f}" if det_val > 0 else "-"
                                     
                                     table_rows += f"""
@@ -1144,7 +1144,7 @@ if st.session_state['data_ready']:
                                         <div class="greeting">Estimados {client_name},</div>
                                         <div class="intro">
                                             Le informamos que a la fecha presenta documentos pendientes de pago por un <b>Total de: {total_real_str}</b>.<br>
-                                            Agradeceremos gestionar la cancelaci├│n a la brevedad posible.
+                                            Agradeceremos gestionar la cancelación a la brevedad posible.
                                         </div>
                                         
                                         <div class="table-wrapper">
@@ -1171,12 +1171,12 @@ if st.session_state['data_ready']:
                                     </div>
                                     <div class="doc-footer">
                                         {CONFIG.get('company_name', 'DACTA S.A.C.')} | RUC: {CONFIG.get('company_ruc', '20375779448')}<br>
-                                        Este es un documento formal generado autom├íticamente. Consultas: {CONFIG.get('phone_contact', '')}
+                                        Este es un documento formal generado automáticamente. Consultas: {CONFIG.get('phone_contact', '')}
                                     </div>
                                 </div>
                                 """
 
-                            # Para el preview en pantalla, usamos una versi├│n m├ís compacta pero similar
+                            # Para el preview en pantalla, usamos una versión más compacta pero similar
                             def get_preview_html(msg):
                                 import re
                                 def _fmt(text):
@@ -1187,7 +1187,7 @@ if st.session_state['data_ready']:
 
                             # GENERATE HTML PREVIEW (Usa Document Mode para consistencia visual)
                             # Pero en el expander de Streamlit mostramos solo el texto por velocidad
-                            # y guardamos el HTML complejo para la generaci├│n de imagen
+                            # y guardamos el HTML complejo para la generación de imagen
                             card_html = create_whatsapp_document_html(empresa, docs_cli, primary_col, secondary_col, logo_b64)
                             
                             contact_data['card_html'] = card_html
@@ -1203,8 +1203,8 @@ if st.session_state['data_ready']:
                 
                 # BOTON NUEVO: ENVIAR WHATSAPP (Selenium)
                 if st.button("Enviar Mensajes por WhatsApp", type="primary"):
-                    # --- DEDUPLICACI├ôN DE SEGURIDAD ---
-                    # Aseguramos que no se env├¡en mensajes dobles si hubo duplicados en la lista UI
+                    # --- DEDUPLICACIÓN DE SEGURIDAD ---
+                    # Aseguramos que no se envíen mensajes dobles si hubo duplicados en la lista UI
                     seen_keys = set()
                     unique_contacts = []
                     for c in contacts_to_send:
@@ -1223,11 +1223,11 @@ if st.session_state['data_ready']:
                     progress_bar = st.progress(0)
                     
                     # UI: Tabla de Resultados en Vivo
-                    st.markdown("##### ­ƒôè Estado del Env├¡o")
+                    st.markdown("##### 📊 Estado del Envío")
                     results_placeholder = st.empty()
                     
                     # UI: Log Oculto
-                    with st.expander("­ƒøá´©Å Ver Log T├®cnico (Solo para depuraci├│n)", expanded=False):
+                    with st.expander("🛠️ Ver Log Técnico (Solo para depuración)", expanded=False):
                         log_area = st.empty()
 
                     # Inicializar estado de resultados
@@ -1235,8 +1235,8 @@ if st.session_state['data_ready']:
                     for c in contacts_to_send:
                         session_results.append({
                             "Cliente": c['nombre_cliente'],
-                            "Tel├®fono": c['telefono'],
-                            "Estado": "ÔÅ│ Pendiente",
+                            "Teléfono": c['telefono'],
+                            "Estado": "⏳ Pendiente",
                             "Detalle": ""
                         })
                     
@@ -1250,33 +1250,33 @@ if st.session_state['data_ready']:
                         log_area.code(log_text)
                         
                         # Actualizar tabla de resultados en vivo
-                        # Identificamos el ├¡ndice actual (current-1 es el que se acaba de procesar o se est├í procesando)
-                        # Nota: La l├│gica de 'current' en el sender a veces es el inicio o el fin. 
-                        # Ajustaremos seg├║n el mensaje de status.
+                        # Identificamos el índice actual (current-1 es el que se acaba de procesar o se está procesando)
+                        # Nota: La lógica de 'current' en el sender a veces es el inicio o el fin. 
+                        # Ajustaremos según el mensaje de status.
                         
                         if "Enviando a" in status:
                             # Estamos procesando current
                             idx = current
                             if 0 <= idx < len(session_results):
-                                session_results[idx]["Estado"] = "­ƒöä Enviando..."
+                                session_results[idx]["Estado"] = "🔄 Enviando..."
                         
-                        # Si hay logs de ├®xito/error, actualizar el anterior
-                        last_lines = log_text.split('\n')[-3:] # Ver ├║ltimas l├¡neas
+                        # Si hay logs de éxito/error, actualizar el anterior
+                        last_lines = log_text.split('\n')[-3:] # Ver últimas líneas
                         full_log = log_text
                         
                         # Parsear log para actualizar estados finales (Naive approach pero funcional visualmente)
-                        # Una mejor forma ser├¡a que el callback reciba el ├¡ndice exacto y el resultado, 
-                        # pero por ahora parseamos el log o usamos el ├¡ndice.
+                        # Una mejor forma sería que el callback reciba el índice exacto y el resultado, 
+                        # pero por ahora parseamos el log o usamos el índice.
                         
                         # Update visual
                         results_placeholder.dataframe(pd.DataFrame(session_results), hide_index=True, use_container_width=True)
                     
                     
-                    # ========== NUEVO v5.0: ENV├ìO UNIFICADO CON MULTI-MODO ==========
-                    # La generaci├│n de im├ígenes y PDFs se maneja autom├íticamente en el backend
-                    # seg├║n el modo seleccionado (send_mode_value)
+                    # ========== NUEVO v5.0: ENVÍO UNIFICADO CON MULTI-MODO ==========
+                    # La generación de imágenes y PDFs se maneja automáticamente en el backend
+                    # según el modo seleccionado (send_mode_value)
                     
-                    status_placeholder.info("ÔÅ│ Preparando env├¡o...")
+                    status_placeholder.info("⏳ Preparando envío...")
                     
                     try:
                         results = send_whatsapp_messages_direct(
@@ -1284,23 +1284,23 @@ if st.session_state['data_ready']:
                             message=template, 
                             speed="Normal (Recomendado)",
                             progress_callback=progress_callback,
-                            send_mode=send_mode_value,  # NUEVO v5.0: Modo de env├¡o
-                            branding_config=CONFIG,      # NUEVO v5.0: Configuraci├│n de branding
+                            send_mode=send_mode_value,  # NUEVO v5.0: Modo de envío
+                            branding_config=CONFIG,      # NUEVO v5.0: Configuración de branding
                             logo_path=logo_path          # NUEVO v5.0: Ruta al logo
                         )
                         
-                        # Actualizaci├│n Final de la Tabla
+                        # Actualización Final de la Tabla
                         final_data = []
                         for i, res in enumerate(results.get('resultados_detallados', [])): # Assuming new return format or map
-                             # Fallback si no cambiamos el return del sender todav├¡a
+                             # Fallback si no cambiamos el return del sender todavía
                              pass
                         
-                        # Como no cambi├® el return de send_whatsapp_messages_direct para devolver lista detallada ordenada,
+                        # Como no cambié el return de send_whatsapp_messages_direct para devolver lista detallada ordenada,
                         # reconstruyo basado en lo que tenemos o simplemente mostramos el resumen final.
-                        # Para hacerlo bien, el sender deber├¡a devolver el estado de cada uno.
+                        # Para hacerlo bien, el sender debería devolver el estado de cada uno.
                         # Por ahora, marcaremos todos como completados si no hubo error fatal, o parseamos el log final.
                         
-                        st.success("Ô£à Proceso Finalizado")
+                        st.success("✅ Proceso Finalizado")
                         
                         # Mostrar resumen final limpio
                         col_res1, col_res2 = st.columns(2)
@@ -1308,9 +1308,9 @@ if st.session_state['data_ready']:
                         col_res2.metric("Fallidos", results['fallidos'])
                         
                         if results['fallidos'] > 0:
-                            st.error("Algunos mensajes fallaron. Revisa el log t├®cnico.")
+                            st.error("Algunos mensajes fallaron. Revisa el log técnico.")
                     except Exception as e:
-                        st.error(f"ÔØî Error: {str(e)}")
+                        st.error(f"❌ Error: {str(e)}")
                         import traceback
                         with st.expander("Ver detalles del error"):
                             st.code(traceback.format_exc())
@@ -1320,48 +1320,48 @@ if st.session_state['data_ready']:
     
     # --- TAB 5: EMAIL ---
     with tab_map["5. Notificaciones Email"]:
-        st.subheader("Gesti├│n de Correos")
+        st.subheader("Gestión de Correos")
         
         if not df_final.empty:
-            # --- Renderizar Reporte Post-Env├¡o si existe en session_state ---
+            # --- Renderizar Reporte Post-Envío si existe en session_state ---
             if 'last_send_results' in st.session_state and st.session_state['last_send_results']:
                 results = st.session_state['last_send_results']
                 
-                st.success("Ô£à Env├¡o completado. Resultados del ├║ltimo proceso:")
+                st.success("✅ Envío completado. Resultados del último proceso:")
                 
                 # --- RC-UX-002: Panel de Resultados Amigable ---
                 st.divider()
-                st.subheader("­ƒôè Resumen del Proceso")
+                st.subheader("📊 Resumen del Proceso")
                 
-                # A) Resumen Ejecutivo (M├®tricas)
+                # A) Resumen Ejecutivo (Métricas)
                 c1, c2, c3 = st.columns(3)
-                c1.metric("Ô£à Enviados", results['success'])
-                c2.metric("ÔØî Fallidos", results['failed'])
-                c3.metric("­ƒöÆ Bloqueados (TTL)", results.get('blocked', 0))
+                c1.metric("✅ Enviados", results['success'])
+                c2.metric("❌ Fallidos", results['failed'])
+                c3.metric("🔒 Bloqueados (TTL)", results.get('blocked', 0))
                 
                 # B) Tabla de Detalles (Negocio)
                 if 'details' in results and results['details']:
                     df_res = pd.DataFrame(results['details'])
                     
-                    st.write("­ƒôØ **Detalle por Cliente:**")
+                    st.write("📝 **Detalle por Cliente:**")
                     st.dataframe(
                         df_res[['Cliente', 'Email', 'Estado', 'Detalle']], 
                         use_container_width=True,
                         hide_index=True
                     )
                     
-                    # Bot├│n descarga
+                    # Botón descarga
                     csv = df_res.to_csv(index=False).encode('utf-8')
                     batch_id = st.session_state.get('last_processed_batch_id', 'unknown')
                     st.download_button(
-                        "­ƒôä Descargar Reporte de Env├¡o (CSV)",
+                        "📄 Descargar Reporte de Envío (CSV)",
                         data=csv,
                         file_name=f"reporte_envio_{batch_id[:8]}.csv",
                         mime="text/csv"
                     )
                 
-                # Bot├│n para cerrar el reporte
-                if st.button("Ô£à Cerrar Reporte"):
+                # Botón para cerrar el reporte
+                if st.button("✅ Cerrar Reporte"):
                     del st.session_state['last_send_results']
                     st.rerun()
                 
@@ -1381,7 +1381,7 @@ if st.session_state['data_ready']:
                     # We use a lambda to check ESTADO DETRACCION == 'PENDIENTE'
                     df_email_view = df_filtered.copy()  # Trabajar sobre vista filtrada
                     df_email_view['DETR_PENDIENTE_AMOUNT'] = df_email_view.apply(
-                        lambda x: float(x['DETRACCI├ôN']) if str(x['ESTADO DETRACCION']).upper().strip() == 'PENDIENTE' else 0.0, 
+                        lambda x: float(x['DETRACCIÓN']) if str(x['ESTADO DETRACCION']).upper().strip() == 'PENDIENTE' else 0.0, 
                         axis=1
                     )
                     
@@ -1396,11 +1396,11 @@ if st.session_state['data_ready']:
                     ]
                     
                     # --- RC-FEAT-UX-EMAIL: Smart Filters & Counters (Tower Integration) ---
-                    # FIX E2E: NO consultar DB si es fresh_load (nuevo ciclo) para evitar contaminaci├│n
+                    # FIX E2E: NO consultar DB si es fresh_load (nuevo ciclo) para evitar contaminación
                     is_fresh_load = st.session_state.get('fresh_load', False)
                     
-                    # --- KPIs de Env├¡o (TAB Notificaciones Email) ---
-                    # Calcular por COD_CLIENTE ├║nico para evitar confusi├│n con emails compartidos
+                    # --- KPIs de Envío (TAB Notificaciones Email) ---
+                    # Calcular por COD_CLIENTE único para evitar confusión con emails compartidos
                     from datetime import date
                     today_str = date.today().strftime('%Y-%m-%d')
                     
@@ -1410,16 +1410,16 @@ if st.session_state['data_ready']:
                         mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
                         mask_enviado_hoy = mask_enviado & mask_hoy
                         
-                        # COD_CLIENTE ├║nicos enviados hoy
+                        # COD_CLIENTE únicos enviados hoy
                         clientes_enviados_hoy_count = df_final[mask_enviado_hoy]['COD CLIENTE'].nunique()
                     else:
                         clientes_enviados_hoy_count = 0
                     
-                    # --- Filtrar clientes disponibles (L├│gica Movida ANTES de mostrar KPIs) ---
+                    # --- Filtrar clientes disponibles (Lógica Movida ANTES de mostrar KPIs) ---
                     # Layout de columnas para KPIs y Controles
                     c_stat1, c_stat2, c_ctrl = st.columns([1, 1, 2])
                     
-                    hide_sent_today = c_ctrl.toggle("­ƒÖê Ocultar ya enviados hoy", value=True, help="Oculta de la lista los clientes que ya recibieron correo hoy.")
+                    hide_sent_today = c_ctrl.toggle("🙈 Ocultar ya enviados hoy", value=True, help="Oculta de la lista los clientes que ya recibieron correo hoy.")
                     
                     if hide_sent_today:
                         # Obtener COD_CLIENTE de clientes enviados HOY desde df_final (SSOT)
@@ -1431,7 +1431,7 @@ if st.session_state['data_ready']:
                             mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
                             mask_enviado_hoy = mask_enviado & mask_hoy
                             
-                            # Obtener COD_CLIENTE ├║nicos enviados hoy
+                            # Obtener COD_CLIENTE únicos enviados hoy
                             clientes_enviados_hoy = df_final[mask_enviado_hoy]['COD CLIENTE'].unique()
                             
                             # Filtrar: excluir clientes enviados hoy
@@ -1442,9 +1442,9 @@ if st.session_state['data_ready']:
                     total_clientes_disponibles = len(client_group_email)
                     pendientes_envio_count = total_clientes_disponibles
                     
-                    # Mostrar KPIs (Ahora s├¡ sincronizados con el multiselect)
-                    c_stat1.metric("ÔÅ│ Pendientes de Env├¡o", pendientes_envio_count)
-                    c_stat2.metric("­ƒôº Enviados Hoy", clientes_enviados_hoy_count)
+                    # Mostrar KPIs (Ahora sí sincronizados con el multiselect)
+                    c_stat1.metric("⏳ Pendientes de Envío", pendientes_envio_count)
+                    c_stat2.metric("📧 Enviados Hoy", clientes_enviados_hoy_count)
                     
                     st.markdown("---")
                     
@@ -1489,7 +1489,7 @@ if st.session_state['data_ready']:
                     if "email_sel_key" not in st.session_state:
                          st.session_state["email_sel_key"] = []
                     
-                    # Limpiar selecci├│n si las opciones cambiaron (filtros) para evitar crash de Streamlit
+                    # Limpiar selección si las opciones cambiaron (filtros) para evitar crash de Streamlit
                     valid_opts_set = set(email_options)
                     st.session_state["email_sel_key"] = [x for x in st.session_state["email_sel_key"] if x in valid_opts_set]
 
@@ -1504,10 +1504,10 @@ if st.session_state['data_ready']:
                     
                     st.button("Seleccionar Todos (Email)", on_click=select_all_callback)
                     
-                    # --- DASHBOARD RESUMEN DE ENV├ìO ---
+                    # --- DASHBOARD RESUMEN DE ENVÍO ---
                     if sel_emails:
                         st.markdown("---")
-                        st.markdown("###### ­ƒôè Resumen de Env├¡o Seleccionado")
+                        st.markdown("###### 📊 Resumen de Envío Seleccionado")
                         
                         total_cli_sel = len(sel_emails)
                         total_s_sel = sum(email_map[x]['deb_s'] for x in sel_emails)
@@ -1534,7 +1534,7 @@ if st.session_state['data_ready']:
                             st.markdown(f"""
                             <div class="stat-box">
                                 <div class="stat-label">Destinatarios</div>
-                                <div class="stat-value">­ƒæÑ {total_cli_sel}</div>
+                                <div class="stat-value">👥 {total_cli_sel}</div>
                             </div>
                             """, unsafe_allow_html=True)
                             
@@ -1549,7 +1549,7 @@ if st.session_state['data_ready']:
                         with k3:
                             st.markdown(f"""
                             <div class="stat-box">
-                                <div class="stat-label">Total D├│lares</div>
+                                <div class="stat-label">Total Dólares</div>
                                 <div class="stat-value" title="$ {total_d_sel:,.2f}">$ {total_d_sel:,.2f}</div>
                             </div>
                             """, unsafe_allow_html=True)
@@ -1609,39 +1609,39 @@ if st.session_state['data_ready']:
                                 src_base64 = f"data:image/png;base64,{encoded_string}"
                                 preview_html_view = preview_html_cid.replace("cid:logo_dacta", src_base64)
                             except:
-                                pass # Fallback (mostrar├í alt text)
+                                pass # Fallback (mostrará alt text)
                         
-                        with st.expander(f"Ô£ë´©Å {info_sel['empresa']}", expanded=False):
+                        with st.expander(f"✉️ {info_sel['empresa']}", expanded=False):
                             components.html(preview_html_view, height=600, scrolling=True)
                     
                     
-                    # --- RC-BUG-006 & 010: Protecci├│n Avanzada contra Doble Env├¡o ---
-                    # Generar una firma ├║nica del lote actual
+                    # --- RC-BUG-006 & 010: Protección Avanzada contra Doble Envío ---
+                    # Generar una firma única del lote actual
                     current_batch_hash = hash(tuple(sorted(sel_emails)))
                     current_batch_id = f"{len(sel_emails)}_{current_batch_hash}"
                     
                     if 'last_processed_batch_id' not in st.session_state:
                          st.session_state['last_processed_batch_id'] = None
                     
-                    # 2. Bloqueo de UI si ya se proces├│
+                    # 2. Bloqueo de UI si ya se procesó
                     is_processed = (st.session_state['last_processed_batch_id'] == current_batch_id)
                     
                     if is_processed:
-                        st.info("Ôä╣´©Å Este lote ya fue procesado. Para enviar otro, cambie la selecci├│n o recargue (F5).")
-                        if st.button("­ƒöä Resetear Bloqueo (Permitir reenv├¡o)"):
+                        st.info("ℹ️ Este lote ya fue procesado. Para enviar otro, cambie la selección o recargue (F5).")
+                        if st.button("🔄 Resetear Bloqueo (Permitir reenvío)"):
                             st.session_state['last_processed_batch_id'] = None
                             st.rerun()
 
 
                     # --- RC-BUG-015: Explicit Resend Control ---
-                    force_resend_ttl = st.checkbox("­ƒöä Habilitar reenv├¡o (Ignorar bloqueo 10min)", help="Marca esto para reenviar intencionalmente una notificaci├│n reciente.")
+                    force_resend_ttl = st.checkbox("🔄 Habilitar reenvío (Ignorar bloqueo 10min)", help="Marca esto para reenviar intencionalmente una notificación reciente.")
                     
-                    # Bot├│n Main de Env├¡o
+                    # Botón Main de Envío
                     if st.button("Enviar Correos Masivos", type="primary", disabled=is_processed):
                         if is_processed:
                              st.stop()
                         
-                        st.write(f"­ƒæÀ DEBUG: Iniciando env├¡o... Hash: {current_batch_id} | ForceResend: {force_resend_ttl}")
+                        st.write(f"👷 DEBUG: Iniciando envío... Hash: {current_batch_id} | ForceResend: {force_resend_ttl}")
 
                         # Credenciales ahora vienen de CONFIG global
                         smtp_cfg = CONFIG.get('smtp_config', {})
@@ -1649,25 +1649,25 @@ if st.session_state['data_ready']:
                         email_pass = smtp_cfg.get('password', '')
 
                         if not email_user or not email_pass:
-                             st.error("ÔØî Faltan credenciales SMTP. Config├║ralas en la pesta├▒a 'Configuraci├│n'.")
+                             st.error("❌ Faltan credenciales SMTP. Configúralas en la pestaña 'Configuración'.")
                         else:
-                            # --- Feedback Visual de Supervisi├│n (RC-BUG-017) ---
+                            # --- Feedback Visual de Supervisión (RC-BUG-017) ---
                             # --- Pre-flight Checks (QA & Internal Copies) RC-BUG-020 ---
                             qa_cfg = CONFIG.get('qa_config', {})
                             qa_enabled = qa_cfg.get('enabled', False)
                             
                             if qa_enabled:
-                                st.warning(f"­ƒº¬ MODO QA ACTIVO: Redirecci├│n a lista de pruebas ({len(qa_cfg.get('recipients', []))} destinos).")
+                                st.warning(f"🧪 MODO QA ACTIVO: Redirección a lista de pruebas ({len(qa_cfg.get('recipients', []))} destinos).")
                             else:
                                 # Prod Mode Info
                                 int_copies = CONFIG.get('internal_copies', {})
                                 n_cc = len(helpers.normalize_emails(int_copies.get('cc_list', [])))
                                 n_bcc = len(helpers.normalize_emails(int_copies.get('bcc_list', [])))
                                 if n_cc > 0 or n_bcc > 0:
-                                    st.info(f"­ƒæÑ En Producci├│n: Se enviar├ín copias internas ({n_cc} CC, {n_bcc} CCO).")
+                                    st.info(f"👥 En Producción: Se enviarán copias internas ({n_cc} CC, {n_bcc} CCO).")
                             
                             messages_to_send = []
-                            # RC-BUG-007: Deduplicaci├│n expl├¡cita en el origen
+                            # RC-BUG-007: Deduplicación explícita en el origen
                             seen_emails_batch = set()
                             
                             # RC-BUG-LOGO: Ensure logo_path is set correctly for the batch
@@ -1693,8 +1693,8 @@ if st.session_state['data_ready']:
                                 # Normalizar email 
                                 email_norm = str(info['email']).strip().lower()
                                 
-                                # RC-BUG-016: Permitir m├║ltiple env├¡o al mismo email si son clientes distintos
-                                # (Ya no bloqueamos por email ├║nico en el batch)
+                                # RC-BUG-016: Permitir múltiple envío al mismo email si son clientes distintos
+                                # (Ya no bloqueamos por email único en el batch)
                                 # if email_norm in seen_emails_batch:
                                 #     continue
                                 # seen_emails_batch.add(email_norm)
@@ -1735,18 +1735,18 @@ if st.session_state['data_ready']:
                                 company_sender = CONFIG.get('company_name', 'DACTA S.A.C.')
                                 subject_line = f"Estado de Cuenta {company_sender} | Cliente: {info['empresa']}"
                                 
-                                # Recolectar MATCH_KEYs para este cliente (para tracking post-env├¡o)
+                                # Recolectar MATCH_KEYs para este cliente (para tracking post-envío)
                                 if 'MATCH_KEY' in d_cli.columns:
                                     match_keys_for_client = d_cli['MATCH_KEY'].tolist()
                                 else:
                                     match_keys_for_client = []
                                 
-                                # Generar ID ├║nico para este mensaje (para matching confiable en post-send)
+                                # Generar ID único para este mensaje (para matching confiable en post-send)
                                 import uuid
                                 msg_unique_id = str(uuid.uuid4())[:8]
                                 
                                 messages_to_send.append({
-                                    'msg_id': msg_unique_id,  # NUEVO: ID ├║nico para matching
+                                    'msg_id': msg_unique_id,  # NUEVO: ID único para matching
                                     'email': info['email'],
                                     'client_name': info['empresa'],
                                     'cod_cliente': info['cod'],
@@ -1777,12 +1777,12 @@ if st.session_state['data_ready']:
                                     banner_html = qa_lib.get_qa_banner_html(real_email=info['email'], qa_list=qa_recipients)
                                     
                                     # QA Footer
-                                    qa_footer_html = f"<div style='margin-top:20px; font-size:10px; color:#aaa; border-top:1px solid #eee; padding-top:10px;'>Env├¡o de prueba (QA) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>"
+                                    qa_footer_html = f"<div style='margin-top:20px; font-size:10px; color:#aaa; border-top:1px solid #eee; padding-top:10px;'>Envío de prueba (QA) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>"
                                     
                                     messages_to_send[-1]['html_body'] = banner_html + body + qa_footer_html
                                     
                                     # Plain: Prepend text
-                                    messages_to_send[-1]['plain_body'] = "[PRUEBA QA] " + plain_body + "\n\n[QA FOOTER: Env├¡o de prueba]"
+                                    messages_to_send[-1]['plain_body'] = "[PRUEBA QA] " + plain_body + "\n\n[QA FOOTER: Envío de prueba]"
                                     
                                     # 4. Log Trace
                                     # We rely on 'original_email' field stored above for reporting
@@ -1817,11 +1817,11 @@ if st.session_state['data_ready']:
                                      now_timestamp = datetime.now()
                                      updated_match_keys = []
                                      
-                                     # Crear mapeo de msg_id -> mensaje para lookup r├ípido
+                                     # Crear mapeo de msg_id -> mensaje para lookup rápido
                                      msg_lookup = {m.get('msg_id'): m for m in messages_to_send if m.get('msg_id')}
                                      
                                      for detail in results['details']:
-                                         if detail.get('Estado') == 'Ô£à Enviado':
+                                         if detail.get('Estado') == '✅ Enviado':
                                              # Obtener msg_id del detalle (si existe)
                                              msg_id_sent = detail.get('msg_id')
                                              
@@ -1834,7 +1834,7 @@ if st.session_state['data_ready']:
                                              
                                              if msg and msg.get('match_keys'):
                                                 # Actualizar por MATCH_KEY (estable por documento, no por email)
-                                                # GUARD RAIL: Tambi├®n filtrar por COD CLIENTE para evitar updates masivos
+                                                # GUARD RAIL: También filtrar por COD CLIENTE para evitar updates masivos
                                                 cod_cliente_msg = msg.get('cod_cliente')
                                                 
                                                 for mk in msg['match_keys']:
@@ -1851,31 +1851,31 @@ if st.session_state['data_ready']:
                                                         updated_match_keys.append(mk)
                                      
                                      # Recalcular df_filtered desde df_final actualizado
-                                     # (Aplicar los mismos filtros que est├ín actualmente activos)
+                                     # (Aplicar los mismos filtros que están actualmente activos)
                                      df_final_updated = st.session_state['df_final']
                                      df_filtered_new = df_final_updated.copy()
                                      
-                                     # Reaplicar filtro de empresa si est├í activo
+                                     # Reaplicar filtro de empresa si está activo
                                      if 'filter_empresa' in st.session_state and st.session_state['filter_empresa']:
                                          selected_empresas = st.session_state['filter_empresa']
-                                         if selected_empresas:  # Solo filtrar si hay selecci├│n
+                                         if selected_empresas:  # Solo filtrar si hay selección
                                              df_filtered_new = df_filtered_new[df_filtered_new['EMPRESA'].isin(selected_empresas)]
                                      
-                                     # Reaplicar filtro "Solo con Correo" si est├í activo
+                                     # Reaplicar filtro "Solo con Correo" si está activo
                                      if st.session_state.get('filter_solo_con_correo', False):
                                          df_filtered_new = df_filtered_new[df_filtered_new['CORREO'].notna() & (df_filtered_new['CORREO'] != '')]
                                      
                                      # Guardar df_filtered actualizado
                                      st.session_state['df_filtered'] = df_filtered_new
                                      
-                                     # Guardar info de actualizaci├│n para display de debug
+                                     # Guardar info de actualización para display de debug
                                      st.session_state['last_tracking_update'] = {
                                          'count': len(updated_match_keys),
                                          'timestamp': now_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                                          'sample_keys': updated_match_keys[:3] if updated_match_keys else []  # Primeros 3 para debug
                                      }
                                      
-                                     # IMPORTANTE: Marcar fresh_load=False despu├®s del primer env├¡o exitoso
+                                     # IMPORTANTE: Marcar fresh_load=False después del primer envío exitoso
                                      st.session_state['fresh_load'] = False
                                      # GUARD RAIL: Marcar que hay cambios locales de tracking
                                      st.session_state['tracking_dirty'] = True
@@ -1886,25 +1886,25 @@ if st.session_state['data_ready']:
                                      # IMPORTANTE: Forzar rerun para refrescar KPIs
                                      # Los resultados quedan guardados en session_state para renderizar post-rerun
                                      if len(updated_match_keys) > 0:
-                                         st.rerun()  # Refresca KPIs + mantiene Reporte Post-Env├¡o v├¡a session_state
+                                         st.rerun()  # Refresca KPIs + mantiene Reporte Post-Envío vía session_state
 
                             
                             # --- RC-UX-002: Panel de Resultados Amigable ---
                             st.divider()
-                            st.subheader("­ƒôè Resumen del Proceso")
+                            st.subheader("📊 Resumen del Proceso")
                             
-                            # A) Resumen Ejecutivo (M├®tricas)
+                            # A) Resumen Ejecutivo (Métricas)
                             c1, c2, c3 = st.columns(3)
-                            c1.metric("Ô£à Enviados", results['success'])
-                            c2.metric("ÔØî Fallidos", results['failed'])
-                            c3.metric("­ƒöÆ Bloqueados (TTL)", results.get('blocked', 0))
+                            c1.metric("✅ Enviados", results['success'])
+                            c2.metric("❌ Fallidos", results['failed'])
+                            c3.metric("🔒 Bloqueados (TTL)", results.get('blocked', 0))
                             
                             # B) Tabla de Detalles (Negocio)
                             if 'details' in results and results['details']:
                                 df_res = pd.DataFrame(results['details'])
                                 
                                 # Estilizar tabla simple
-                                st.write("­ƒôØ **Detalle por Cliente:**")
+                                st.write("📝 **Detalle por Cliente:**")
                                 st.dataframe(
                                     df_res[['Cliente', 'Email', 'Estado', 'Detalle']], 
                                     use_container_width=True,
@@ -1914,7 +1914,7 @@ if st.session_state['data_ready']:
                                 # --- RC-FEAT-012: Traceability (Original vs Sent) ---
                                 qa_cfg_active = CONFIG.get('qa_config', {})
                                 if qa_cfg_active.get('enabled', False):
-                                    st.info("Ôä╣´©Å Modo QA Activo: Los correos mostrados arriba son los de QA. Abajo el mapeo original.")
+                                    st.info("ℹ️ Modo QA Activo: Los correos mostrados arriba son los de QA. Abajo el mapeo original.")
                                     # Rebuild mapping from messages_to_send
                                     # msg['client_name'] -> msg['original_email']
                                     orig_map = {m['client_name']: m['original_email'] for m in messages_to_send}
@@ -1927,23 +1927,23 @@ if st.session_state['data_ready']:
                                         hide_index=True
                                     )
                                 
-                                # Bot├│n descarga
+                                # Botón descarga
                                 csv = df_res.to_csv(index=False).encode('utf-8')
                                 st.download_button(
-                                    "­ƒôä Descargar Reporte de Env├¡o (CSV)",
+                                    "📄 Descargar Reporte de Envío (CSV)",
                                     data=csv,
                                     file_name=f"reporte_envio_{current_batch_id[:8]}.csv",
                                     mime="text/csv"
                                 )
                             
-                            # C) Log T├®cnico (Oculto)
-                            with st.expander("­ƒøá´©Å Avanzado (QA / Soporte T├®cnico)", expanded=False):
+                            # C) Log Técnico (Oculto)
+                            with st.expander("🛠️ Avanzado (QA / Soporte Técnico)", expanded=False):
                                 st.write(f"RunID: {current_batch_id}")
                                 
-                                # NUEVO: Estad├¡sticas de Tracking
+                                # NUEVO: Estadísticas de Tracking
                                 if 'last_tracking_update' in st.session_state:
                                     update_info = st.session_state['last_tracking_update']
-                                    st.success(f"Ô£à Tracking actualizado: {update_info['count']} documentos")
+                                    st.success(f"✅ Tracking actualizado: {update_info['count']} documentos")
                                     st.caption(f"Timestamp: {update_info['timestamp']}")
                                     if update_info.get('sample_keys'):
                                         st.caption(f"MATCH_KEYs de muestra: {', '.join(str(k) for k in update_info['sample_keys'])}")
@@ -1952,16 +1952,16 @@ if st.session_state['data_ready']:
                                 for l in results['log']:
                                     st.text(l)
                                     if "535" in l:
-                                        st.error("Error 535: Revisa tu contrase├▒a de aplicaci├│n de Gmail.")
+                                        st.error("Error 535: Revisa tu contraseña de aplicación de Gmail.")
                 else:
                     st.info("Selecciona un cliente para ver la vista previa.")
 
         else:
              st.info("Sube los archivos y filtra para ver las notificaciones.")
 
-    # --- TAB 6: CONFIGURACI├ôN GLOBAL ---
-    with tab_map["6. Configuraci├│n"]:
-        st.header("Configuraci├│n del Sistema")
+    # --- TAB 6: CONFIGURACIÓN GLOBAL ---
+    with tab_map["6. Configuración"]:
+        st.header("Configuración del Sistema")
         
         with st.form("config_form"):
             col1, col2 = st.columns(2)
@@ -1970,45 +1970,45 @@ if st.session_state['data_ready']:
                 st.subheader("Identidad Corporativa")
                 new_company = st.text_input("Nombre de la Empresa", value=CONFIG['company_name'])
                 new_ruc = st.text_input("RUC", value=CONFIG['company_ruc'])
-                new_phone = st.text_input("Tel├®fono de Contacto", value=CONFIG['phone_contact'])
+                new_phone = st.text_input("Teléfono de Contacto", value=CONFIG['phone_contact'])
                 
                 st.subheader("Branding (Colores)")
                 new_primary = st.color_picker("Color Primario (Encabezados/Botones)", value=CONFIG['primary_color'])
                 new_secondary = st.color_picker("Color Secundario (Acentos)", value=CONFIG['secondary_color'])
                 # Nuevo: Color de Texto
                 curr_text_col = CONFIG.get('text_color', '#262730')
-                new_text_color = st.color_picker("Color de Texto (T├¡tulos)", value=curr_text_col, help="Color para t├¡tulos y encabezados. El cuerpo se mantiene legible.")
+                new_text_color = st.color_picker("Color de Texto (Títulos)", value=curr_text_col, help="Color para títulos y encabezados. El cuerpo se mantiene legible.")
 
             with col2:
                 st.subheader("Funcionalidades (Tabs)")
-                f_analysis = st.checkbox("Mostrar Tab An├ílisis", value=CONFIG.get('features', {}).get('show_analysis', False))
+                f_analysis = st.checkbox("Mostrar Tab Análisis", value=CONFIG.get('features', {}).get('show_analysis', False))
                 f_sales = st.checkbox("Mostrar Tab Ventas", value=CONFIG.get('features', {}).get('show_sales', False))
                 
                 st.markdown("---")
-                st.subheader("Configuraci├│n de Correo (SMTP)")
-                st.info("Credenciales para el env├¡o de correos masivos.")
+                st.subheader("Configuración de Correo (SMTP)")
+                st.info("Credenciales para el envío de correos masivos.")
                 st.markdown("""
                 > **Nota Importante para Gmail:**  
-                > Debes usar una **Contrase├▒a de Aplicaci├│n**, no tu clave normal.  
+                > Debes usar una **Contraseña de Aplicación**, no tu clave normal.  
                 > 1. Ve a tu Cuenta de Google > Seguridad.  
-                > 2. Activa la Verificaci├│n en 2 pasos.  
-                > 3. Busca "Contrase├▒as de aplicaciones" y genera una nueva.  
-                > [Ver Gu├¡a Oficial de Google](https://support.google.com/accounts/answer/185833)
+                > 2. Activa la Verificación en 2 pasos.  
+                > 3. Busca "Contraseñas de aplicaciones" y genera una nueva.  
+                > [Ver Guía Oficial de Google](https://support.google.com/accounts/answer/185833)
                 """)
                 new_smtp_server = st.text_input("Servidor SMTP", value=CONFIG['smtp_config']['server'])
                 new_smtp_port = st.text_input("Puerto SMTP", value=CONFIG['smtp_config']['port'])
                 new_smtp_user = st.text_input("Usuario (Correo)", value=CONFIG['smtp_config']['user'])
-                new_smtp_pass = st.text_input("Contrase├▒a App", value=CONFIG['smtp_config']['password'], type="password")
+                new_smtp_pass = st.text_input("Contraseña App", value=CONFIG['smtp_config']['password'], type="password")
 
             st.markdown("---")
             st.subheader("Plantilla de Correo")
             col_t1, col_t2 = st.columns(2)
             new_intro = col_t1.text_area("Texto Introductorio", value=CONFIG['email_template']['intro_text'], height=150, help="Texto antes de la tabla de deuda. Usa {CLIENTE} para insertar el nombre del cliente.")
-            new_footer = col_t2.text_area("Texto Pie de P├ígina", value=CONFIG['email_template']['footer_text'], height=150, help="Texto despu├®s de los totales.")
-            new_alert = st.text_area("Texto Alerta Detracci├│n", value=CONFIG['email_template']['alert_text'], help="Mensaje resaltado sobre cuentas de detracci├│n.")
-            new_voucher = st.text_area("Texto Nota (Vouchers)", value=CONFIG['email_template'].get('voucher_text', ''), help="Texto al final del correo (ej: instrucciones de env├¡o de vouchers). Deja vac├¡o para no mostrar.")
+            new_footer = col_t2.text_area("Texto Pie de Página", value=CONFIG['email_template']['footer_text'], height=150, help="Texto después de los totales.")
+            new_alert = st.text_area("Texto Alerta Detracción", value=CONFIG['email_template']['alert_text'], help="Mensaje resaltado sobre cuentas de detracción.")
+            new_voucher = st.text_area("Texto Nota (Vouchers)", value=CONFIG['email_template'].get('voucher_text', ''), help="Texto al final del correo (ej: instrucciones de envío de vouchers). Deja vacío para no mostrar.")
 
-            submitted = st.form_submit_button("Guardar Configuraci├│n")
+            submitted = st.form_submit_button("Guardar Configuración")
             
             if submitted:
                 new_settings = {
@@ -2036,15 +2036,15 @@ if st.session_state['data_ready']:
                     }
                 }
                 if sm.save_settings(new_settings):
-                    st.success("Ô£à Configuraci├│n guardada correctamente. Por favor recarga la p├ígina para aplicar cambios visuales.")
+                    st.success("✅ Configuración guardada correctamente. Por favor recarga la página para aplicar cambios visuales.")
                     st.rerun() # Recarga inmediata
                 else:
-                    st.error("ÔØî Error al guardar la configuraci├│n.")
+                    st.error("❌ Error al guardar la configuración.")
 
         # --- SECCION INDEPENDIENTE: COPIAS INTERNAS (RC-FEAT-013) ---
         st.markdown("---")
-        st.subheader("­ƒæÑ Copias Internas (CC / CCO)")
-        st.info("Configura las listas de distribuci├│n interna. Estas copias se env├¡an con cada correo a cliente (Solo en Producci├│n).")
+        st.subheader("👥 Copias Internas (CC / CCO)")
+        st.info("Configura las listas de distribución interna. Estas copias se envían con cada correo a cliente (Solo en Producción).")
         
         # --- State Management for Dirty Check (Internal Copies) ---
         current_internal_copies = CONFIG.get('internal_copies', {})
@@ -2057,11 +2057,11 @@ if st.session_state['data_ready']:
         c_copy1, c_copy2 = st.columns(2)
         with c_copy1:
             st.markdown("##### CC (Copia Visible)")
-            cc_input = st.text_area("Emails visibles (separados por coma/l├¡nea)", value=saved_cc, height=100, help="Estos correos aparecer├ín en el header 'Cc' del correo.")
+            cc_input = st.text_area("Emails visibles (separados por coma/línea)", value=saved_cc, height=100, help="Estos correos aparecerán en el header 'Cc' del correo.")
             
         with c_copy2:
             st.markdown("##### CCO (Copia Oculta)")
-            bcc_input = st.text_area("Emails ocultos (separados por coma/l├¡nea)", value=saved_bcc, height=100, help="Estos correos recibir├ín copia pero NO aparecer├ín en el header.")
+            bcc_input = st.text_area("Emails ocultos (separados por coma/línea)", value=saved_bcc, height=100, help="Estos correos recibirán copia pero NO aparecerán en el header.")
             
         # Preview & Diff Logic
         norm_cc = helpers.normalize_emails(cc_input)
@@ -2074,7 +2074,7 @@ if st.session_state['data_ready']:
         )
         
         if True: # Force render
-             st.caption(f"­ƒôØ Vista Previa: Se enviar├ín **{len(norm_cc)}** copias visibles y **{len(norm_bcc)}** ocultas por cada correo.")
+             st.caption(f"📝 Vista Previa: Se enviarán **{len(norm_cc)}** copias visibles y **{len(norm_bcc)}** ocultas por cada correo.")
              if norm_cc or norm_bcc:
                  p_c1, p_c2 = st.columns(2)
                  with p_c1:
@@ -2082,7 +2082,7 @@ if st.session_state['data_ready']:
                  with p_c2:
                      if norm_bcc: st.warning(f"**CCO**: {', '.join(norm_bcc)}")
 
-        if st.button("­ƒÆ¥ Guardar Copias Internas", disabled=not has_changes_copies, type="primary" if has_changes_copies else "secondary"):
+        if st.button("💾 Guardar Copias Internas", disabled=not has_changes_copies, type="primary" if has_changes_copies else "secondary"):
             new_copies_cfg = {
                 "cc_list": norm_cc,
                 "bcc_list": norm_bcc
@@ -2091,13 +2091,13 @@ if st.session_state['data_ready']:
             
             if sm.save_settings(CONFIG):
                 st.session_state['prev_internal_copies'] = new_copies_cfg # Update State
-                st.success(f"Ô£à Guardado: {len(norm_cc)} CCs y {len(norm_bcc)} CCOs configurados.")
-                st.toast("Listas de distribuci├│n actualizadas", icon="­ƒæÑ")
+                st.success(f"✅ Guardado: {len(norm_cc)} CCs y {len(norm_bcc)} CCOs configurados.")
+                st.toast("Listas de distribución actualizadas", icon="👥")
                 import time
                 time.sleep(1)
                 st.rerun()
             else:
-                st.error("Error al guardar configuraci├│n.")
+                st.error("Error al guardar configuración.")
                 
         # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
         # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
@@ -2119,14 +2119,14 @@ if st.session_state['data_ready']:
 
         # --- RC-FEAT-LEGGER: MANTENIMIENTO ---
         st.markdown("---")
-        # st.subheader("Gesti├│n de Sesi├│n") # Clean subheader or removed
-        with st.expander("ÔÜÖ´©Å Opciones Avanzadas (Reenv├¡o)", expanded=False):
-            # st.warning("Estas acciones afectan el historial de env├¡os. ├Üsalas con precauci├│n.") # Removed warning if logic is safe now
+        # st.subheader("Gestión de Sesión") # Clean subheader or removed
+        with st.expander("⚙️ Opciones Avanzadas (Reenvío)", expanded=False):
+            # st.warning("Estas acciones afectan el historial de envíos. Úsalas con precaución.") # Removed warning if logic is safe now
             
             c_dang1, c_dang2 = st.columns([3, 1])
             with c_dang1:
-                st.markdown("**Nuevo Ciclo de Env├¡os**")
-                st.caption("Reinicia el contador de env├¡os para esta sesi├│n. ├Ütil si deseas volver a notificar a clientes ya gestionados hoy.")
+                st.markdown("**Nuevo Ciclo de Envíos**")
+                st.caption("Reinicia el contador de envíos para esta sesión. Útil si deseas volver a notificar a clientes ya gestionados hoy.")
             with c_dang2:
                 # Initialize confirmation state
                 if 'confirm_reset' not in st.session_state:
@@ -2134,7 +2134,7 @@ if st.session_state['data_ready']:
                 
                 if not st.session_state['confirm_reset']:
                     # Step 1: Show confirmation button
-                    if st.button("Reiniciar Sesi├│n", type="secondary", help="Limpia visualizaci├│n de enviados"):
+                    if st.button("Reiniciar Sesión", type="secondary", help="Limpia visualización de enviados"):
                         # Calculate how many records will be affected
                         affected_count = 0
                         if 'df_final' in st.session_state and st.session_state['df_final'] is not None:
@@ -2151,18 +2151,18 @@ if st.session_state['data_ready']:
                     affected_count = st.session_state.get('affected_count', 0)
                     
                     st.warning(f"""
-                    ÔÜá´©Å **Confirmaci├│n Requerida**
+                    ⚠️ **Confirmación Requerida**
                     
-                    Esto reiniciar├í el ciclo de env├¡os:
-                    - Limpiar├í: `EMAIL_FINAL`, `ESTADO_EMAIL`, `FECHA_ULTIMO_ENVIO`
-                    - **{affected_count} registros** volver├ín a estado "Pendiente"
+                    Esto reiniciará el ciclo de envíos:
+                    - Limpiará: `EMAIL_FINAL`, `ESTADO_EMAIL`, `FECHA_ULTIMO_ENVIO`
+                    - **{affected_count} registros** volverán a estado "Pendiente"
                     
-                    ┬┐Deseas continuar?
+                    ¿Deseas continuar?
                     """)
                     
                     col_yes, col_no = st.columns(2)
                     with col_yes:
-                        if st.button("Ô£à S├¡, Reiniciar", type="primary"):
+                        if st.button("✅ Sí, Reiniciar", type="primary"):
                             # Execute reset
                             st.session_state['session_start_ts'] = datetime.now()
                             
@@ -2195,31 +2195,31 @@ if st.session_state['data_ready']:
                             st.session_state['reset_details'] = reset_details
                             st.session_state['confirm_reset'] = False
                             
-                            st.toast("­ƒöä Ciclo reiniciado", icon="Ô£à")
+                            st.toast("🔄 Ciclo reiniciado", icon="✅")
                             import time
                             time.sleep(0.5)
                             st.rerun()
                     
                     with col_no:
-                        if st.button("ÔØî Cancelar", type="secondary"):
+                        if st.button("❌ Cancelar", type="secondary"):
                             st.session_state['confirm_reset'] = False
                             st.rerun()
                 
                 # Show success message if reset was just completed
                 if st.session_state.get('reset_complete', False):
                     affected = st.session_state.get('affected_count', 0)
-                    st.success(f"Ô£à Ciclo reiniciado: **{affected} registros** pendientes nuevamente")
+                    st.success(f"✅ Ciclo reiniciado: **{affected} registros** pendientes nuevamente")
                     
-                    with st.expander("­ƒôï Ver detalle"):
+                    with st.expander("📋 Ver detalle"):
                         for detail in st.session_state.get('reset_details', []):
-                            st.caption(f"ÔÇó {detail}")
+                            st.caption(f"• {detail}")
                     
                     # Clear the flag
                     st.session_state['reset_complete'] = False
 
         st.markdown("---")
-        st.subheader("­ƒº¬ Modo Marcha Blanca (QA)")
-        st.warning("ÔÜá´©Å Zona de Seguridad: Configura el entorno de pruebas para env├¡os seguros. Controla To, CC, BCC.")
+        st.subheader("🧪 Modo Marcha Blanca (QA)")
+        st.warning("⚠️ Zona de Seguridad: Configura el entorno de pruebas para envíos seguros. Controla To, CC, BCC.")
         
         qa_cfg_defaults = CONFIG.get('qa_config', {
             'enabled': False,
@@ -2229,24 +2229,24 @@ if st.session_state['data_ready']:
         })
         
         # UI Components
-        qa_enabled = st.toggle("­ƒÜ¿ Activar Modo Marcha Blanca (QA)", value=qa_cfg_defaults.get('enabled', False))
+        qa_enabled = st.toggle("🚨 Activar Modo Marcha Blanca (QA)", value=qa_cfg_defaults.get('enabled', False))
         
         c_qa1, c_qa2 = st.columns(2)
         with c_qa1:
             qa_recipients_txt = st.text_area(
-                "Destinatarios QA (Separados por coma o l├¡nea)",
+                "Destinatarios QA (Separados por coma o línea)",
                 value=",\n".join(qa_cfg_defaults.get('recipients', [])),
                 height=100,
                 disabled=not qa_enabled,
-                help="Todos los correos del sistema se redirigir├ín a esta lista."
+                help="Todos los correos del sistema se redirigirán a esta lista."
             )
         
         with c_qa2:
-            st.write("Estrategia de Env├¡o QA:")
+            st.write("Estrategia de Envío QA:")
             qa_mode_sel = st.radio(
                 "Comportamiento",
                 options=["ALL", "PRIMARY"],
-                format_func=lambda x: "Enviar a TODOS los QA (Recomendado)" if x == "ALL" else "Enviar solo al PRIMERO (R├ípido)",
+                format_func=lambda x: "Enviar a TODOS los QA (Recomendado)" if x == "ALL" else "Enviar solo al PRIMERO (Rápido)",
                 index=0 if qa_cfg_defaults.get('mode', 'ALL') == 'ALL' else 1,
                 disabled=not qa_enabled
             )
@@ -2259,7 +2259,7 @@ if st.session_state['data_ready']:
                 value=",\n".join(qa_cfg_defaults.get('cc_recipients', [])),
                 height=80,
                 disabled=not qa_enabled,
-                help="Estos correos aparecer├ín en el header CC y recibir├ín copia."
+                help="Estos correos aparecerán en el header CC y recibirán copia."
             )
         with c_qabcc:
             qa_bcc_txt = st.text_area(
@@ -2267,7 +2267,7 @@ if st.session_state['data_ready']:
                 value=",\n".join(qa_cfg_defaults.get('bcc_recipients', [])),
                 height=80,
                 disabled=not qa_enabled,
-                help="Estos correos recibir├ín copia oculta."
+                help="Estos correos recibirán copia oculta."
             )
             
         # --- Dirty Check Logic QA ---
@@ -2289,18 +2289,18 @@ if st.session_state['data_ready']:
         if qa_enabled:
             st.markdown(f"""
             <div style="background-color: #fff3cd; padding: 10px; border-radius: 5px; border: 1px solid #ffeeba; margin-bottom: 10px;">
-                <strong>­ƒôØ Vista Previa QA (Simulaci├│n):</strong><br>
-                Por cada correo enviado, se armar├í el siguiente esquema:<br>
+                <strong>📝 Vista Previa QA (Simulación):</strong><br>
+                Por cada correo enviado, se armará el siguiente esquema:<br>
                 <ul>
                     <li><strong>To (Destino):</strong> {len(curr_qa_recipients)} correos (Lista QA)</li>
                     <li><strong>Cc (Visible):</strong> {len(curr_qa_cc)} correos (Lista QA)</li>
                     <li><strong>Bcc (Oculto):</strong> {len(curr_qa_bcc)} correos (Lista QA)</li>
                 </ul>
-                <small><em>* Los correos de Producci├│n ser├ín IGNORADOS completamente.</em></small>
+                <small><em>* Los correos de Producción serán IGNORADOS completamente.</em></small>
             </div>
             """, unsafe_allow_html=True)
 
-        if st.button("­ƒÆ¥ Guardar Configuraci├│n QA", type="primary" if qa_changes else "secondary", disabled=not qa_changes):
+        if st.button("💾 Guardar Configuración QA", type="primary" if qa_changes else "secondary", disabled=not qa_changes):
             new_qa_config = {
                 'enabled': qa_enabled,
                 'mode': qa_mode_sel,
@@ -2312,9 +2312,9 @@ if st.session_state['data_ready']:
             
             CONFIG['qa_config'] = new_qa_config
             if sm.save_settings(CONFIG):
-                st.success(f"Ô£à Modo QA Actualizado. Destinos: {len(curr_qa_recipients)} To | {len(curr_qa_cc)} CC | {len(curr_qa_bcc)} BCC")
+                st.success(f"✅ Modo QA Actualizado. Destinos: {len(curr_qa_recipients)} To | {len(curr_qa_cc)} CC | {len(curr_qa_bcc)} BCC")
                 if qa_enabled:
-                    st.toast("­ƒÜ¿ MODO QA ACTIVO: No saldr├ín correos a clientes.", icon="­ƒº¬")
+                    st.toast("🚨 MODO QA ACTIVO: No saldrán correos a clientes.", icon="🧪")
                 import time
                 time.sleep(1)
                 st.rerun()
@@ -2337,7 +2337,7 @@ if st.session_state['data_ready']:
         if current_logo_path and os.path.exists(current_logo_path):
             logo_active_exists = True
             
-        st.markdown("##### Logo Activo (En Producci├│n)")
+        st.markdown("##### Logo Activo (En Producción)")
         if logo_active_exists and st.session_state.logo_staged is None:
             # Show Active only if not staging (or show both? User wants "Vista previa final" on upload)
             # Strategy: Show Active. If Staged exists, show Staged below in "Review" section.
@@ -2346,8 +2346,8 @@ if st.session_state['data_ready']:
             with c_active_img:
                 st.image(current_logo_path, width=200)
             with c_active_info:
-                st.success("Ô£à Logo configurado y visible en correos.")
-                if st.button("­ƒùæ´©Å Eliminar Logo Actual", type="secondary", key="btn_del_logo"):
+                st.success("✅ Logo configurado y visible en correos.")
+                if st.button("🗑️ Eliminar Logo Actual", type="secondary", key="btn_del_logo"):
                     # IMMEDIATE ACTION requested by user (Clean config + files)
                     CONFIG['logo_path'] = None
                     try:
@@ -2358,7 +2358,7 @@ if st.session_state['data_ready']:
                     sm.save_settings(CONFIG)
                     st.rerun()
         elif not logo_active_exists and st.session_state.logo_staged is None:
-             st.info("Ôä╣´©Å No hay logo configurado. El correo saldr├í SIN logo.")
+             st.info("ℹ️ No hay logo configurado. El correo saldrá SIN logo.")
 
         
         st.markdown("---")
@@ -2373,11 +2373,11 @@ if st.session_state['data_ready']:
         )
         
         # Recomendaciones (Collapsed)
-        with st.expander("Ôä╣´©Å Recomendaciones T├®cnicas"):
+        with st.expander("ℹ️ Recomendaciones Técnicas"):
             st.markdown("""
             *   **Formato**: PNG (transparente) o JPG.
             *   **Dimensiones**: > 800px ancho.
-            *   **Proceso**: Se aplica corte de bordes (trim) y redimensionado (resize) autom├ítico.
+            *   **Proceso**: Se aplica corte de bordes (trim) y redimensionado (resize) automático.
             """)
 
         # 4. Processing Logic (Run once per file)
@@ -2411,13 +2411,13 @@ if st.session_state['data_ready']:
         # 5. Staging Review & Commit (Save)
         if st.session_state.logo_staged:
             st.divider()
-            st.warning("ÔÜá´©Å Tienes cambios pendientes (Logo en Staging). No se usar├ín hasta que guardes.")
+            st.warning("⚠️ Tienes cambios pendientes (Logo en Staging). No se usarán hasta que guardes.")
             
             staged = st.session_state.logo_staged
             
             col_rev1, col_rev2 = st.columns(2)
             with col_rev1:
-                st.caption("Previsualizaci├│n Final")
+                st.caption("Previsualización Final")
                 st.image(staged['bytes'], width=300)
                 st.caption(f"Dim: {staged['w']}x{staged['h']} px | {len(staged['bytes'])//1024} KB")
             
@@ -2425,7 +2425,7 @@ if st.session_state['data_ready']:
                 st.caption("Acciones")
                 
                 # SAVE ACTION
-                if st.button("­ƒÆ¥ GUARDAR Y APLICAR", type="primary", use_container_width=True):
+                if st.button("💾 GUARDAR Y APLICAR", type="primary", use_container_width=True):
                     # Persist to Disk
                     assets_dir = os.path.join(os.getcwd(), "assets")
                     if not os.path.exists(assets_dir):
@@ -2450,14 +2450,14 @@ if st.session_state['data_ready']:
                     st.session_state.logo_last_hash = None
                     st.session_state.logo_uploader_key += 1 # Forces uploader reset
                     
-                    st.success("Ô£à Logo guardado correctamente.")
+                    st.success("✅ Logo guardado correctamente.")
                     import time
                     time.sleep(1)
                     st.rerun()
 
                 st.write("")
                 # CANCEL ACTION
-                if st.button("Ô£û´©Å Cancelar / Descartar", use_container_width=True):
+                if st.button("✖️ Cancelar / Descartar", use_container_width=True):
                     st.session_state.logo_staged = None
                     st.session_state.logo_last_hash = None
                     st.session_state.logo_uploader_key += 1 # Reset uploader
@@ -2468,7 +2468,7 @@ else:
     st.markdown("""
     <div style='text-align: center; padding: 50px;'>
         <h3>Bienvenido</h3>
-        <p>Por favor utiliza el men├║ lateral para cargar tus archivos de <strong>CtasxCobrar, Cobranza y Cartera</strong>.</p>
-        <p style='color: gray; font-size: 0.9em;'>El sistema procesar├í autom├íticamente la informaci├│n.</p>
+        <p>Por favor utiliza el menú lateral para cargar tus archivos de <strong>CtasxCobrar, Cobranza y Cartera</strong>.</p>
+        <p style='color: gray; font-size: 0.9em;'>El sistema procesará automáticamente la información.</p>
     </div>
     """, unsafe_allow_html=True)

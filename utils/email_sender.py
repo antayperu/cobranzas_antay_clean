@@ -1,4 +1,4 @@
-﻿import smtplib
+import smtplib
 import html
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -45,7 +45,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
 
         # Apply cleanup to vector (RC-FIX-STRINGS) using shared helper
         df_calc['SALDO_REAL_CLEAN'] = df_calc['SALDO REAL'].apply(helpers.safe_clean_decimal)
-        df_calc['DETRACCION_CLEAN'] = df_calc['DETRACCI├ôN'].apply(helpers.safe_clean_decimal)
+        df_calc['DETRACCION_CLEAN'] = df_calc['DETRACCIÓN'].apply(helpers.safe_clean_decimal)
         
         mask_soles = df_calc['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
         
@@ -63,8 +63,8 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         count_d = len(df_dol)
         kpi_dacta_d = f"US$ {sum_d:,.2f} ({count_d:02d} documentos)" if (sum_d > 0 or count_d > 0) else "US$ 0.00 (00 documentos)"
         
-        # 3. Detracci├│n SUNAT (Solo documentos afectos)
-        # 3. Detracci├│n SUNAT (Solo documentos afectos + Pendientes)
+        # 3. Detracción SUNAT (Solo documentos afectos)
+        # 3. Detracción SUNAT (Solo documentos afectos + Pendientes)
         # RC-FIX-KEYERROR: Consolidate filtering on df_calc directly to avoid intermediate column loss
         try:
             mask_d_val = df_calc['DETRACCION_CLEAN'] > 0.01
@@ -92,7 +92,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                 <td style="padding: 6px 0; text-align: right; font-weight: bold; color: {COLOR_PRIMARY};">{kpi_dacta_s}</td>
             </tr>
             <tr>
-                <td style="padding: 6px 0; color: #555;">Deuda Total <strong>D├│lares</strong>:</td>
+                <td style="padding: 6px 0; color: #555;">Deuda Total <strong>Dólares</strong>:</td>
                 <td style="padding: 6px 0; text-align: right; font-weight: bold; color: {COLOR_PRIMARY};">{kpi_dacta_d}</td>
             </tr>
             <tr>
@@ -123,7 +123,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     raw_intro = email_config.get('intro_text', '').strip()
     if not raw_intro:
         # Default with {cliente} placeholder support
-        raw_intro = "Estimado cliente {cliente},\nAdjuntamos el detalle actualizado de sus documentos pendientes de pago. Agradeceremos verificar la siguiente informaci├│n:"
+        raw_intro = "Estimado cliente {cliente},\nAdjuntamos el detalle actualizado de sus documentos pendientes de pago. Agradeceremos verificar la siguiente información:"
     
     # Process Intro: Safe render + Client Name injection (case-insensitive)
     safe_cliente = html.escape(str(client_name))
@@ -142,7 +142,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
     else:
         # Default Signature
         ruc = branding_config.get('company_ruc', '20601995817')
-        footer_block_html = f"<strong>{COMPANY_NAME}</strong> &bull; RUC: {ruc}<br>├ürea de Cobranzas y Facturaci├│n"
+        footer_block_html = f"<strong>{COMPANY_NAME}</strong> &bull; RUC: {ruc}<br>Área de Cobranzas y Facturación"
 
     # C. Detraccion Block (Conditional)
     detraccion_block_html = ""
@@ -194,7 +194,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         # Increase top padding to center title nicely in the white box
         title_padding_top = "30px"
 
-    # --- GENERACI├ôN DE FILAS (PC y M├ôVIL) ---
+    # --- GENERACIÓN DE FILAS (PC y MÓVIL) ---
     table_rows = ""
     mobile_cards = ""
     
@@ -214,7 +214,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
         try:
             imp_val = float(row.get('MONT EMIT', 0))
             sal_val = float(row.get('SALDO REAL', 0)) # Saldo a DACTA
-            det_val = float(row.get('DETRACCI├ôN', 0)) # Detracci├│n SUNAT
+            det_val = float(row.get('DETRACCIÓN', 0)) # Detracción SUNAT
         except:
             imp_val, sal_val, det_val = 0.0, 0.0, 0.0
 
@@ -248,7 +248,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
             mobile_st_text = "Cobrado"
             mobile_style_st = "color: #28a745;"
              
-        # Regla visual: Si Saldo Dacta es 0 pero Detraccion Pendiente -> Alerta visual expl├¡cita
+        # Regla visual: Si Saldo Dacta es 0 pero Detraccion Pendiente -> Alerta visual explícita
         # Zebra Striping Logic for Row BG
         # Use simple toggle based on idx if needed, or CSS. CSS nth-child is better but inline support varies.
         # We will use explicit background color for even rows for better email support.
@@ -261,9 +261,9 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
 
         m_sal_display = m_sal
         
-        # "Saldo a DACTA: 0.00 ÔÇö Solo falta detracci├│n SUNAT" logic
+        # "Saldo a DACTA: 0.00 — Solo falta detracción SUNAT" logic
         if sal_val <= 0.1 and det_val > 0 and estado_dt == "PENDIENTE":
-            m_sal_display = "<span style='color:#999;'>0.00</span><br><span style='font-size:10px; color:#d9534f'>(Solo Detracci├│n)</span>"
+            m_sal_display = "<span style='color:#999;'>0.00</span><br><span style='font-size:10px; color:#d9534f'>(Solo Detracción)</span>"
             # Highlight this row specially? 
             row_bg_pc = "#fff8f8" 
 
@@ -298,7 +298,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
             </div>
             
             <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eee; font-size: 13px;">
-                 <span style="color:#666;">Detracci├│n SUNAT (S/):</span> 
+                 <span style="color:#666;">Detracción SUNAT (S/):</span> 
                  <span style="{mobile_style_st}">{m_det} <small>({mobile_st_text})</small></span>
             </div>
         </div>
@@ -439,11 +439,11 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                         <thead>
                             <tr>
                                 <th>Documento</th>
-                                <th>Emisi├│n</th>
+                                <th>Emisión</th>
                                 <th>Vencimiento</th>
                                 <th style="text-align: right;">Importe</th>
                                 <th style="text-align: right;">Saldo a DACTA</th>
-                                <th style="text-align: right;">Detracci├│n (S/)</th>
+                                <th style="text-align: right;">Detracción (S/)</th>
                                 <th style="text-align: center;">Estado Detr.</th>
                             </tr>
                         </thead>
@@ -468,7 +468,7 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
                         <div class="account-item"><span class="bank-label">BBVA:</span> 001103400200230077<br>CCI: 01134000020023007776</div>
                     </div>
                     <div class="account-col">
-                        <div class="account-title">Cuentas en D├│lares (US$)</div>
+                        <div class="account-title">Cuentas en Dólares (US$)</div>
                         <div class="account-item"><span class="bank-label">BCP:</span> 1912078776145<br>CCI: 00219100207877614559</div>
                     </div>
                 </div>
@@ -493,14 +493,14 @@ def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, bran
 
 def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_config):
     """
-    Genera versi├│n texto plano para reducir puntaje de spam.
+    Genera versión texto plano para reducir puntaje de spam.
     """
     company_name = branding_config.get('company_name', 'DACTA S.A.C.')
     intro = branding_config.get('email_template', {}).get('intro_text', '').replace('{cliente}', client_name)
     footer = branding_config.get('email_template', {}).get('footer_text', '')
     
     text = f"Estimados {client_name},\n\n"
-    text += f"Notificaci├│n de {company_name}\n\n"
+    text += f"Notificación de {company_name}\n\n"
     text += f"{intro}\n\n"
     text += f"{'DOC':<15} | {'VENC':<10} | {'IMPORTE':>13} | {'SALDO':>13} | {'DETRAC.':>10} | {'ESTADO':<10}\n"
     text += "-" * 95 + "\n"
@@ -515,7 +515,7 @@ def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_co
         mon = row.get('MONEDA', '')
         sim = "S/" if str(mon).upper().startswith('S') else "$"
         
-        # L├│gica Estado Detracci├│n
+        # Lógica Estado Detracción
         estado_dt_raw = str(row.get('ESTADO DETRACCION', ''))
         if estado_dt_raw.upper() == "NO APLICA":
             estado_dt_val = "No aplica"
@@ -527,7 +527,7 @@ def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_co
         try:
             imp = float(row.get('MONT EMIT', 0))
             sal = float(row.get('SALDO REAL', 0))
-            det = float(row.get('DETRACCI├ôN', 0))
+            det = float(row.get('DETRACCIÓN', 0))
             
             str_det = f"S/ {det:,.2f}" if det > 0 else "-"
             
@@ -540,17 +540,17 @@ def generate_plain_text_body(client_name, docs_df, total_s, total_d, branding_co
     text += "-" * 95 + "\n"
     text += f"TOTAL PENDIENTE: {total_s}   {total_d}\n\n"
     text += f"{footer}\n\n"
-    text += "Nota: Este correo contiene elementos gr├íficos. Si no los ve, habilite el contenido HTML.\n"
+    text += "Nota: Este correo contiene elementos gráficos. Si no los ve, habilite el contenido HTML.\n"
     
     return text
 
 def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=None, force_resend=False, internal_copies_config=None, qa_settings=None, cycle_id=None):
     """
-    Env├¡a lote de correos con reporte de progreso y bloqueo TTL por negocio.
+    Envía lote de correos con reporte de progreso y bloqueo TTL por negocio.
     force_resend: Si True, ignora el bloqueo TTL (Reason: USER_RESEND).
     internal_copies_config: Dict opcional {'cc_list': [...], 'bcc_list': [...]}
-    qa_settings: Dict de configuraci├│n QA o None. Si est├í presente y enabled, se aplica l├│gica QA.
-    cycle_id: ID ├║nico del ciclo de carga (para aislar TTL entre ciclos). Si None, usa 'default_cycle'.
+    qa_settings: Dict de configuración QA o None. Si está presente y enabled, se aplica lógica QA.
+    cycle_id: ID único del ciclo de carga (para aislar TTL entre ciclos). Si None, usa 'default_cycle'.
     """
     import smtplib
     
@@ -574,10 +574,10 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     if not messages:
         return stats
     
-    # Run ID ├║nico para este lote
+    # Run ID único para este lote
     run_id = str(uuid.uuid4())[:8]
     
-    # Deduplicaci├│n en memoria del batch actual (evitar enviar 2 veces al mismo en el mismo loop)
+    # Deduplicación en memoria del batch actual (evitar enviar 2 veces al mismo en el mismo loop)
     # RC-BUG-016: Usar Notification Key en lugar de solo email
     seen_keys = set()
     unique_messages = []
@@ -601,7 +601,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
         
         if uniq_key in seen_keys:
             duplicates_count += 1
-            stats['log'].append(f"ÔÜá´©Å [RunID:{run_id}] Duplicado interno omitido: {uniq_key}")
+            stats['log'].append(f"⚠️ [RunID:{run_id}] Duplicado interno omitido: {uniq_key}")
             continue
         seen_keys.add(uniq_key)
         unique_messages.append(m)
@@ -611,7 +611,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     # 1. Forensic Caller Dump
     stack_dump = "".join(traceback.format_stack())
     print(f"DEBUG_FORENSIC: [RunID:{run_id}] CALLER STACK:\n{stack_dump}")
-    stats['log'].append(f"­ƒöì [RunID:{run_id}] Stack Trace recorded.")
+    stats['log'].append(f"🔍 [RunID:{run_id}] Stack Trace recorded.")
 
     # 2. Initialize Ledger (Schema v15: Dual Table)
     TTL_MINUTES = 10
@@ -624,7 +624,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
         c.execute('''CREATE TABLE IF NOT EXISTS ledger_last_send
                      (ledger_key TEXT PRIMARY KEY, last_sent_at TIMESTAMP, last_msg_id TEXT, send_count INTEGER)''')
         
-        # History Table (Auditor├¡a)
+        # History Table (Auditoría)
         # RC-FEAT-011: Added supervisor_copied column logic could be in 'status' or metadata. 
         # For now we keep schema compatible and log 'SUPERVISOR_COPY' in log or new column if we wanted migration.
         # We will log it in 'reason' or append to status if needed, but lets keep it simple to avoid schema migration risks on hotfix.
@@ -632,7 +632,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                      (id TEXT PRIMARY KEY, ledger_key TEXT, recipient TEXT, status TEXT, reason TEXT, timestamp TIMESTAMP, run_id TEXT)''')
         conn.commit()
     except Exception as e_db:
-        stats['log'].append(f"ÔÜá´©Å [RunID:{run_id}] Error initializing DB: {e_db}")
+        stats['log'].append(f"⚠️ [RunID:{run_id}] Error initializing DB: {e_db}")
         return stats # Abort safety
 
     try:
@@ -640,7 +640,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
         server.starttls()
         server.login(smtp_config['user'], smtp_config['password'])
         
-        stats['log'].append(f"Ô£à [RunID:{run_id}] Conectado a {smtp_config['server']}")
+        stats['log'].append(f"✅ [RunID:{run_id}] Conectado a {smtp_config['server']}")
 
         total = len(unique_messages)
         send_call_index = 0
@@ -689,7 +689,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                         elapsed = (now_ts - last_sent).total_seconds() / 60.0
                         
                         if elapsed < TTL_MINUTES:
-                            msg_dup = f"­ƒöÆ [RunID:{run_id}] BLOCKED by TTL ({elapsed:.1f}m < {TTL_MINUTES}m). Recipient:{recipient_ledger}"
+                            msg_dup = f"🔒 [RunID:{run_id}] BLOCKED by TTL ({elapsed:.1f}m < {TTL_MINUTES}m). Recipient:{recipient_ledger}"
                             stats['log'].append(msg_dup)
                             print(f"DEBUG_FORENSIC: {msg_dup} | Key={ledger_key}")
                             
@@ -705,13 +705,13 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                             stats['details'].append({
                                 'Cliente': client_name,
                                 'Email': recipient_ledger,
-                                'Estado': '­ƒöÆ Bloqueado',
+                                'Estado': '🔒 Bloqueado',
                                 'Detalle': f"TTL (<{TTL_MINUTES}min). Use 'Reenviar' para forzar.",
                                 'RunID': run_id
                             })
                             continue # SKIP SEND
                 except Exception as e_chk:
-                    stats['log'].append(f"ÔÜá´©Å [RunID:{run_id}] Ledger Check Error: {e_chk}")
+                    stats['log'].append(f"⚠️ [RunID:{run_id}] Ledger Check Error: {e_chk}")
 
             try:
                 # Crear Mensaje
@@ -752,12 +752,12 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                         image.add_header('Content-ID', '<logo_dacta>')
                         image.add_header('Content-Disposition', 'inline', filename='logo.png')
                         msg.attach(image)
-                        stats['log'].append(f"­ƒôÄ [RunID:{run_id}] INLINE_IMAGE_ATTACHED: True (Size: {len(logo_data)} bytes)")
+                        stats['log'].append(f"📎 [RunID:{run_id}] INLINE_IMAGE_ATTACHED: True (Size: {len(logo_data)} bytes)")
                     except Exception as e_img:
-                         stats['log'].append(f"ÔÜá´©Å [RunID:{run_id}] No se pudo adjuntar logo: {str(e_img)}")
+                         stats['log'].append(f"⚠️ [RunID:{run_id}] No se pudo adjuntar logo: {str(e_img)}")
 
                 # Log PRE-SEND (Forensic)
-                stats['log'].append(f"­ƒôí [RunID:{run_id}] SEND_CALL #{send_call_index} PREPARE -> To: {msg_data['email']} | MsgID: {msg_id}")
+                stats['log'].append(f"📡 [RunID:{run_id}] SEND_CALL #{send_call_index} PREPARE -> To: {msg_data['email']} | MsgID: {msg_id}")
                 
                 # --- RC-BUG-009: Explicit Envelope Deduplication ---
                 # Use normalized list from above
@@ -834,14 +834,14 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 # Log Actual RCPT LIST
                 recipients_log_str = ", ".join(unique_envelope_recipients)
                 print(f"DEBUG_FORENSIC: [RunID:{run_id}] Thread:{thread_id} | RCPT_LIST={recipients_log_str} | LedgerKey={ledger_key}")
-                stats['log'].append(f"­ƒôº [RunID:{run_id}] Envelope Targets ({len(unique_envelope_recipients)}): {recipients_log_str} {copies_log_info}")
+                stats['log'].append(f"📧 [RunID:{run_id}] Envelope Targets ({len(unique_envelope_recipients)}): {recipients_log_str} {copies_log_info}")
 
-                # Enviar con sobre expl├¡cito (Explicit Envelope)
-                # IMPORTANTE: Pasamos to_addrs expl├¡citamente para que el Envelope incluya BCC (invisible en headers).
+                # Enviar con sobre explícito (Explicit Envelope)
+                # IMPORTANTE: Pasamos to_addrs explícitamente para que el Envelope incluya BCC (invisible en headers).
                 server.send_message(msg, to_addrs=unique_envelope_recipients)
 
                 # Log POST-SEND (Forensic)
-                stats['log'].append(f"Ô£à [RunID:{run_id}] SEND_CALL #{send_call_index} SUCCESS -> Sent OK")
+                stats['log'].append(f"✅ [RunID:{run_id}] SEND_CALL #{send_call_index} SUCCESS -> Sent OK")
                 
                 # 4. Update Ledger (Confirm Sent)
                 reason = "USER_RESEND" if force_resend else "NORMAL"
@@ -860,7 +860,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     
                     conn.commit()
                 except Exception as e_ins:
-                     stats['log'].append(f"ÔÜá´©Å [RunID:{run_id}] Ledger Write Error: {e_ins}")
+                     stats['log'].append(f"⚠️ [RunID:{run_id}] Ledger Write Error: {e_ins}")
                 
                 
                 stats['success'] += 1
@@ -871,7 +871,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     'msg_id': msg_data.get('msg_id'),  # NUEVO: Para matching en app.py
                     'Cliente': client_name,
                     'Email': recipient_ledger,
-                    'Estado': 'Ô£à Enviado',
+                    'Estado': '✅ Enviado',
                     'Detalle': f'Entregado SMTP {copies_log_info}',
                     'RunID': run_id
                 })
@@ -890,13 +890,13 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                      pass
 
                 stats['failed'] += 1
-                stats['log'].append(f"[{i+1}/{total}] ÔØî [RunID:{run_id}] Error para {msg_data['client_name']}: {str(e)}")
+                stats['log'].append(f"[{i+1}/{total}] ❌ [RunID:{run_id}] Error para {msg_data['client_name']}: {str(e)}")
                 
                 # Detail Entry (Fail)
                 stats['details'].append({
                     'Cliente': client_name,
                     'Email': recipient_ledger,
-                    'Estado': 'ÔØî Fall├│',
+                    'Estado': '❌ Falló',
                     'Detalle': str(e)[:100],
                     'RunID': run_id
                 })
@@ -905,11 +905,11 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
         server.quit()
         
     except smtplib.SMTPAuthenticationError:
-        err_msg = "ÔØî Error de Autenticaci├│n (535). \nSi usas Gmail, NECESITAS activar 'Verificaci├│n en 2 pasos' y generar una 'Contrase├▒a de Aplicaci├│n'. Tu contrase├▒a normal de Google NO funcionar├í."
+        err_msg = "❌ Error de Autenticación (535). \nSi usas Gmail, NECESITAS activar 'Verificación en 2 pasos' y generar una 'Contraseña de Aplicación'. Tu contraseña normal de Google NO funcionará."
         stats['log'].append(err_msg)
         stats['failed'] = len(messages)
     except Exception as e:
-        stats['log'].append(f"ÔØî Error de Conexi├│n SMTP: {str(e)}")
+        stats['log'].append(f"❌ Error de Conexión SMTP: {str(e)}")
         stats['failed'] = len(messages)
         
     return stats

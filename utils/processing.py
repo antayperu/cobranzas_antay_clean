@@ -1,32 +1,32 @@
-﻿import pandas as pd
+import pandas as pd
 import numpy as np
 from datetime import date
 
 def format_phone(phone):
     """
-    Formatea el tel├®fono al est├índar +51XXXXXXXXX.
-    Elimina espacios, guiones y par├®ntesis.
-    Si es NaN o vac├¡o, devuelve "".
+    Formatea el teléfono al estándar +51XXXXXXXXX.
+    Elimina espacios, guiones y paréntesis.
+    Si es NaN o vacío, devuelve "".
     """
     if pd.isna(phone) or phone == "":
         return ""
     
-    # Convertir a string y limpiar caracteres no num├®ricos
+    # Convertir a string y limpiar caracteres no numéricos
     p = str(phone).strip()
     p = ''.join(filter(str.isdigit, p))
     
     if not p:
         return ""
     
-    # Si ya empieza con 51 y tiene longitud correcta (11 d├¡gitos: 51 + 9 d├¡gitos)
+    # Si ya empieza con 51 y tiene longitud correcta (11 dígitos: 51 + 9 dígitos)
     if p.startswith("51") and len(p) == 11:
         return "+" + p
     
-    # Si es un celular de 9 d├¡gitos, agregar +51
+    # Si es un celular de 9 dígitos, agregar +51
     if len(p) == 9:
         return "+51" + p
         
-    # Otros casos (fijos o mal formados), devolver limpio con +51 si parece razonable, o dejar como est├í si es raro
+    # Otros casos (fijos o mal formados), devolver limpio con +51 si parece razonable, o dejar como está si es raro
     # Regla simple solicitada: +51 + X
     if not p.startswith("51"):
         return "+51" + p
@@ -35,7 +35,7 @@ def format_phone(phone):
 
 def format_client_code(code):
     """
-    Formatea el c├│digo de cliente a 6 d├¡gitos con ceros a la izquierda.
+    Formatea el código de cliente a 6 dígitos con ceros a la izquierda.
     """
     if pd.isna(code):
         return "000000"
@@ -59,7 +59,7 @@ def load_data(file_ctas, file_cartera, file_cobranza):
 
 def process_data(df_ctas, df_cartera, df_cobranza):
     """
-    Aplica la l├│gica de negocio para fusionar y calcular campos.
+    Aplica la lógica de negocio para fusionar y calcular campos.
     """
     # 1. Estandarizar claves de cruce
     # CtasxCobrar: codcli
@@ -140,10 +140,10 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         how='left'
     )
     
-    # Formatear tel├®fono
-    df_merged['TEL├ëFONO'] = df_merged['telefono'].apply(format_phone)
+    # Formatear teléfono
+    df_merged['TELÉFONO'] = df_merged['telefono'].apply(format_phone)
     
-    # 3. Construir Comprobante SUNAT (Relaci├│n con Cobranza)
+    # 3. Construir Comprobante SUNAT (Relación con Cobranza)
     # Regla: Preferir Ctas["Documento Referencia"], si no sersun + "-" + numsun (padding 8)
     def clean_numsun(val):
         try:
@@ -167,32 +167,32 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     # Objetivo: Match perfecto
     
     def clean_key_part(val):
-        # Normalizaci├│n robusta: Quitar espacios y guiones para evitar desfases
+        # Normalización robusta: Quitar espacios y guiones para evitar desfases
         return str(val).strip().replace("-", "").replace(" ", "")
 
     def pad_numsun(val):
-        # Asegurar 8 d├¡gitos para el n├║mero
+        # Asegurar 8 dígitos para el número
         try:
             return str(int(float(val))).zfill(8)
         except:
-            # Si no es num├®rico, intentamos limpiar y rellenar si es corto, o dejar tal cual
+            # Si no es numérico, intentamos limpiar y rellenar si es corto, o dejar tal cual
             s = str(val).strip()
             if len(s) < 8 and s.isdigit():
                 return s.zfill(8)
             return s
     
     def build_match_key_ctas(row):
-        # Concatenaci├│n robusta con padding en el n├║mero
+        # Concatenación robusta con padding en el número
         # Cod + Serie + Num(8)
         return clean_key_part(row.get('coddoc', '')) + clean_key_part(row.get('sersun', '')) + pad_numsun(row.get('numsun', ''))
         
     df_merged['MATCH_KEY'] = df_merged.apply(build_match_key_ctas, axis=1)
 
-    # 4. Calcular Detracci├│n y Estado (Cruce con Cobranza)
-    # En Cobranza, clave ahora ser├í MATCH_KEY (coddoc + numsun)
+    # 4. Calcular Detracción y Estado (Cruce con Cobranza)
+    # En Cobranza, clave ahora será MATCH_KEY (coddoc + numsun)
     
     def build_match_key_cobranza(row):
-        # Concatenaci├│n robusta
+        # Concatenación robusta
         return clean_key_part(row.get('coddoc', '')) + clean_key_part(row.get('numsun', ''))
     
     if 'numsun' not in df_cobranza.columns:
@@ -206,15 +206,15 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     else:
         df_dt = pd.DataFrame() # Si no hay columna forpag, no hay DTs
         
-    # Agrupar por numsun para evitar duplicados si hubo pagos parciales DT (aunque raro en detracci├│n)
-    # Regla: "Si S├ì existe registro DT -> mostrar cadena legible"
-    # Tomamos el ├║ltimo pago DT si hubiera varios
+    # Agrupar por numsun para evitar duplicados si hubo pagos parciales DT (aunque raro en detracción)
+    # Regla: "Si SÍ existe registro DT -> mostrar cadena legible"
+    # Tomamos el último pago DT si hubiera varios
     
     if not df_dt.empty:
         # Asegurar formato de clave en Cobranza
         df_dt['MATCH_KEY'] = df_dt.apply(build_match_key_cobranza, axis=1)
         
-        # Crear texto formateado detallado con saltos de l├¡nea (para Excel con ajuste de texto)
+        # Crear texto formateado detallado con saltos de línea (para Excel con ajuste de texto)
         # Campos: codbco, nombco, fecpro, mondoc, monpag, forpag, nudopa
         def format_dt_info(row):
             fec = pd.to_datetime(row.get('fecpro', '')).strftime('%d/%m/%Y') if pd.notna(row.get('fecpro')) else ''
@@ -238,13 +238,13 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         
         # Deduplicar por MATCH_KEY
         dt_lookup = df_dt.groupby('MATCH_KEY')['info_dt'].apply(lambda x: "\n---\n".join(x))
-        # Lookup de Monto pagado (Suma por si acaso, aunque deber├¡a ser ├║nico)
+        # Lookup de Monto pagado (Suma por si acaso, aunque debería ser único)
         dt_amount_lookup = df_dt.groupby('MATCH_KEY')['monpag'].sum()
     else:
         dt_lookup = pd.Series(dtype='object')
         dt_amount_lookup = pd.Series(dtype='float')
 
-    # --- NUEVA L├ôGICA: AMORTIZACIONES (todo lo que NO sea DT) ---
+    # --- NUEVA LÓGICA: AMORTIZACIONES (todo lo que NO sea DT) ---
     if not df_cobranza.empty:
         # Filtrar NO DT y NO DET
         df_amort = df_cobranza[~df_cobranza['forpag'].isin(['DT', 'DET'])].copy()
@@ -252,26 +252,26 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         df_amort = pd.DataFrame()
         
     if not df_amort.empty:
-        # Usar MATCH_KEY tambi├®n para amortizaciones
+        # Usar MATCH_KEY también para amortizaciones
         df_amort['MATCH_KEY'] = df_amort.apply(build_match_key_cobranza, axis=1)
-        # Usar la misma funci├│n de formato
+        # Usar la misma función de formato
         df_amort['info_amort'] = df_amort.apply(format_dt_info, axis=1)
         # Agrupar concatenando
         amort_lookup = df_amort.groupby('MATCH_KEY')['info_amort'].apply(lambda x: "\n---\n".join(x))
     else:
         amort_lookup = pd.Series(dtype='object')
         
-    # 5. C├ílculos Finales en Merged
+    # 5. Cálculos Finales en Merged
     
     # Importe Referencial (S/) - antes mondoc
     # Se asume que mondoc viene del excel CtasxCobrar
     if 'mondoc' in df_merged.columns:
         df_merged['Importe Referencial (S/)'] = df_merged['mondoc']
     else:
-        # Fallback si no existe, aunque deber├¡a
+        # Fallback si no existe, aunque debería
         df_merged['Importe Referencial (S/)'] = 0.0
     
-    # Helper detracci├│n (Nueva L├│gica con Prioridad Lookup)
+    # Helper detracción (Nueva Lógica con Prioridad Lookup)
     def calc_detraccion_final(row):
         match_key = row['MATCH_KEY']
         
@@ -282,7 +282,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
                 val_dt = float(dt_amount_lookup[match_key])
                 return round(val_dt, 0)
             except:
-                pass # Fallback a c├ílculo si falla conversi├│n
+                pass # Fallback a cálculo si falla conversión
         
         # 2. Respaldo: Regla de Negocio (> 700 -> 12%)
         try:
@@ -293,14 +293,14 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         except:
             return 0.00
 
-    df_merged['DETRACCI├ôN'] = df_merged.apply(calc_detraccion_final, axis=1)
+    df_merged['DETRACCIÓN'] = df_merged.apply(calc_detraccion_final, axis=1)
     
-    # Estado Detracci├│n
+    # Estado Detracción
     def get_estado_dt(row):
-        if row['DETRACCI├ôN'] == 0:
+        if row['DETRACCIÓN'] == 0:
             return "No Aplica" 
         
-        if row['DETRACCI├ôN'] <= 0:
+        if row['DETRACCIÓN'] <= 0:
             return "-"
 
         comprobante = row['COMPROBANTE'] # Visual
@@ -319,14 +319,14 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         # Buscar en amort_lookup
         if match_key in amort_lookup.index:
             return amort_lookup[match_key]
-        return "-" # O vac├¡o
+        return "-" # O vacío
     
     df_merged['AMORTIZACIONES'] = df_merged.apply(get_amortizaciones, axis=1)
 
-    # 6. Selecci├│n y Ordenamiento de Columnas Finales
-    # COD CLIENTE (6 d├¡gitos, texto)
+    # 6. Selección y Ordenamiento de Columnas Finales
+    # COD CLIENTE (6 dígitos, texto)
     # EMPRESA (de nomcli)
-    # TEL├ëFONO (+51)
+    # TELÉFONO (+51)
     # FECH EMIS (de fecdoc)
     # FECH VENC (de fecvct)
     # COMPROBANTE (Documento Referencia)
@@ -334,7 +334,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     # TIPO CAMBIO (de tipcam)
     # MONT EMIT (de mododo)
     # Importe Referencial (S/) (de mondoc)
-    # DETRACCI├ôN
+    # DETRACCIÓN
     # ESTADO DETRACCION
     # SALDO (de sldacl)
     
@@ -356,28 +356,28 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     
     # Calculo de SALDO REAL
     # Regla:
-    # Si ESTADO DETRACCION != "Pendiente" (es decir, ya se pag├│/aplic├│): Saldo Real = Saldo
+    # Si ESTADO DETRACCION != "Pendiente" (es decir, ya se pagó/aplicó): Saldo Real = Saldo
     # Si ESTADO DETRACCION == "Pendiente":
-    #    Si Moneda == 'SOL': Saldo Real = Saldo - Detracci├│n
-    #    Si Moneda == 'USD': Saldo Real = Saldo - (Detracci├│n / Tipo Cambio)
+    #    Si Moneda == 'SOL': Saldo Real = Saldo - Detracción
+    #    Si Moneda == 'USD': Saldo Real = Saldo - (Detracción / Tipo Cambio)
     
     def calc_saldo_real(row):
         saldo = float(row.get('SALDO', 0.0))
-        detraccion = float(row.get('DETRACCI├ôN', 0.0))
+        detraccion = float(row.get('DETRACCIÓN', 0.0))
         estado_dt = row.get('ESTADO DETRACCION', '')
         moneda = str(row.get('MONEDA', '')).strip().upper()
         tc = float(row.get('TIPO CAMBIO', 1.0))
         
-        # Si no aplica detracci├│n (ej. monto bajo), el saldo real es el saldo
+        # Si no aplica detracción (ej. monto bajo), el saldo real es el saldo
         if detraccion <= 0:
             return saldo
 
-        # Si ya se aplic├│ la detracci├│n (encontrado en cobranza), el saldo ya considera eso?
-        # El usuario dijo: "si en el archivo de cobranza ya se aplico la detracci├│n... no debe afectar el saldo... significa que es un saldo real"
-        # "si no existira la aplicaci├│n... el saldo real... sera el monto del saldo menos el importe de la detracci├│n"
+        # Si ya se aplicó la detracción (encontrado en cobranza), el saldo ya considera eso?
+        # El usuario dijo: "si en el archivo de cobranza ya se aplico la detracción... no debe afectar el saldo... significa que es un saldo real"
+        # "si no existira la aplicación... el saldo real... sera el monto del saldo menos el importe de la detracción"
         
         if estado_dt == "Pendiente":
-            # Restar la detracci├│n
+            # Restar la detracción
             if moneda == 'US$': # Caso Dolares
                  # Detraccion esta en soles, convertir a dolares para restar
                  if tc > 0:
@@ -396,7 +396,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
 
     # --- EXPERT REFINEMENTS v4.0: Aging & Formatting ---
     
-    # 1. D├ìAS MORA & ESTADO (Semaforizaci├│n)
+    # 1. DÍAS MORA & ESTADO (Semaforización)
     today = date.today()
     
     def calc_aging(row):
@@ -409,15 +409,15 @@ def process_data(df_ctas, df_cartera, df_cobranza):
             
             delta = (today - venc).days
             
-            # Estado (Sem├íforo Textual)
+            # Estado (Semáforo Textual)
             if delta < 0:
-                status = "­ƒƒó Por Vencer"
+                status = "🟢 Por Vencer"
             elif delta <= 8:
-                status = "­ƒƒí Gesti├│n Preventiva"
+                status = "🟡 Gestión Preventiva"
             elif delta <= 30:
-                status = "­ƒƒá Gesti├│n Administrativa"
+                status = "🟠 Gestión Administrativa"
             else:
-                status = "­ƒö┤ Gesti├│n Pre-Legal"
+                status = "🔴 Gestión Pre-Legal"
                 
             return delta, status
         except:
@@ -425,22 +425,22 @@ def process_data(df_ctas, df_cartera, df_cobranza):
 
     # Apply aging
     aging_results = df_merged.apply(calc_aging, axis=1, result_type='expand')
-    df_merged['D├ìAS MORA'] = aging_results[0]
+    df_merged['DÍAS MORA'] = aging_results[0]
     df_merged['ESTADO DEUDA'] = aging_results[1]
 
-    # 2. Formato Moneda Integrado (Pegar s├¡mbolo al valor)
-    # Columnas a formatear: MONT EMIT, DETRACCI├ôN, SALDO, SALDO REAL
+    # 2. Formato Moneda Integrado (Pegar símbolo al valor)
+    # Columnas a formatear: MONT EMIT, DETRACCIÓN, SALDO, SALDO REAL
     
     def format_currency_cell(row, col_name):
         try:
             amount = float(row.get(col_name, 0))
             if amount == 0: return "-" # Limpieza visual
             
-            # Obtener s├¡mbolo
+            # Obtener símbolo
             mon = str(row.get('MONEDA', '')).strip().upper()
             
-            # REGLA DE NEGOCIO: La Detracci├│n SIEMPRE es en Soles
-            if col_name == 'DETRACCI├ôN':
+            # REGLA DE NEGOCIO: La Detracción SIEMPRE es en Soles
+            if col_name == 'DETRACCIÓN':
                 symbol = "S/"
             else:
                 symbol = "S/" if mon.startswith('S') else "$"
@@ -449,16 +449,16 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         except:
             return str(row.get(col_name, ""))
 
-    # Crear columnas formateadas para Display (Las num├®ricas se quedan para c├ílculos si hicieran falta)
+    # Crear columnas formateadas para Display (Las numéricas se quedan para cálculos si hicieran falta)
     # Sobreescribimos las columnas para el reporte final directo? 
-    # El usuario pidi├│ "pegar como parte de la celda". 
-    # Si sobreescribimos, perdemos la capacidad de sumar en Excel num├®ricamente f├ícil? 
+    # El usuario pidió "pegar como parte de la celda". 
+    # Si sobreescribimos, perdemos la capacidad de sumar en Excel numéricamente fácil? 
     # El usuario dijo "el cuadro resultante", implicando lo que ve.
     # Para Excel export, mejor tener strings visuales. 
     
-    cols_to_format = ['MONT EMIT', 'DETRACCI├ôN', 'SALDO', 'SALDO REAL']
+    cols_to_format = ['MONT EMIT', 'DETRACCIÓN', 'SALDO', 'SALDO REAL']
     for col in cols_to_format:
-        # Crear columna _DISPLAY para visualizaci├│n, mantener original num├®rica para c├ílculos
+        # Crear columna _DISPLAY para visualización, mantener original numérica para cálculos
         display_col = f"{col}_DISPLAY"
         df_merged[display_col] = df_merged.apply(lambda r: format_currency_cell(r, col), axis=1)
 
@@ -472,16 +472,16 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     df_merged['FECHA_ULTIMO_ENVIO'] = ""  # Empty by default, will be timestamp string after send
 
     final_cols = [
-        'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'NOTA', 'CORREO', 'TEL├ëFONO', 
+        'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'NOTA', 'CORREO', 'TELÉFONO', 
         'TIPO PEDIDO', 
         'COMPROBANTE', 'FECH EMIS', 'FECH VENC',
-        'D├ìAS MORA', 'ESTADO DEUDA',
+        'DÍAS MORA', 'ESTADO DEUDA',
         'MONEDA',
         'TIPO CAMBIO', # AGREGADO v4.3.2
         'MONT EMIT', 'MONT EMIT_DISPLAY',
         'SALDO REAL', 'SALDO REAL_DISPLAY',
         'SALDO', 'SALDO_DISPLAY',
-        'DETRACCI├ôN', 'DETRACCI├ôN_DISPLAY',
+        'DETRACCIÓN', 'DETRACCIÓN_DISPLAY',
         'ESTADO DETRACCION', 
         'AMORTIZACIONES',
         'MATCH_KEY',
