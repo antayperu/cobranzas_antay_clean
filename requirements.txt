@@ -1,9 +1,6 @@
 streamlit
 pandas
-numpy
-openpyxl
 pillow
 python-dotenv
 notion-client
 supabase
-httpx
