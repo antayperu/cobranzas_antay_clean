@@ -1,6 +1,9 @@
 {
-    "framework": null,
-    "outputDirectory": ".",
+    "functions": {
+        "api/*.py": {
+            "runtime": "@vercel/python"
+        }
+    },
     "routes": [
         {
             "src": "/(.*)",
