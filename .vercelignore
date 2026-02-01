@@ -1,5 +1,18 @@
 email_ledger.db
-*.pyc
+*.db
+*.xlsx
+*.spec
+*.log
+*.txt
+*.html
+*.jpg
+*.png
+*.jpeg
+*.pdf
+test_*.py
+debug_*.py
+PRUEBA_*.py
+app_backup.py
 __pycache__/
 .streamlit/
 .env
@@ -10,7 +23,6 @@ RETOMAR_SESION.md
 GIT_ROLLBACK_COMMANDS.md
 CHANGELOG_v*.md
 GATE3_CHECKLIST_v*.md
-PRUEBA_*.py
 estructura_carpeta.xlsx
 EstructuraCarpeta.py
 client_secrets.json
@@ -19,3 +31,6 @@ token.pickle
 venv/
 .vs/
 .pytest_cache/
+.github/
+.cache/
+docops/
