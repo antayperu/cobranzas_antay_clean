@@ -4,6 +4,7 @@ email_ledger.db
 *.spec
 *.log
 *.txt
+!requirements.txt
 *.html
 *.jpg
 *.png
