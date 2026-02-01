@@ -30,6 +30,20 @@ def load_css():
         header[data-testid="stHeader"] {{
             background-color: transparent;
         }}
+
+        /* EDGE-TO-EDGE LAYOUT (100% Width) */
+        [data-testid="stAppViewBlockContainer"] {{
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            padding-left: 3rem;
+            padding-right: 3rem;
+            max-width: 100% !important;
+        }}
+
+        /* FIX Sidebar Padding for wide screens */
+        [data-testid="stSidebarContent"] {{
+            padding-top: 1.5rem;
+        }}
         
         /* SIDEBAR PREMIUM LOOK */
         [data-testid="stSidebar"] {{

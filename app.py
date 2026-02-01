@@ -6,11 +6,6 @@ import hashlib
 from utils.processing import load_data, process_data
 from utils.excel_export import generate_excel
 
-# --- FULLSCREEN VIEW DETECTION (ANTES de set_page_config) ---
-# Detectar si estamos en modo pantalla completa
-query_params = st.query_params
-is_fullscreen_view = query_params.get("view") == "full_table"
-
 # Configuración de Página
 import utils.email_sender as es
 import utils.settings_manager as sm
@@ -33,132 +28,17 @@ import base64
 CONFIG = sm.load_settings()
 
 # --- RC-UX-PREMIUM: Page Layout Wide & Corporate Title ---
-if is_fullscreen_view:
-    # Vista pantalla completa: sin sidebar, layout wide
-    st.set_page_config(
-        page_title="Reporte General - Pantalla Completa",
-        page_icon="📊",
-        layout="wide",
-        initial_sidebar_state="collapsed"  # Ocultar sidebar
-    )
-else:
-    # Vista normal
-    st.set_page_config(
-        page_title=CONFIG.get('company_name', 'Antay Reportes'),
-        page_icon="📊",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+st.set_page_config(
+    page_title=CONFIG.get('company_name', 'Antay Reportes'),
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --- INYECTAR ENTERPRISE CSS ---
 styles.load_css()
 
-# --- FULLSCREEN VIEW RENDERING ---
-if is_fullscreen_view:
-    # Vista dedicada de pantalla completa
-    # Ocultar sidebar completamente con CSS
-    st.markdown("""
-    <style>
-        /* Ocultar sidebar y elementos decorativos */
-        [data-testid="stSidebar"] {
-            display: none;
-        }
-        /* Maximizar contenedor principal */
-        .block-container {
-            padding-top: 1rem !important;
-            padding-bottom: 1rem !important;
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-            max-width: 100% !important;
-        }
-        /* Tabla ocupa todo el espacio */
-        .stDataFrame {
-            height: calc(100vh - 150px) !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Breadcrumb con navegación
-    st.markdown("""
-    <div style="margin-bottom: 10px; font-size: 14px; color: #666;">
-        <a href="/" style="color: #2E86AB; text-decoration: none;">🏠 Inicio</a> / 
-        <span style="color: #666;">Reporte General</span> / 
-        <span style="color: #333; font-weight: 500;">Pantalla Completa</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Header minimalista
-    col_h1, col_h2 = st.columns([10, 1])
-    with col_h1:
-        st.markdown("### 📊 Reporte General — Vista Completa (Pantalla Completa)")
-    with col_h2:
-        # Link para volver a vista normal (NO usar st.switch_page)
-        st.markdown("""
-        <a href="/" target="_self" style="
-            display: inline-block;
-            padding: 8px 16px;
-            background-color: #dc3545;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: 500;
-            font-size: 14px;
-        ">
-            ✖ Cerrar
-        </a>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Intentar cargar datos desde session state o desde persistencia
-    df_final = None
-    
-    # Opción 1: Datos ya en session state de esta pestaña
-    if 'df_final' in st.session_state and st.session_state.get('data_ready', False):
-        df_final = st.session_state['df_final']
-    
-    # Opción 2: Intentar cargar desde persistencia (sesión guardada)
-    elif state_mgr.has_valid_session()[0]:
-        try:
-            df_loaded, meta_loaded, cache_ts_loaded = state_mgr.load_session()
-            if df_loaded is not None:
-                df_final = df_loaded
-                st.session_state['df_final'] = df_loaded
-                st.session_state['data_ready'] = True
-                st.session_state['session_start_ts'] = cache_ts_loaded
-        except Exception as e:
-            pass  # Silenciar error, mostrar mensaje abajo
-    
-    # Renderizar tabla o mensaje de error
-    if df_final is not None:
-        # Aplicar los mismos filtros que en la vista normal
-        # (Por simplicidad, mostrar todo; idealmente pasar filtros via query params)
-        df_filtered = df_final.copy()
-        
-        # Renderizar tabla en modo fullscreen
-        ui_report.render_report_fullscreen(df_filtered)
-        
-    else:
-        st.warning("⚠️ No hay datos cargados. Por favor, vuelve a la vista principal y carga los archivos.")
-        st.markdown("""
-        <a href="/" target="_self" style="
-            display: inline-block;
-            padding: 10px 20px;
-            background-color: #2E86AB;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: 500;
-            margin-top: 10px;
-        ">
-            🔙 Volver a Vista Principal
-        </a>
-        """, unsafe_allow_html=True)
-    
-    # Detener ejecución aquí (no renderizar el resto de la app)
-    st.stop()
-
-# --- VISTA NORMAL (resto del código) ---
+# --- VISTA NORMAL ---
 
 # --- RC-UX-PREMIUM: Enterprise CSS System ---
 # Typography: System UI for speed + clear hierarchy
@@ -239,8 +119,10 @@ st.markdown("""
 # Si no hay datos en session_state pero existe sesión persistida válida,
 # auto-restaurar silenciosamente para preservar continuidad al volver de fullscreen
 # IMPORTANTE: NO auto-restaurar si el usuario está en proceso de cargar nuevos archivos
+# FIX v1.5.2.1: NO auto-restaurar si tracking_dirty=True (hay cambios locales de envío pendientes)
 if (not st.session_state.get('data_ready', False) and 
-    not st.session_state.get('loading_new_files', False)):  # FIX: No auto-restaurar si usuario está cargando archivos
+    not st.session_state.get('loading_new_files', False) and
+    not st.session_state.get('tracking_dirty', False)):  # FIX: No sobrescribir si hay cambios locales
     has_session, cache_time, cache_meta = state_mgr.has_valid_session()
     if has_session:
         try:
@@ -693,20 +575,39 @@ if st.session_state['data_ready']:
                 tracking_dirty = st.session_state.get('tracking_dirty', False)
                 if not is_fresh_load and not tracking_dirty:
                     # Continuing previous work - update from DB ONLY if no local changes
-                    def get_rich_status(email, field):
-                        if not email: return ""
-                        st_info = status_map.get(email, {})
-                        if field == 'ts':
-                            return st_info.get('ts_raw', '')
-                        if field == 'st_text':
-                            return st_info.get('status', 'PENDIENTE')
-                        return ""
+                    # FIX v1.5.2.1: Surgical update - only touch records with DB data
+                    # This prevents timestamp propagation to all records when switching views
+                    for email, info in status_map.items():
+                        # SURGICAL GUARD: Only update records that are currently PENDING
+                        # This prevents a broad email match from overwriting document-level session state
+                        mask = (df_final['CORREO'] == email) & (df_final['ESTADO_EMAIL'] == "PENDIENTE")
+                        
+                        num_targets = mask.sum()
+                        if num_targets == 0:
+                            continue
 
-                    # Update the SSOT (df_final) tracking columns from database
-                    if 'ESTADO_EMAIL' in df_final.columns:
-                        df_final['ESTADO_EMAIL'] = df_final['CORREO'].apply(get_email_status_icon)
-                    if 'FECHA_ULTIMO_ENVIO' in df_final.columns:
-                        df_final['FECHA_ULTIMO_ENVIO'] = df_final['CORREO'].apply(lambda x: get_rich_status(x, 'ts'))
+                        status = info.get('status', 'PENDIENTE')
+                        time_str = info.get('time', '')
+                        ts_raw = info.get('ts_raw', '')
+
+                        if status == 'SENT':
+                            # surgical update: keep ESTADO_EMAIL as category for badges
+                            if 'ESTADO_EMAIL' in df_final.columns:
+                                df_final.loc[mask, 'ESTADO_EMAIL'] = "ENVIADO"
+                            if 'ESTADO_ENVIO_TEXTO' in df_final.columns:
+                                df_final.loc[mask, 'ESTADO_ENVIO_TEXTO'] = f"ENVIADO ({time_str})"
+                            if 'FECHA_ULTIMO_ENVIO' in df_final.columns:
+                                df_final.loc[mask, 'FECHA_ULTIMO_ENVIO'] = ts_raw
+                        elif status == 'FAILED':
+                            if 'ESTADO_EMAIL' in df_final.columns:
+                                df_final.loc[mask, 'ESTADO_EMAIL'] = "FALLIDO"
+                            if 'ESTADO_ENVIO_TEXTO' in df_final.columns:
+                                df_final.loc[mask, 'ESTADO_ENVIO_TEXTO'] = "FALLIDO"
+                        elif status == 'BLOCKED':
+                            if 'ESTADO_EMAIL' in df_final.columns:
+                                df_final.loc[mask, 'ESTADO_EMAIL'] = "BLOQUEADO"
+                            if 'ESTADO_ENVIO_TEXTO' in df_final.columns:
+                                df_final.loc[mask, 'ESTADO_ENVIO_TEXTO'] = f"BLOQUEADO ({time_str})"
                     
                     # Update session state with the updated SSOT
                     st.session_state['df_final'] = df_final

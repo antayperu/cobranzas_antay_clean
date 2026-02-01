@@ -667,7 +667,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 ledger_src = f"{cycle_id}|{recipient_ledger}|{notif_key}"  # NUEVO: Incluir cycle_id
             
             ledger_key = hashlib.sha256(ledger_src.encode()).hexdigest()
-            now_ts = datetime.utcnow()
+            now_ts = datetime.now()
             
             # 3. Check TTL (Anti-Duplicado Accidental)
             if not force_resend:

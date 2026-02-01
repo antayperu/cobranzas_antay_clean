@@ -37,6 +37,20 @@ DEFAULT_SETTINGS = {
     "features": {
         "show_analysis": False,
         "show_sales": False
+    },
+    "report_views": {
+        "ejecutiva": [
+            "COD CLIENTE", "EMPRESA", "COMPROBANTE", "FECHA EMISIÓN", "MONEDA", 
+            "MONT EMIT", "TIPO CAMBIO", "SALDO", "DETRACCIÓN", "ESTADO DETRACCION", 
+            "AMORTIZACIONES", "SALDO REAL", "ESTADO_EMAIL", "FECHA_ULTIMO_ENVIO", 
+            "NOTA", "ENVIAR EMAIL"
+        ],
+        "completa": [
+             "COD CLIENTE", "EMPRESA", "COMPROBANTE", "FECHA EMISIÓN", "MONEDA", 
+            "MONT EMIT", "TIPO CAMBIO", "SALDO", "DETRACCIÓN", "ESTADO DETRACCION", 
+            "AMORTIZACIONES", "SALDO REAL", "ESTADO_EMAIL", "FECHA_ULTIMO_ENVIO", 
+            "NOTA", "ENVIAR EMAIL"
+        ]
     }
 }
 

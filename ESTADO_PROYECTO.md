@@ -1,117 +1,54 @@
 # Estado del Proyecto: Reporte de Cobranzas y WhatsApp
 
 **Fecha de Inicio**: 2025-12-16
-**Estado General**: ✅ STATUS: v4.6.1 (Completado/Validado) -> Iniciando v5.0 (WhatsApp Pro Upgrade)
-**Última Actualización:** 2025-12-23
-**Estado:** Estable (v4.6.1) | **En Proceso:** Planificación de Potenciación WhatsApp
+**Estado General**: ✅ STATUS: v1.5.6 (Estable / Producción)
+**Última Actualización:** 2026-02-01
+**Estado:** Estable (v1.5.6) | **En Proceso:** Entrega Final de Release 1.5.x
 **Repositorio**: [antayperu/cobranzas_antay](https://github.com/antayperu/cobranzas_antay)
 
 ## 🎯 Objetivo
-Construir una aplicación web en Streamlit para consolidar reportes de cobranza, calcular detracciones y generar enlaces de WhatsApp masivos.
-
+Construir una aplicación web en Streamlit para consolidar reportes de cobranza, calcular detracciones y gestionar notificaciones masivas con altos estándares visuales.
 
 ## 📌 Preferencias del Proyecto
-- **Idioma**: Toda la comunicación, planes y documentación deben ser estrictamente en **Español**.
-- **UX**: Priorizar diseños premium y explicaciones claras.
+- **Idioma**: Toda la comunicación y documentación en **Español**.
+- **UX**: Estándar Enterprise Premium (Antay Methodology).
+- **Layout**: Diseño Edge-to-Edge para máxima productividad.
 
-## 🏆 Estándares Técnicos (Mandamientos)
-1. **Escalabilidad Enterprise**: El código debe estar preparado para procesar millones de registros.
-2. **Optimización Obligatoria**: La eficiencia no es opcional, es el estándar base.
-3. **Excelencia UI/UX**: Interfaces con los más altos estándares internacionales (Premium & Intuitive).
+## 🏆 Evolución Reciente (Sprints 1.5.x)
 
-## 📝 Planificación y Estado
+### 📈 v1.5.4: Premium UI/UX
+- **Badges de Estado**: Implementación de etiquetas color-coded para correos y detracciones.
+- **Fechas Humanizadas**: Uso de etiquetas dinámicas (Hoy, Ayer) para facilitar el seguimiento.
+- **KPI Emphasis**: Resaltado visual del **Saldo Real** en azul corporativo.
 
-### 1. Configuración
-- [x] Estructura de carpetas (`ReporteCobranzas/`, `utils/`)
-- [x] Archivo de trazabilidad (`ESTADO_PROYECTO.md`)
+### 🖥️ v1.5.5: Layout Enterprise
+- **Edge-to-Edge**: Aplicación expandida al 100% del ancho del monitor.
+- **Auto-fit Columns**: Refinamiento de anchos de tabla para eliminar scroll horizontal.
 
-### 2. Backend (Lógica)
-- [x] Procesamiento de Excel (`utils/processing.py`)
-    - [x] Carga y Limpieza
-    - [x] Cruce de Tablas (CtasxCobrar + Cartera + Cobranza)
-    - [x] Reglas de Negocio (Detracciones, Estado)
-- [x] Exportación (`utils/excel_export.py`)
-    - [x] Estilos Excel (Colores, Filtros)
+### 🛡️ v1.5.6: Tracking Integrity (Hotfix Crítico)
+- **Local Time Sync**: Eliminación de desfases horários (UTC -> Local).
+- **Surgical Sync**: Protección de base de datos para evitar sobre-escritura masiva de estados.
+- **Robustness**: Detección de estados mejorada para reportes históricos.
 
-### 3. Frontend (UI)
-- [x] Interfaz Principal (`app.py`)
-    - [x] Branding (**#2E86AB** a **#A23B72**)
-    - [x] Carga de Archivos
-    - [x] Tabla Interactiva
-    - [x] Descarga de Reporte
-- [x] Módulo WhatsApp
-    - [x] Agrupación por Cliente
-    - [x] Plantillas Personalizables
-    - [x] Generación de Links
+---
 
 ## 🔄 Contexto para Próxima Sesión
--### 📌 Estado Actual (2025-12-24)
-- **QA Mode Stable**: Separación estricta Prod/QA implementada. `RC-BUG-021` Fixed.
-- **BCC Fixed**: Fix crítico en `email_sender.py` para envío real de copias ocultas. `RC-BUG-022` Fixed.
-- **UX Config**: Lógica "Dirty State" y Previews implementadas en `app.py`. `RC-UX-008` Fixed.
-- **Próximos Pasos**: Pruebas de campo (Smoke Tests) y posibles ajustes menores.
+- **Estado Actual**: v1.5.6 validado y listo para cierre.
+- **Pendientes**: 
+    - [ ] Monitoreo de desempeño en envíos reales masivos.
+    - [ ] Feedback de usuario sobre el nuevo layout Edge-to-Edge.
 
---- **v1.3**: Automatización de "Documento Referencia".
-    - **v1.4**: Mejoras de diseño y columna Amortizaciones.
-    - **v1.5**: Módulo WhatsApp actualizado (Marca "DACTA SAC", Totales Multimoneda).
-    - **v1.6**: Mensaje WhatsApp Detallado (Listado completo y pie de página).
-    - **v1.7**: UX WhatsApp Rediseñado (Estilo "Tarjeta" con iconos).
-    - **v1.8**: Ajuste Fino de UX (Orden específico de campos).
-### ✅ Módulo de Correo (v4.6.1-stable)
-- **Estado**: ✅ Estable.
-- **Fix Crítico**: Solucionado problema de duplicidad con "Smart Ledger" (SQLite) y limpieza de código en `app.py`.
-- **Causa Raíz**: Bloque duplicado en `app.py` que invocaba la función de envío dos veces.
-- **Solución**: Eliminación de código redundante + Ledger SQLite + TTL + Soporte Multi-cliente.
-- **New Feature**: Supervisor Copy (BCC/CC) con persistencia y UX Enterprise [RC-FEAT-011] [RC-BUG-017].
-- **Tickets Completados**: [RC-BUG-013] a [RC-BUG-017], [RC-UX-002] y [RC-FEAT-011].
-
-### ✅ Módulo de WhatsApp (v4.6.1-hotfix)
-- **Estado**: ⚠️ Mantenimiento Parcial (Modo Solo Texto Habilitado).
-- **HOTIX EMERGENCY**: Se ha deshabilitado temporalmente el envío de "Tarjeta" y "PDF" por inestabilidad.
-- **Tickets P0**: [RC-OPS-001] (Hotfix UI/Backend), [RC-QA-001] (Smoke Test).
-- **Hotfix (v4.6.1)**: Deshabilitado temporalmente. Se usa modo "Solo Texto".
-- **Status**: En Mantenimiento (v5.0 Roadap).
-
-#### ⚠️ Reglas de No-Regresión (Critical)
-1. **Excel Export**: SIEMPRE usar `df_export` (numérico) separado de `df_display` (visual).
-   - Montos (`SALDO`, `DETRACCIÓN`) deben ser **NUMÉRICOS/SUMABLES**.
-   - `DETRACCIÓN` siempre en Soles (`S/`).
-   - `AMORTIZACIONES` siempre Texto Completo (No 0.00).
-
-### 3. Documentación
-- `docs/SMOKE_TEST_v1.0.md`: Checklist de validación (Release v4.6.1).
-
-### 🔄 Próximos Pasos (ROADMAP v5.x)
-1. **[RC-QA-002] Ejecutar Smoke Test**: Validar que el modo Texto funciona 100% para release hoy.
-2. **[RC-QA-001] Validar Envío PDF**: Retomar pruebas tras la entrega urgente.
+---
 
 ## 📦 Backlog (Ver docs/TICKETS_ANTAY.md)
 *Consulta el archivo técnico oficial `docs/TICKETS_ANTAY.md` para el backlog detallado.*
 
-## 📦 Backlog
-- [ ] Implementar envío de correos masivos (módulo listo, falta integración final UI).
-- [ ] Dashboard de estadísticas de cobranza.
-    - **v2.0**: Lógica Flexible (Filtros, Totales Estrictos).
-    - **v2.1**: Rendimiento y UI (Procesamiento Manual con Memoria, Corrección de Índice de Tabla).
-    - **v3.0**: Integración de Selenium para WhatsApp, refactor UI y lógica de conteo por moneda.
-    - **v3.1**: UX Refinement (Plantilla profesional + Diseño compacto de documentos).
-    - **v3.2**: Detracciones Inteligentes (3ra línea condicional) + Footer específico de contacto.
-    - **v3.3**: Ajustes de Copy (Totales explicados "S/ X (Y docs)", estados con palabras completas).
-    - **v3.4**: Refinamiento Lógico de Datos (Filtro 'PAV' y Match Key robusto para Detracciones).
-    - **v3.5**: Mejoras Finales (Columna 'TIPO PEDIDO' y nombre de archivo personalizado).
-    - **v4.0 (Experto)**: Tablero de Gerencia (Semaforización de Deuda, Antigüedad, Moneda Integrada y Orden Lógico).
-    - **v4.1 (Polish UI/UX & Mobile)**: 
-        - Refactorización Visual (Eliminación de emojis, diseño corporativo serio).
-        - **Sidebar Profesional**: Logo y carga compacta.
-        - **Configuración Persistente**: Ajustes de color, toggles de funcionalidad y templates.
-        - **Email Premium**: Vista previa individual y **Responsividad Móvil (Cartas)**.
-        - **Email Premium**: Vista previa individual y **Responsividad Móvil (Cartas)**.
-        - Corrección de bugs (Iconos fantasma, validación de encabezados).
-    - **v4.2 (Email Deliverability & UX)**:
-        - **Anti-Spam**: Implementación de `multipart/alternative` (Texto Plano + HTML) y headers correctos.
-        - **UI Mejorada**: Selector con desglose de moneda `S/ | $` y Dashboard de Resumen previo al envío.
-        - **Correcciones**: Fix `st.rerun`, selección masiva con callback seguro, y visibilidad de métricas largas.
-- **Versión Actual**: v4.6.3 (Corporate Template PC)
+---
+
+## 📦 HISTORIAL DE VERSIONES
+- **v1.0 - v1.4**: Desarrollo base y refinamiento de filtros.
+- **v1.5.2**: Persistencia de sesión y remoción de fullscreen.
+- **v1.5.6**: Release estable con UI Premium y Tracking Auditado.
 - **Última Actualización**: 23/12/2025
 - **Estado**: 🟢 ESTABLE (En proceso de release v5.0)
 

@@ -1,6 +1,6 @@
 # PROMPT PARA RETOMAR SESIÓN - ReporteCobranzas v1.5.2
 
-**Fecha de pausa:** 2026-01-01 03:29  
+**Fecha de pausa:** 2026-01-30 00:15  
 **Proyecto:** ReporteCobranzas - Antay Perú  
 **Versión en desarrollo:** v1.5.2-fullscreen-tracking-fix
 
