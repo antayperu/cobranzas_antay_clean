@@ -7,13 +7,13 @@ from datetime import datetime
 from email.utils import make_msgid, formatdate
 import pandas as pd
 import uuid
-import utils.helpers as helpers
 import hashlib
 import time
 import threading
 import os
-import sqlite3
 import traceback
+from . import helpers
+from . import db_manager
 
 # Colores Branding
 COLOR_PRIMARY = "#2E86AB"
@@ -613,27 +613,9 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     print(f"DEBUG_FORENSIC: [RunID:{run_id}] CALLER STACK:\n{stack_dump}")
     stats['log'].append(f"🔍 [RunID:{run_id}] Stack Trace recorded.")
 
-    # 2. Initialize Ledger (Schema v15: Dual Table)
+    # 2. Initialize Ledger (Hybrid Mode via db_manager)
     TTL_MINUTES = 10
-    
-    try:
-        conn = sqlite3.connect('email_ledger.db')
-        c = conn.cursor()
-        
-        # State Table (Anti-Duplicado)
-        c.execute('''CREATE TABLE IF NOT EXISTS ledger_last_send
-                     (ledger_key TEXT PRIMARY KEY, last_sent_at TIMESTAMP, last_msg_id TEXT, send_count INTEGER)''')
-        
-        # History Table (Auditoría)
-        # RC-FEAT-011: Added supervisor_copied column logic could be in 'status' or metadata. 
-        # For now we keep schema compatible and log 'SUPERVISOR_COPY' in log or new column if we wanted migration.
-        # We will log it in 'reason' or append to status if needed, but lets keep it simple to avoid schema migration risks on hotfix.
-        c.execute('''CREATE TABLE IF NOT EXISTS send_attempts
-                     (id TEXT PRIMARY KEY, ledger_key TEXT, recipient TEXT, status TEXT, reason TEXT, timestamp TIMESTAMP, run_id TEXT)''')
-        conn.commit()
-    except Exception as e_db:
-        stats['log'].append(f"⚠️ [RunID:{run_id}] Error initializing DB: {e_db}")
-        return stats # Abort safety
+    db_manager.initialize_db()
 
     try:
         server = smtplib.SMTP(smtp_config['server'], int(smtp_config['port']))
@@ -672,20 +654,19 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
             # 3. Check TTL (Anti-Duplicado Accidental)
             if not force_resend:
                 try:
-                    c.execute("SELECT last_sent_at FROM ledger_last_send WHERE ledger_key=?", (ledger_key,))
-                    existing = c.fetchone()
+                    existing = db_manager.get_last_sent_info(ledger_key)
                     
                     if existing:
-                        last_sent_str = existing[0]
-                        # Python sqlite adapter might return str or datetime depending on detection
-                        try:
-                            last_sent = datetime.strptime(last_sent_str, "%Y-%m-%d %H:%M:%S.%f")
-                        except:
+                        last_sent_val = existing['last_sent_at']
+                        # Normalizar a datetime
+                        if isinstance(last_sent_val, str):
                             try:
-                                last_sent = datetime.strptime(last_sent_str, "%Y-%m-%d %H:%M:%S")
+                                last_sent = datetime.strptime(last_sent_val.split('.')[0].replace('T', ' '), "%Y-%m-%d %H:%M:%S")
                             except:
                                 last_sent = datetime.min
-                                
+                        else:
+                            last_sent = last_sent_val
+                        
                         elapsed = (now_ts - last_sent).total_seconds() / 60.0
                         
                         if elapsed < TTL_MINUTES:
@@ -694,10 +675,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                             print(f"DEBUG_FORENSIC: {msg_dup} | Key={ledger_key}")
                             
                             # Audit Block
-                            att_id = str(uuid.uuid4())
-                            c.execute("INSERT INTO send_attempts VALUES(?,?,?,?,?,?,?)", 
-                                      (att_id, ledger_key, recipient_ledger, 'BLOCKED', 'TTL_BLOCK', now_ts, run_id))
-                            conn.commit()
+                            db_manager.log_attempt(recipient_ledger, 'BLOCKED', run_id, ledger_key, reason='TTL_BLOCK')
                             
                             duplicates_count += 1
                             stats['blocked'] += 1
@@ -848,19 +826,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 if not is_qa_mode and copies_log_info:
                     reason += "_wCOPIES"
                 
-                try:
-                    # Update State
-                    c.execute("INSERT OR REPLACE INTO ledger_last_send (ledger_key, last_sent_at, last_msg_id, send_count) VALUES (?, ?, ?, COALESCE((SELECT send_count FROM ledger_last_send WHERE ledger_key=?)+1, 1))", 
-                              (ledger_key, now_ts, msg_id, ledger_key))
-                    
-                    # Audit Entry
-                    att_id = str(uuid.uuid4())
-                    c.execute("INSERT INTO send_attempts VALUES(?,?,?,?,?,?,?)", 
-                              (att_id, ledger_key, recipient_ledger, 'SENT', reason, now_ts, run_id))
-                    
-                    conn.commit()
-                except Exception as e_ins:
-                     stats['log'].append(f"⚠️ [RunID:{run_id}] Ledger Write Error: {e_ins}")
+                db_manager.log_attempt(recipient_ledger, 'SENT', run_id, ledger_key, reason=reason)
                 
                 
                 stats['success'] += 1
@@ -881,13 +847,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 
             except Exception as e:
                 # Audit Failure
-                try:
-                     att_id = str(uuid.uuid4())
-                     c.execute("INSERT INTO send_attempts VALUES(?,?,?,?,?,?,?)", 
-                              (att_id, ledger_key, recipient_ledger, 'FAILED', str(e)[:50], now_ts, run_id))
-                     conn.commit()
-                except:
-                     pass
+                db_manager.log_attempt(recipient_ledger, 'FAILED', run_id, ledger_key, reason=str(e)[:100])
 
                 stats['failed'] += 1
                 stats['log'].append(f"[{i+1}/{total}] ❌ [RunID:{run_id}] Error para {msg_data['client_name']}: {str(e)}")
@@ -901,7 +861,6 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     'RunID': run_id
                 })
         
-        conn.close() # Close DB
         server.quit()
         
     except smtplib.SMTPAuthenticationError:

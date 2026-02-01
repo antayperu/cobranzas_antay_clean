@@ -261,18 +261,11 @@ if wizard_action == "PROCESS_TRIGGERED":
                     st.session_state['cycle_id'] = cycle_id  # NUEVO: ID de ciclo
                     
                     # --- LIMPIEZA TTL: Purgar bloqueos del ciclo anterior ---
-                    # Limpiar DB SQLite de bloqueos TTL antiguos
-                    try:
-                        import sqlite3
-                        conn = sqlite3.connect('email_ledger.db')
-                        c = conn.cursor()
-                        # Eliminar registros de ledger_last_send (TTL state)
-                        c.execute("DELETE FROM ledger_last_send")
-                        conn.commit()
-                        conn.close()
+                    # Limpiar DB (Hybrid Mode) de bloqueos TTL antiguos
+                    if dbm.clear_all_ledger():
                         print(f"DEBUG: TTL DB limpiada para nuevo ciclo {cycle_id}")
-                    except Exception as e:
-                        print(f"WARNING: No se pudo limpiar TTL DB: {e}")
+                    else:
+                        print(f"WARNING: No se pudo limpiar TTL DB")
                     
                     # Persistence & Session Logic
                     try:
