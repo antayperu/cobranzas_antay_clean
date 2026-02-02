@@ -925,6 +925,15 @@ def test_smtp_connectivity(smtp_config):
         host = smtp_config.get('server', 'smtp.gmail.com')
         port = int(smtp_config.get('port', 465))
         
+        # 0. Red General
+        log.append("🌐 Verificando acceso general a Internet (Port 443)...")
+        try:
+            socket.create_connection(("google.com", 443), timeout=5)
+            log.append("✅ [Red] Acceso a google.com:443 OK.")
+        except Exception as e:
+            log.append(f"❌ [Red] No hay acceso a google.com:443: {e}")
+            log.append("🚨 Esto indica que la red de Railway está restringida o no tiene salida.")
+
         # 1. DNS
         ip = None
         try:
@@ -934,17 +943,22 @@ def test_smtp_connectivity(smtp_config):
             ip = "142.251.2.108" # Fallback literal
             log.append(f"⚠️ [DNS] FALLÓ resolución. Usando Fallback IP: {ip}")
             
-        # 2. Conexión TCP
-        log.append(f"🔌 Conectando a {ip}:{port}...")
+        # 2. Conexión TCP SMTP
+        log.append(f"🔌 Intentando conexión a {ip}:{port}...")
         try:
-            if port == 465:
+            if str(port) == "465":
                 server = smtplib.SMTP_SSL(ip, port, timeout=10)
             else:
                 server = smtplib.SMTP(ip, port, timeout=10)
                 server.starttls()
-            log.append("✅ [Red] Conexión TCP establecida.")
+            log.append(f"✅ [SMTP] Conexión TCP a Puerto {port} establecida.")
         except Exception as e:
-            return {'ok': False, 'msg': f"Falla de Red/Puerto: {e}", 'log': log}
+            log.append(f"❌ [SMTP] Falla de Conexión a Puerto {port}: {e}")
+            if str(port) == "465":
+                log.append("💡 TIP: Railway a veces bloquea el puerto 465. Prueba con el puerto 587.")
+            else:
+                log.append("💡 TIP: Verifica si tu cuenta de Railway tiene restricciones de salida (Egress).")
+            return {'ok': False, 'msg': f"Falla de Red/Puerto {port}: {e}", 'log': log}
             
         # 3. Login
         try:
@@ -953,6 +967,7 @@ def test_smtp_connectivity(smtp_config):
             server.quit()
             return {'ok': True, 'msg': "Conexión y credenciales válidas.", 'log': log}
         except Exception as e:
+            log.append(f"❌ [Auth] Error: {e}")
             return {'ok': False, 'msg': f"Falla de Login: {e}", 'log': log}
             
     except Exception as ge:
