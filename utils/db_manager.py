@@ -221,7 +221,9 @@ def get_last_sent_info(ledger_key):
 def reset_today_stats():
     """Limpia el historial de hoy."""
     today_pattern = f"{datetime.now().strftime('%Y-%m-%d')}%"
-    
+    if is_cloud_mode():
+        client = get_supabase_client()
+        if client:
             try:
                 client.table("send_attempts").delete().like("timestamp", today_pattern).execute()
                 client.table("ledger_last_send").delete().like("last_sent_at", today_pattern).execute()
