@@ -72,15 +72,36 @@ def load_settings():
                 else:
                     settings[k] = v
             
-            # --- RC-FEAT-CLOUD: Override with Env Vars (Railway/Vercel) ---
-            if os.getenv("SMTP_SERVER"):
-                settings['smtp_config']['server'] = os.getenv("SMTP_SERVER")
-            if os.getenv("SMTP_PORT"):
-                settings['smtp_config']['port'] = os.getenv("SMTP_PORT")
-            if os.getenv("SMTP_USER"):
-                settings['smtp_config']['user'] = os.getenv("SMTP_USER")
-            if os.getenv("SMTP_PASSWORD"):
-                settings['smtp_config']['password'] = os.getenv("SMTP_PASSWORD")
+            # --- RC-FEAT-CLOUD: Safe Multi-Source Settings ---
+            # 1. Start with Defaults
+            # 2. Merge JSON (User UI changes) -> This is already done in for-loop above
+            
+            # 3. Apply Environment Variables ONLY IF the value is still the default or empty
+            # (Allows Railway dashboard to provide initial setup, but UI can override them)
+            
+            env_map = {
+                "SMTP_SERVER": ('smtp_config', 'server'),
+                "SMTP_PORT": ('smtp_config', 'port'),
+                "SMTP_USER": ('smtp_config', 'user'),
+                "SMTP_PASSWORD": ('smtp_config', 'password'),
+                "SUPABASE_URL": ('supabase_config', 'url'),
+                "SUPABASE_KEY": ('supabase_config', 'key')
+            }
+            
+            for env_name, (section, key) in env_map.items():
+                env_val = os.getenv(env_name)
+                if env_val:
+                    # Specific Logic: Don't override if user has already set a non-default value in JSON
+                    # (Simple check: if JSON has anything other than "" or "587" in some cases)
+                    if section in settings:
+                         current_val = settings[section].get(key, "")
+                         # If current_val is empty or the absolute hardcoded default, use Env Var
+                         if not current_val or current_val in ["", "587", "smtp.gmail.com"]:
+                             settings[section][key] = env_val
+                    else:
+                         # For sections that don't exist yet (like supabase_config)
+                         if section not in settings: settings[section] = {}
+                         settings[section][key] = env_val
                 
             return settings
     except:

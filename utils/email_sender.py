@@ -618,6 +618,14 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     db_manager.initialize_db()
 
     try:
+        # --- RC-DEBUG: Resolve IP to see if IPv6 is the issue ---
+        import socket
+        try:
+            target_ip = socket.gethostbyname(smtp_config['server'])
+            stats['log'].append(f"🔍 [DNS] Resolucin: {smtp_config['server']} -> {target_ip}")
+        except:
+            stats['log'].append(f"⚠️ [DNS] No se pudo resolver {smtp_config['server']}")
+
         port = int(smtp_config['port'])
         if port == 465:
             server = smtplib.SMTP_SSL(smtp_config['server'], port, timeout=15)
