@@ -240,3 +240,8 @@ def reset_today_stats():
         conn.close()
         return True, "Historial de hoy limpiado en Local."
     except Exception as e: return False, str(e)
+
+def clear_all_ledger():
+    """Wrapper para reset_today_stats compatible con la llamada en app.py."""
+    success, msg = reset_today_stats()
+    return success
