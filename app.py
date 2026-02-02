@@ -1857,108 +1857,103 @@ if st.session_state['data_ready']:
     with tab_map["6. Configuración"]:
         st.header("Configuración del Sistema")
         
-        with st.form("config_form"):
-            col1, col2 = st.columns(2)
+        # Identity and Visuals Column
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Identidad Corporativa")
+            new_company = st.text_input("Nombre de la Empresa", value=CONFIG['company_name'])
+            new_ruc = st.text_input("RUC", value=CONFIG['company_ruc'])
+            new_phone = st.text_input("Teléfono de Contacto", value=CONFIG['phone_contact'])
             
-            with col1:
-                st.subheader("Identidad Corporativa")
-                new_company = st.text_input("Nombre de la Empresa", value=CONFIG['company_name'])
-                new_ruc = st.text_input("RUC", value=CONFIG['company_ruc'])
-                new_phone = st.text_input("Teléfono de Contacto", value=CONFIG['phone_contact'])
-                
-                st.subheader("Branding (Colores)")
-                new_primary = st.color_picker("Color Primario (Encabezados/Botones)", value=CONFIG['primary_color'])
-                new_secondary = st.color_picker("Color Secundario (Acentos)", value=CONFIG['secondary_color'])
-                # Nuevo: Color de Texto
-                curr_text_col = CONFIG.get('text_color', '#262730')
-                new_text_color = st.color_picker("Color de Texto (Títulos)", value=curr_text_col, help="Color para títulos y encabezados. El cuerpo se mantiene legible.")
+            st.subheader("Branding (Colores)")
+            new_primary = st.color_picker("Color Primario (Encabezados/Botones)", value=CONFIG['primary_color'])
+            new_secondary = st.color_picker("Color Secundario (Acentos)", value=CONFIG['secondary_color'])
+            # Nuevo: Color de Texto
+            curr_text_col = CONFIG.get('text_color', '#262730')
+            new_text_color = st.color_picker("Color de Texto (Títulos)", value=curr_text_col, help="Color para títulos y encabezados. El cuerpo se mantiene legible.")
 
-            with col2:
-                st.subheader("Funcionalidades (Tabs)")
-                f_analysis = st.checkbox("Mostrar Tab Análisis", value=CONFIG.get('features', {}).get('show_analysis', False))
-                f_sales = st.checkbox("Mostrar Tab Ventas", value=CONFIG.get('features', {}).get('show_sales', False))
-                
-                st.markdown("---")
-                st.info(f"📧 **Configuración de Correo (SMTP)**", icon="📧")
-                st.caption("Credenciales para el envío de correos masivos.")
-                
-                col_serv, col_port = st.columns([3, 1])
-                with col_serv:
-                    new_smtp_server = st.text_input("Servidor SMTP", value=CONFIG['smtp_config']['server'])
-                with col_port:
-                    new_smtp_port = st.text_input("Puerto SMTP", value=CONFIG['smtp_config']['port'])
-                
-                new_smtp_user = st.text_input("Usuario (Correo)", value=CONFIG['smtp_config']['user'])
-                new_smtp_pass = st.text_input("Contraseña App", value=CONFIG['smtp_config']['password'], type="password")
-
-                # --- Botón de Diagnóstico ---
-                if st.button("🔌 Probar Conexión SMTP (Diagnóstico)", help="Verifica DNS, Red y Login con los datos ingresados arriba"):
-                    from utils import email_sender as es_diag
-                    test_smtp_cfg = {
-                        "server": new_smtp_server,
-                        "port": new_smtp_port,
-                        "user": new_smtp_user,
-                        "password": new_smtp_pass
-                    }
-                    with st.spinner("Realizando diagnóstico de red..."):
-                        diag_stats = es_diag.test_smtp_connectivity(test_smtp_cfg)
-                        if diag_stats['ok']:
-                            st.success(diag_stats['msg'])
-                        else:
-                            st.error(diag_stats['msg'])
-                        with st.expander("Ver Bitácora de Diagnóstico"):
-                            for l in diag_stats['log']:
-                                st.text(l)
-
-                st.markdown("""
-                > **Nota Importante para Gmail:**  
-                > Debes usar una **Contraseña de Aplicación**, no tu clave normal.  
-                > 1. Ve a tu Cuenta de Google > Seguridad.  
-                > 2. Activa la Verificación en 2 pasos.  
-                > 3. Busca "Contraseñas de aplicaciones" y genera una nueva.  
-                > [Ver Guía Oficial de Google](https://support.google.com/accounts/answer/185833)
-                """)
-
+        with col2:
+            st.subheader("Funcionalidades (Tabs)")
+            f_analysis = st.checkbox("Mostrar Tab Análisis", value=CONFIG.get('features', {}).get('show_analysis', False))
+            f_sales = st.checkbox("Mostrar Tab Ventas", value=CONFIG.get('features', {}).get('show_sales', False))
+            
             st.markdown("---")
-            st.subheader("Plantilla de Correo")
-            col_t1, col_t2 = st.columns(2)
-            new_intro = col_t1.text_area("Texto Introductorio", value=CONFIG['email_template']['intro_text'], height=150, help="Texto antes de la tabla de deuda. Usa {CLIENTE} para insertar el nombre del cliente.")
-            new_footer = col_t2.text_area("Texto Pie de Página", value=CONFIG['email_template']['footer_text'], height=150, help="Texto después de los totales.")
-            new_alert = st.text_area("Texto Alerta Detracción", value=CONFIG['email_template']['alert_text'], help="Mensaje resaltado sobre cuentas de detracción.")
-            new_voucher = st.text_area("Texto Nota (Vouchers)", value=CONFIG['email_template'].get('voucher_text', ''), help="Texto al final del correo (ej: instrucciones de envío de vouchers). Deja vacío para no mostrar.")
-
-            submitted = st.form_submit_button("Guardar Configuración")
+            st.info(f"📧 **Configuración de Correo (SMTP)**", icon="📧")
+            st.caption("Credenciales para el envío de correos masivos.")
             
-            if submitted:
-                new_settings = {
-                    "company_name": new_company,
-                    "company_ruc": new_ruc,
-                    "phone_contact": new_phone,
-                    "primary_color": new_primary,
-                    "secondary_color": new_secondary,
-                    "text_color": new_text_color,
-                    "features": {
-                        "show_analysis": f_analysis,
-                        "show_sales": f_sales
-                    },
-                    "email_template": {
-                        "intro_text": new_intro,
-                        "footer_text": new_footer,
-                        "alert_text": new_alert,
-                        "voucher_text": new_voucher
-                    },
-                    "smtp_config": {
-                        "server": new_smtp_server,
-                        "port": new_smtp_port,
-                        "user": new_smtp_user,
-                        "password": new_smtp_pass
-                    }
+            col_serv, col_port = st.columns([3, 1])
+            with col_serv:
+                new_smtp_server = st.text_input("Servidor SMTP", value=CONFIG['smtp_config']['server'])
+            with col_port:
+                new_smtp_port = st.text_input("Puerto SMTP", value=CONFIG['smtp_config']['port'])
+            
+            new_smtp_user = st.text_input("Usuario (Correo)", value=CONFIG['smtp_config']['user'])
+            new_smtp_pass = st.text_input("Contraseña App", value=CONFIG['smtp_config']['password'], type="password")
+
+            # --- Botón de Diagnóstico (Interactive, No Form) ---
+            if st.button("🔌 Probar Conexión SMTP (Diagnóstico)", help="Verifica DNS, Red y Login con los datos ingresados arriba"):
+                from utils import email_sender as es_diag
+                test_smtp_cfg = {
+                    "server": new_smtp_server,
+                    "port": new_smtp_port,
+                    "user": new_smtp_user,
+                    "password": new_smtp_pass
                 }
-                if sm.save_settings(new_settings):
-                    st.success("✅ Configuración guardada correctamente. Por favor recarga la página para aplicar cambios visuales.")
-                    st.rerun() # Recarga inmediata
-                else:
-                    st.error("❌ Error al guardar la configuración.")
+                with st.spinner("Realizando diagnóstico de red..."):
+                    diag_stats = es_diag.test_smtp_connectivity(test_smtp_cfg)
+                    if diag_stats['ok']:
+                        st.success(diag_stats['msg'])
+                    else:
+                        st.error(diag_stats['msg'])
+                    with st.expander("Ver Bitácora de Diagnóstico"):
+                        for l in diag_stats['log']:
+                            st.text(l)
+
+            st.markdown("""
+            > **Nota Importante para Gmail:**  
+            > Debes usar una **Contraseña de Aplicación**, no tu clave normal.  
+            > [Ver Guía Oficial de Google](https://support.google.com/accounts/answer/185833)
+            """)
+
+        st.markdown("---")
+        st.subheader("Plantilla de Correo")
+        col_t1, col_t2 = st.columns(2)
+        new_intro = col_t1.text_area("Texto Introductorio", value=CONFIG['email_template']['intro_text'], height=150, help="Texto antes de la tabla de deuda. Usa {CLIENTE} para insertar el nombre del cliente.")
+        new_footer = col_t2.text_area("Texto Pie de Página", value=CONFIG['email_template']['footer_text'], height=150, help="Texto después de los totales.")
+        new_alert = st.text_area("Texto Alerta Detracción", value=CONFIG['email_template']['alert_text'], help="Mensaje resaltado sobre cuentas de detracción.")
+        new_voucher = st.text_area("Texto Nota (Vouchers)", value=CONFIG['email_template'].get('voucher_text', ''), help="Texto al final del correo (ej: instrucciones de envío de vouchers). Deja vacío para no mostrar.")
+
+        if st.button("💾 Guardar Configuración", type="primary", use_container_width=True):
+            new_settings = {
+                "company_name": new_company,
+                "company_ruc": new_ruc,
+                "phone_contact": new_phone,
+                "primary_color": new_primary,
+                "secondary_color": new_secondary,
+                "text_color": new_text_color,
+                "features": {
+                    "show_analysis": f_analysis,
+                    "show_sales": f_sales
+                },
+                "email_template": {
+                    "intro_text": new_intro,
+                    "footer_text": new_footer,
+                    "alert_text": new_alert,
+                    "voucher_text": new_voucher
+                },
+                "smtp_config": {
+                    "server": new_smtp_server,
+                    "port": new_smtp_port,
+                    "user": new_smtp_user,
+                    "password": new_smtp_pass
+                }
+            }
+            if sm.save_settings(new_settings):
+                st.success("✅ Configuración guardada correctamente.")
+                st.rerun()
+            else:
+                st.error("❌ Error al guardar la configuración.")
 
         # --- SECCION INDEPENDIENTE: COPIAS INTERNAS (RC-FEAT-013) ---
         st.markdown("---")
