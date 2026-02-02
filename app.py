@@ -1879,8 +1879,37 @@ if st.session_state['data_ready']:
                 f_sales = st.checkbox("Mostrar Tab Ventas", value=CONFIG.get('features', {}).get('show_sales', False))
                 
                 st.markdown("---")
-                st.subheader("Configuración de Correo (SMTP)")
-                st.info("Credenciales para el envío de correos masivos.")
+                st.info(f"📧 **Configuración de Correo (SMTP)**", icon="📧")
+                st.caption("Credenciales para el envío de correos masivos.")
+                
+                col_serv, col_port = st.columns([3, 1])
+                with col_serv:
+                    new_smtp_server = st.text_input("Servidor SMTP", value=CONFIG['smtp_config']['server'])
+                with col_port:
+                    new_smtp_port = st.text_input("Puerto SMTP", value=CONFIG['smtp_config']['port'])
+                
+                new_smtp_user = st.text_input("Usuario (Correo)", value=CONFIG['smtp_config']['user'])
+                new_smtp_pass = st.text_input("Contraseña App", value=CONFIG['smtp_config']['password'], type="password")
+
+                # --- Botón de Diagnóstico ---
+                if st.button("🔌 Probar Conexión SMTP (Diagnóstico)", help="Verifica DNS, Red y Login con los datos ingresados arriba"):
+                    from utils import email_sender as es_diag
+                    test_smtp_cfg = {
+                        "server": new_smtp_server,
+                        "port": new_smtp_port,
+                        "user": new_smtp_user,
+                        "password": new_smtp_pass
+                    }
+                    with st.spinner("Realizando diagnóstico de red..."):
+                        diag_stats = es_diag.test_smtp_connectivity(test_smtp_cfg)
+                        if diag_stats['ok']:
+                            st.success(diag_stats['msg'])
+                        else:
+                            st.error(diag_stats['msg'])
+                        with st.expander("Ver Bitácora de Diagnóstico"):
+                            for l in diag_stats['log']:
+                                st.text(l)
+
                 st.markdown("""
                 > **Nota Importante para Gmail:**  
                 > Debes usar una **Contraseña de Aplicación**, no tu clave normal.  
@@ -1889,10 +1918,6 @@ if st.session_state['data_ready']:
                 > 3. Busca "Contraseñas de aplicaciones" y genera una nueva.  
                 > [Ver Guía Oficial de Google](https://support.google.com/accounts/answer/185833)
                 """)
-                new_smtp_server = st.text_input("Servidor SMTP", value=CONFIG['smtp_config']['server'])
-                new_smtp_port = st.text_input("Puerto SMTP", value=CONFIG['smtp_config']['port'])
-                new_smtp_user = st.text_input("Usuario (Correo)", value=CONFIG['smtp_config']['user'])
-                new_smtp_pass = st.text_input("Contraseña App", value=CONFIG['smtp_config']['password'], type="password")
 
             st.markdown("---")
             st.subheader("Plantilla de Correo")

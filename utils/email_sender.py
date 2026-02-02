@@ -12,6 +12,8 @@ import time
 import threading
 import os
 import traceback
+import socket
+import ssl
 from . import helpers
 from . import db_manager
 
@@ -618,25 +620,45 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     db_manager.initialize_db()
 
     try:
-        try:
-            target_ip = socket.gethostbyname(smtp_config['server'])
-            stats['log'].append(f"🔍 [DNS] Resolucin: {smtp_config['server']} -> {target_ip}")
-        except:
-            stats['log'].append(f"⚠️ [DNS] No se pudo resolver {smtp_config['server']}")
-
-        port = int(smtp_config['port'])
-        stats['log'].append(f"🔌 Conectando a {smtp_config['server']} vía Puerto {port}...")
+        # --- RC-DEBUG-v2: Enhanced Connection & Egress Check ---
+        host = smtp_config.get('server', 'smtp.gmail.com')
+        port = int(smtp_config.get('port', 465))
         
-        if port == 465:
-            # SMTP_SSL para puerto 465 (Cifrado desde el inicio)
-            server = smtplib.SMTP_SSL(smtp_config['server'], port, timeout=15)
-        else:
-            # SMTP + STARTTLS para puerto 587
-            server = smtplib.SMTP(smtp_config['server'], port, timeout=15)
-            server.starttls()
+        target_ip = None
+        try:
+            target_ip = socket.gethostbyname(host)
+            stats['log'].append(f"🔍 [DNS] Resolución OK: {host} -> {target_ip}")
+        except Exception as dns_e:
+            stats['log'].append(f"⚠️ [DNS] No se pudo resolver {host}: {dns_e}")
+            # Fallback Google IPs if it's Gmail
+            if "gmail.com" in host:
+                fallbacks = ["142.251.2.108", "173.194.65.108", "142.250.141.109"]
+                target_ip = fallbacks[0]
+                stats['log'].append(f"💡 [DNS] Usando IP de respaldo: {target_ip}")
+
+        # Connectivity Check before full batch
+        try:
+            socket.create_connection(("8.8.8.8", 53), timeout=3)
+            stats['log'].append("🌐 [Red] Acceso básico a Internet OK (8.8.8.8:53)")
+        except Exception as net_e:
+            stats['log'].append(f"🚨 [Red] SIN ACCESO BÁSICO A INTERNET: {net_e}")
+
+        try:
+            stats['log'].append(f"🔌 Conectando a {target_ip or host} vía Puerto {port}...")
             
-        server.login(smtp_config['user'], smtp_config['password'])
-        stats['log'].append(f"✅ [RunID:{run_id}] Conectado exitosamente.")
+            if port == 465:
+                # SMTP_SSL para puerto 465 (Cifrado desde el inicio)
+                server = smtplib.SMTP_SSL(target_ip or host, port, timeout=20)
+            else:
+                # SMTP + STARTTLS para puerto 587
+                server = smtplib.SMTP(target_ip or host, port, timeout=20)
+                server.starttls()
+                
+            server.login(smtp_config['user'], smtp_config['password'])
+            stats['log'].append(f"✅ [RunID:{run_id}] Conexión y Login exitosos.")
+        except Exception as conn_e:
+            stats['log'].append(f"❌ [Error] Falló conexión SMTP inicial: {conn_e}")
+            raise conn_e
 
         total = len(unique_messages)
         send_call_index = 0
@@ -892,3 +914,46 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
         stats['failed'] = len(messages)
         
     return stats
+
+
+def test_smtp_connectivity(smtp_config):
+    """Diagnóstico rápido de conectividad SMTP para la UI."""
+    import socket
+    import smtplib
+    log = []
+    try:
+        host = smtp_config.get('server', 'smtp.gmail.com')
+        port = int(smtp_config.get('port', 465))
+        
+        # 1. DNS
+        ip = None
+        try:
+            ip = socket.gethostbyname(host)
+            log.append(f"🔍 [DNS] OK: {host} -> {ip}")
+        except:
+            ip = "142.251.2.108" # Fallback literal
+            log.append(f"⚠️ [DNS] FALLÓ resolución. Usando Fallback IP: {ip}")
+            
+        # 2. Conexión TCP
+        log.append(f"🔌 Conectando a {ip}:{port}...")
+        try:
+            if port == 465:
+                server = smtplib.SMTP_SSL(ip, port, timeout=10)
+            else:
+                server = smtplib.SMTP(ip, port, timeout=10)
+                server.starttls()
+            log.append("✅ [Red] Conexión TCP establecida.")
+        except Exception as e:
+            return {'ok': False, 'msg': f"Falla de Red/Puerto: {e}", 'log': log}
+            
+        # 3. Login
+        try:
+            server.login(smtp_config['user'], smtp_config['password'])
+            log.append("✅ [Auth] Autenticación Exitosa.")
+            server.quit()
+            return {'ok': True, 'msg': "Conexión y credenciales válidas.", 'log': log}
+        except Exception as e:
+            return {'ok': False, 'msg': f"Falla de Login: {e}", 'log': log}
+            
+    except Exception as ge:
+        return {'ok': False, 'msg': f"Error inesperado: {ge}", 'log': log}
