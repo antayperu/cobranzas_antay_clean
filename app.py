@@ -2287,7 +2287,7 @@ if st.session_state['data_ready']:
              if last_hash != file_hash:
                  with st.spinner("Procesando logo (Trim + Resize)..."):
                      import io
-                      from PIL import Image
+                     from PIL import Image
                      
                      # Process
                      proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
