@@ -71,6 +71,17 @@ def load_settings():
                     settings[k].update(v)
                 else:
                     settings[k] = v
+            
+            # --- RC-FEAT-CLOUD: Override with Env Vars (Railway/Vercel) ---
+            if os.getenv("SMTP_SERVER"):
+                settings['smtp_config']['server'] = os.getenv("SMTP_SERVER")
+            if os.getenv("SMTP_PORT"):
+                settings['smtp_config']['port'] = os.getenv("SMTP_PORT")
+            if os.getenv("SMTP_USER"):
+                settings['smtp_config']['user'] = os.getenv("SMTP_USER")
+            if os.getenv("SMTP_PASSWORD"):
+                settings['smtp_config']['password'] = os.getenv("SMTP_PASSWORD")
+                
             return settings
     except:
         return DEFAULT_SETTINGS.copy()
