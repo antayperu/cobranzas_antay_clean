@@ -618,11 +618,16 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     db_manager.initialize_db()
 
     try:
-        server = smtplib.SMTP(smtp_config['server'], int(smtp_config['port']))
-        server.starttls()
+        port = int(smtp_config['port'])
+        if port == 465:
+            server = smtplib.SMTP_SSL(smtp_config['server'], port, timeout=15)
+        else:
+            server = smtplib.SMTP(smtp_config['server'], port, timeout=15)
+            server.starttls()
+            
         server.login(smtp_config['user'], smtp_config['password'])
         
-        stats['log'].append(f"✅ [RunID:{run_id}] Conectado a {smtp_config['server']}")
+        stats['log'].append(f"✅ [RunID:{run_id}] Conectado a {smtp_config['server']} (Puerto {port})")
 
         total = len(unique_messages)
         send_call_index = 0
