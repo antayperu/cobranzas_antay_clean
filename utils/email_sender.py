@@ -627,6 +627,8 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
             stats['log'].append(f"⚠️ [DNS] No se pudo resolver {smtp_config['server']}")
 
         port = int(smtp_config['port'])
+        stats['log'].append(f"🔌 Conectando a {smtp_config['server']} vía Puerto {port}...")
+        
         if port == 465:
             server = smtplib.SMTP_SSL(smtp_config['server'], port, timeout=15)
         else:
@@ -635,7 +637,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
             
         server.login(smtp_config['user'], smtp_config['password'])
         
-        stats['log'].append(f"✅ [RunID:{run_id}] Conectado a {smtp_config['server']} (Puerto {port})")
+        stats['log'].append(f"✅ [RunID:{run_id}] Conectado exitosamente.")
 
         total = len(unique_messages)
         send_call_index = 0
