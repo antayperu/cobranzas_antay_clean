@@ -2,5 +2,4 @@ streamlit
 pandas
 pillow
 python-dotenv
-notion-client
-supabase
+httpx
