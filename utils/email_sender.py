@@ -653,27 +653,42 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     except Exception as net_e:
         stats['log'].append(f"🚨 [Red] SIN ACCESO HTTPS: {net_e}")
 
-    # Connection Handling
-    server = None
-    if not use_api:
-        try:
-            stats['log'].append(f"🔌 Conectando a {target_ip or host} vía Puerto {port}...")
-            if port == 465:
-                server = smtplib.SMTP_SSL(target_ip or host, port, timeout=20)
-            else:
-                server = smtplib.SMTP(target_ip or host, port, timeout=20)
-                server.starttls()
-            server.login(smtp_config['user'], smtp_config['password'])
-            stats['log'].append(f"✅ [RunID:{run_id}] Conexión SMTP Exitosa.")
-        except Exception as conn_e:
-            stats['log'].append(f"❌ [Error] Falló conexión SMTP inicial: {conn_e}")
-            raise conn_e
-    else:
-        # SendGrid API Client
-        sg_client = SendGridAPIClient(api_key)
-        stats['log'].append("✅ [SendGrid] Cliente API inicializado.")
-
     try:
+        # Connection Handling
+        server = None
+        if not use_api:
+            try:
+                stats['log'].append(f"🔌 Conectando a {target_ip or host} vía Puerto {port}...")
+                if port == 465:
+                    server = smtplib.SMTP_SSL(target_ip or host, port, timeout=25)
+                else:
+                    server = smtplib.SMTP(target_ip or host, port, timeout=25)
+                    server.ehlo()
+                    if server.has_extn('starttls'):
+                        server.starttls()
+                        server.ehlo()
+                
+                server.login(smtp_config['user'], smtp_config['password'])
+                stats['log'].append(f"✅ [RunID:{run_id}] Conexión SMTP Exitosa.")
+            except smtplib.SMTPAuthenticationError:
+                err_auth = "❌ Error de Autenticación (535). Si usas Gmail con 2FA, NECESITAS una 'Contraseña de Aplicación'. Tu clave normal de Google no funcionará."
+                stats['log'].append(err_auth)
+                stats['failed'] = len(messages)
+                return stats
+            except Exception as conn_e:
+                stats['log'].append(f"❌ [Error] Falló conexión SMTP inicial: {conn_e}")
+                stats['failed'] = len(messages)
+                return stats
+        else:
+            # SendGrid API Client
+            try:
+                sg_client = SendGridAPIClient(api_key)
+                stats['log'].append("✅ [SendGrid] Cliente API inicializado.")
+            except Exception as e_api_init:
+                stats['log'].append(f"❌ [Error] Falló inicialización de SendGrid: {e_api_init}")
+                stats['failed'] = len(messages)
+                return stats
+
         total = len(unique_messages)
         send_call_index = 0
         
@@ -993,10 +1008,13 @@ def test_smtp_connectivity(smtp_config):
         log.append(f"🔌 Intentando conexión a {ip}:{port}...")
         try:
             if str(port) == "465":
-                server = smtplib.SMTP_SSL(ip, port, timeout=10)
+                server = smtplib.SMTP_SSL(ip, port, timeout=12)
             else:
-                server = smtplib.SMTP(ip, port, timeout=10)
-                server.starttls()
+                server = smtplib.SMTP(ip, port, timeout=12)
+                server.ehlo()
+                if server.has_extn('starttls'):
+                    server.starttls()
+                    server.ehlo()
             log.append(f"✅ [SMTP] Conexión TCP a Puerto {port} establecida.")
         except Exception as e:
             log.append(f"❌ [SMTP] Falla de Conexión a Puerto {port}: {e}")
