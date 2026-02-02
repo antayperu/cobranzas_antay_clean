@@ -1,5 +1,7 @@
 streamlit
 pandas
 openpyxl
+pillow
 python-dotenv
+supabase
 httpx

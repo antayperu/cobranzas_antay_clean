@@ -11,100 +11,17 @@ DB_NAME = "email_ledger.db"
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-import httpx
-
-# --- Configuración de Motores ---
-DB_NAME = "email_ledger.db"
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-class SupabaseRest:
-    """Cliente REST ligero para Supabase (PostgREST) usando HTTPX."""
-    def __init__(self):
-        self.base_url = f"{SUPABASE_URL}/rest/v1"
-        self.headers = {
-            "apikey": SUPABASE_KEY,
-            "Authorization": f"Bearer {SUPABASE_KEY}",
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-        }
-
-    def table(self, name):
-        self.current_table = name
-        return self
-
-    def _get_url(self, params=None):
-        url = f"{self.base_url}/{self.current_table}"
-        if params:
-            url += "?" + "&".join(params)
-        return url
-
-    def insert(self, data):
-        response = httpx.post(self._get_url(), json=data, headers=self.headers)
-        response.raise_for_status()
-        return response
-
-    def upsert(self, data):
-        headers = self.headers.copy()
-        headers["Prefer"] = "resolution=merge-duplicates"
-        # PostgREST upsert necesita que el payload sea un objeto o lista
-        response = httpx.post(self._get_url(), json=data, headers=headers)
-        response.raise_for_status()
-        return response
-
-    def select(self, columns="*"):
-        self.query_params = [f"select={columns}"]
-        return self
-
-    def eq(self, column, value):
-        self.query_params.append(f"{column}=eq.{value}")
-        return self
-
-    def in_(self, column, values):
-        vals_str = ",".join(map(str, values))
-        self.query_params.append(f"{column}=in.({vals_str})")
-        return self
-
-    def gte(self, column, value):
-        self.query_params.append(f"{column}=gte.{value}")
-        return self
-
-    def like(self, column, pattern):
-        # Translate SQL % to PostgREST *
-        pattern = pattern.replace('%', '*')
-        self.query_params.append(f"{column}=like.{pattern}")
-        return self
-
-    def order(self, column, desc=False):
-        direction = "desc" if desc else "asc"
-        self.query_params.append(f"order={column}.{direction}")
-        return self
-
-    def execute(self):
-        response = httpx.get(self._get_url(self.query_params), headers=self.headers)
-        response.raise_for_status()
-        # Mocking supabase-py response structure
-        class MockResponse:
-            def __init__(self, data): self.data = data
-        return MockResponse(response.json())
-
-    def delete(self):
-        self.query_params = []
-        return self
-
-    def commit_delete(self):
-        """Eliminación física en PostgREST."""
-        response = httpx.delete(self._get_url(self.query_params), headers=self.headers)
-        response.raise_for_status()
-        return response
-
 _client = None
 
 def get_supabase_client():
-    """Inicializa el cliente ligero."""
+    """Inicializa el cliente de Supabase solo si es necesario."""
     global _client
     if _client is None and SUPABASE_URL and SUPABASE_KEY:
-        _client = SupabaseRest()
+        try:
+            from supabase import create_client
+            _client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        except Exception as e:
+            print(f"Supabase Init Error: {e}")
     return _client
 
 def is_cloud_mode():
@@ -305,12 +222,9 @@ def reset_today_stats():
     """Limpia el historial de hoy."""
     today_pattern = f"{datetime.now().strftime('%Y-%m-%d')}%"
     
-    if is_cloud_mode():
-        client = get_supabase_client()
-        if client:
             try:
-                client.table("send_attempts").like("timestamp", today_pattern).commit_delete()
-                client.table("ledger_last_send").like("last_sent_at", today_pattern).commit_delete()
+                client.table("send_attempts").delete().like("timestamp", today_pattern).execute()
+                client.table("ledger_last_send").delete().like("last_sent_at", today_pattern).execute()
                 return True, "Historial de hoy limpiado en Cloud."
             except Exception as e: return False, str(e)
 
