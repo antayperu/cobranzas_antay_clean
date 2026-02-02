@@ -5,3 +5,4 @@ pillow
 python-dotenv
 supabase
 httpx
+sendgrid

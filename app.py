@@ -1891,14 +1891,19 @@ if st.session_state['data_ready']:
             new_smtp_user = st.text_input("Usuario (Correo)", value=CONFIG['smtp_config']['user'])
             new_smtp_pass = st.text_input("Contraseña App", value=CONFIG['smtp_config']['password'], type="password")
 
+            st.markdown("---")
+            st.warning("🚀 **API Bridge (Opcional - Recomendado para Nube)**", icon="🚀")
+            new_sg_key = st.text_input("SendGrid API Key", value=CONFIG['smtp_config'].get('sendgrid_api_key', ''), type="password", help="Si Railway bloquea el puerto SMTP, usa una API Key de SendGrid para enviar por el puerto 443.")
+
             # --- Botón de Diagnóstico (Interactive, No Form) ---
-            if st.button("🔌 Probar Conexión SMTP (Diagnóstico)", help="Verifica DNS, Red y Login con los datos ingresados arriba"):
+            if st.button("🔌 Probar Conexión (Diagnóstico)", help="Verifica DNS, Red, SMTP y API Key"):
                 from utils import email_sender as es_diag
                 test_smtp_cfg = {
                     "server": new_smtp_server,
                     "port": new_smtp_port,
                     "user": new_smtp_user,
-                    "password": new_smtp_pass
+                    "password": new_smtp_pass,
+                    "sendgrid_api_key": new_sg_key
                 }
                 with st.spinner("Realizando diagnóstico de red..."):
                     diag_stats = es_diag.test_smtp_connectivity(test_smtp_cfg)
@@ -1911,9 +1916,8 @@ if st.session_state['data_ready']:
                             st.text(l)
 
             st.markdown("""
-            > **Nota Importante para Gmail:**  
-            > Debes usar una **Contraseña de Aplicación**, no tu clave normal.  
-            > [Ver Guía Oficial de Google](https://support.google.com/accounts/answer/185833)
+            > **Nota:** Si el diagnóstico SMTP da 'timed out', configura tu **SendGrid API Key** para saltar el bloqueo.  
+            > [Crear cuenta gratis en SendGrid](https://signup.sendgrid.com/)
             """)
 
         st.markdown("---")
@@ -1946,7 +1950,8 @@ if st.session_state['data_ready']:
                     "server": new_smtp_server,
                     "port": new_smtp_port,
                     "user": new_smtp_user,
-                    "password": new_smtp_pass
+                    "password": new_smtp_pass,
+                    "sendgrid_api_key": new_sg_key
                 }
             }
             if sm.save_settings(new_settings):

@@ -14,6 +14,12 @@ import os
 import traceback
 import socket
 import ssl
+try:
+    from sendgrid import SendGridAPIClient
+    from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition, ContentId
+    HAS_SENDGRID = True
+except ImportError:
+    HAS_SENDGRID = False
 from . import helpers
 from . import db_manager
 
@@ -619,47 +625,55 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     TTL_MINUTES = 10
     db_manager.initialize_db()
 
+    # --- RC-DEBUG-v2: Enhanced Connection & Egress Check ---
+    # NEW: First check if we should use API Bridge (SendGrid)
+    api_key = smtp_config.get('sendgrid_api_key', '')
+    use_api = HAS_SENDGRID and bool(api_key)
+    
+    if use_api:
+        stats['log'].append("🚀 [Modo] Usando BRIDGE API (SendGrid) para saltar bloqueos SMTP.")
+    else:
+        stats['log'].append("🔌 [Modo] Usando Protocolo SMTP Estándar.")
+
+    host = smtp_config.get('server', 'smtp.gmail.com')
+    port = int(smtp_config.get('port', 465))
+    
+    # DNS Check (Standard diagnostics)
+    target_ip = None
     try:
-        # --- RC-DEBUG-v2: Enhanced Connection & Egress Check ---
-        host = smtp_config.get('server', 'smtp.gmail.com')
-        port = int(smtp_config.get('port', 465))
-        
-        target_ip = None
-        try:
-            target_ip = socket.gethostbyname(host)
-            stats['log'].append(f"🔍 [DNS] Resolución OK: {host} -> {target_ip}")
-        except Exception as dns_e:
-            stats['log'].append(f"⚠️ [DNS] No se pudo resolver {host}: {dns_e}")
-            # Fallback Google IPs if it's Gmail
-            if "gmail.com" in host:
-                fallbacks = ["142.251.2.108", "173.194.65.108", "142.250.141.109"]
-                target_ip = fallbacks[0]
-                stats['log'].append(f"💡 [DNS] Usando IP de respaldo: {target_ip}")
+        target_ip = socket.gethostbyname(host)
+        stats['log'].append(f"🔍 [DNS] Resolución OK: {host} -> {target_ip}")
+    except Exception as dns_e:
+        stats['log'].append(f"⚠️ [DNS] No se pudo resolver {host}: {dns_e}")
 
-        # Connectivity Check before full batch
-        try:
-            socket.create_connection(("8.8.8.8", 53), timeout=3)
-            stats['log'].append("🌐 [Red] Acceso básico a Internet OK (8.8.8.8:53)")
-        except Exception as net_e:
-            stats['log'].append(f"🚨 [Red] SIN ACCESO BÁSICO A INTERNET: {net_e}")
+    # Connectivity Check
+    try:
+        socket.create_connection(("google.com", 443), timeout=3)
+        stats['log'].append("🌐 [Red] Acceso HTTPS (443) OK.")
+    except Exception as net_e:
+        stats['log'].append(f"🚨 [Red] SIN ACCESO HTTPS: {net_e}")
 
+    # Connection Handling
+    server = None
+    if not use_api:
         try:
             stats['log'].append(f"🔌 Conectando a {target_ip or host} vía Puerto {port}...")
-            
             if port == 465:
-                # SMTP_SSL para puerto 465 (Cifrado desde el inicio)
                 server = smtplib.SMTP_SSL(target_ip or host, port, timeout=20)
             else:
-                # SMTP + STARTTLS para puerto 587
                 server = smtplib.SMTP(target_ip or host, port, timeout=20)
                 server.starttls()
-                
             server.login(smtp_config['user'], smtp_config['password'])
-            stats['log'].append(f"✅ [RunID:{run_id}] Conexión y Login exitosos.")
+            stats['log'].append(f"✅ [RunID:{run_id}] Conexión SMTP Exitosa.")
         except Exception as conn_e:
             stats['log'].append(f"❌ [Error] Falló conexión SMTP inicial: {conn_e}")
             raise conn_e
+    else:
+        # SendGrid API Client
+        sg_client = SendGridAPIClient(api_key)
+        stats['log'].append("✅ [SendGrid] Cliente API inicializado.")
 
+    try:
         total = len(unique_messages)
         send_call_index = 0
         
@@ -756,8 +770,8 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 # 2. HTML
                 msg_alternative.attach(MIMEText(msg_data['html_body'], 'html'))
                 
-                # Adjuntar Logo Inline (si existe)
-                if logo_path:
+                # Adjuntar Logo Inline (si existe) - Only for SMTP, SendGrid handles it differently
+                if logo_path and not use_api:
                     try:
                         with open(logo_path, 'rb') as f:
                             logo_data = f.read()
@@ -856,9 +870,40 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 print(f"DEBUG_FORENSIC: [RunID:{run_id}] Thread:{thread_id} | RCPT_LIST={recipients_log_str} | LedgerKey={ledger_key}")
                 stats['log'].append(f"📧 [RunID:{run_id}] Envelope Targets ({len(unique_envelope_recipients)}): {recipients_log_str} {copies_log_info}")
 
-                # Enviar con sobre explícito (Explicit Envelope)
-                # IMPORTANTE: Pasamos to_addrs explícitamente para que el Envelope incluya BCC (invisible en headers).
-                server.send_message(msg, to_addrs=unique_envelope_recipients)
+                # --- DELIVERY BRANCH ---
+                if use_api:
+                    # SendGrid Delivery
+                    try:
+                        message = Mail(
+                            from_email=smtp_config['user'],
+                            to_emails=unique_envelope_recipients,
+                            subject=msg_data['subject'],
+                            html_content=msg_data['html_body']
+                        )
+                        
+                        # Manejo de CC/BCC explícito en SendGrid si es necesario (ya están en unique_envelope_recipients por ahora)
+                        # Nota: SendGrid maneja a todos como destinatarios en el sobre a menos que se especifique Personalization
+                        
+                        if logo_path:
+                             with open(logo_path, 'rb') as f:
+                                 encoded_file = base64.b64encode(f.read()).decode()
+                             attached_file = Attachment(
+                                 FileContent(encoded_file),
+                                 FileName('logo.png'),
+                                 FileType('image/png'),
+                                 Disposition('inline'),
+                                 ContentId('logo_dacta')
+                             )
+                             message.add_attachment(attached_file)
+                        
+                        response = sg_client.send(message)
+                        stats['log'].append(f"[{i+1}/{total}] ✅ [API] Enviado vía SendGrid (Status: {response.status_code})")
+                    except Exception as e_api:
+                        raise Exception(f"SendGrid API Error: {e_api}")
+                else:
+                    # Standard SMTP Delivery
+                    # IMPORTANTE: Pasamos to_addrs explícitamente para que el Envelope incluya BCC (invisible en headers).
+                    server.send_message(msg, from_addr=smtp_config['user'], to_addrs=unique_envelope_recipients)
 
                 # Log POST-SEND (Forensic)
                 stats['log'].append(f"✅ [RunID:{run_id}] SEND_CALL #{send_call_index} SUCCESS -> Sent OK")
@@ -903,7 +948,8 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     'RunID': run_id
                 })
         
-        server.quit()
+        if server:
+            server.quit()
         
     except smtplib.SMTPAuthenticationError:
         err_msg = "❌ Error de Autenticación (535). \nSi usas Gmail, NECESITAS activar 'Verificación en 2 pasos' y generar una 'Contraseña de Aplicación'. Tu contraseña normal de Google NO funcionará."
