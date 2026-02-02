@@ -617,6 +617,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     TTL_MINUTES = 10
     db_manager.initialize_db()
 
+    try:
         try:
             target_ip = socket.gethostbyname(smtp_config['server'])
             stats['log'].append(f"🔍 [DNS] Resolucin: {smtp_config['server']} -> {target_ip}")
@@ -643,7 +644,6 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
         for i, msg_data in enumerate(unique_messages):
             send_call_index += 1
             
-            client_name = msg_data.get('client_name', 'Unknown')
             client_name = msg_data.get('client_name', 'Unknown')
             
             # --- RC-FIX-QA-TYPE: Robust Ledger Recipient Extraction ---
@@ -797,15 +797,22 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     qa_bcc = helpers.normalize_emails(qa_settings.get('bcc_recipients', []))
                     
                     # 1. Update Envelope
-                    for e in qa_cc + qa_bcc:
+                    added_cc_qa = 0
+                    added_bcc_qa = 0
+                    for e in qa_cc:
                         if e.lower() not in unique_envelope_recipients:
                             unique_envelope_recipients.append(e.lower())
+                            added_cc_qa += 1
+                    for e in qa_bcc:
+                        if e.lower() not in unique_envelope_recipients:
+                            unique_envelope_recipients.append(e.lower())
+                            added_bcc_qa += 1
                             
                     # 2. Set QA Headers
                     if qa_cc:
                         msg['Cc'] = ", ".join(qa_cc)
                         
-                    copies_log_info = f"[MODE=QA] Strict. Targets: {len(qa_cc)} CC, {len(qa_bcc)} BCC. (Prod Ignored)"
+                    copies_log_info = f"[MODE=QA] Added: {added_cc_qa} CC, {added_bcc_qa} BCC"
                 
                 # --- Advanced Forensic Headers ---
                 # Identificadores de Proceso/Hilo
