@@ -618,26 +618,45 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     db_manager.initialize_db()
 
     try:
-        # --- RC-DEBUG: Resolve IP to see if IPv6 is the issue ---
+        # --- RC-DEBUG: Resolve IP and Health Check ---
         import socket
+        
+        # 0. Health Check (Can we reach the internet at all?)
+        try:
+            socket.create_connection(("8.8.8.8", 53), timeout=3)
+            stats['log'].append("🌐 [Red] Conectividad básica OK (8.8.8.8:53)")
+        except:
+            stats['log'].append("🚨 [Red] SIN ACCESO A INTERNET (Falla ping 8.8.8.8)")
+
         try:
             target_ip = socket.gethostbyname(smtp_config['server'])
             stats['log'].append(f"🔍 [DNS] Resolucin: {smtp_config['server']} -> {target_ip}")
         except:
             stats['log'].append(f"⚠️ [DNS] No se pudo resolver {smtp_config['server']}")
 
-        port = int(smtp_config['port'])
-        stats['log'].append(f"🔌 Conectando a {smtp_config['server']} vía Puerto {port}...")
+        # 1. FORZAR IPv4 para evitar loops de IPv6 en Railway
+        # Monkeypatch temporal de socket.getaddrinfo para este hilo
+        orig_getaddrinfo = socket.getaddrinfo
+        def forced_ipv4_getaddrinfo(*args, **kwargs):
+            return orig_getaddrinfo(args[0], args[1], socket.AF_INET)
         
-        if port == 465:
-            server = smtplib.SMTP_SSL(smtp_config['server'], port, timeout=15)
-        else:
-            server = smtplib.SMTP(smtp_config['server'], port, timeout=15)
-            server.starttls()
+        socket.getaddrinfo = forced_ipv4_getaddrinfo
+
+        try:
+            port = int(smtp_config['port'])
+            stats['log'].append(f"🔌 Conectando a {smtp_config['server']} vía Puerto {port}...")
             
-        server.login(smtp_config['user'], smtp_config['password'])
-        
-        stats['log'].append(f"✅ [RunID:{run_id}] Conectado exitosamente.")
+            if port == 465:
+                server = smtplib.SMTP_SSL(smtp_config['server'], port, timeout=15)
+            else:
+                server = smtplib.SMTP(smtp_config['server'], port, timeout=15)
+                server.starttls()
+                
+            server.login(smtp_config['user'], smtp_config['password'])
+            stats['log'].append(f"✅ [RunID:{run_id}] Conectado exitosamente.")
+        finally:
+            # 2. Restaurar original SIEMPRE
+            socket.getaddrinfo = orig_getaddrinfo
 
         total = len(unique_messages)
         send_call_index = 0
