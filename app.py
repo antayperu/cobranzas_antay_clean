@@ -2287,7 +2287,11 @@ if st.session_state['data_ready']:
              if last_hash != file_hash:
                  with st.spinner("Procesando logo (Trim + Resize)..."):
                      import io
-                     from PIL import Image
+                      try:
+                          from PIL import Image
+                      except ImportError:
+                          st.error("⚠️ El procesamiento dinámico de imágenes no está disponible en este entorno.")
+                          st.stop()
                      
                      # Process
                      proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
