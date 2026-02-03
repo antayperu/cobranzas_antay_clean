@@ -169,8 +169,8 @@ class TestE_HTMLPreviewConsistency:
         df_final = fixture_fresh_load()
         df_filtered = create_synthetic_df_filtered(df_final, filter_moneda="SOLES")
         
-        # Simular selección de cliente
-        client_code = df_filtered['COD CLIENTE'].iloc[0]
+        # Simular selección de cliente (asegurar que tenga saldo para validar suma > 0)
+        client_code = df_filtered[df_filtered['SALDO REAL'] > 0]['COD CLIENTE'].iloc[0]
         docs_cli_mail = df_filtered[df_filtered['COD CLIENTE'] == client_code]
         
         # Calcular totales (como en el código real)

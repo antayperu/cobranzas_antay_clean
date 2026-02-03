@@ -3,7 +3,7 @@ from notion_client import Client
 
 # SECURITY: Token must be provided via environment variable
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
-PAGE_ID = "2377544a512b804db020d8e8b62fd00d"
+PAGE_ID = "2377544a512b80048f40e7cd8568c09c"
 OUTPUT_FILE = "docs/ANTAY_METHODOLOGY.md"
 def get_block_content(block):
     block_type = block.get("type")
