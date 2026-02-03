@@ -6,7 +6,7 @@ def render_sidebar():
     with st.sidebar:
         # --- 1. HEADER (Brand) ---
         st.markdown("### 🏢 Cobranzas Antay")
-        st.caption(f"v1.5.0 Enterprise | {date.today().strftime('%d %b %Y')}")
+        st.caption(f"v1.6.0-PATCH-DEFINITIVO | {date.today().strftime('%d %b %Y')}")
         st.markdown("---")
 
         # --- 2. SESIÓN (Persistence) ---

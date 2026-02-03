@@ -1542,6 +1542,10 @@ if st.session_state['data_ready']:
                         email_user = smtp_cfg.get('user', '')
                         email_pass = smtp_cfg.get('password', '')
                         api_key_sg = smtp_cfg.get('sendgrid_api_key', '')
+                        
+                        # --- DEBUG DEPLOYMENT (RIGOROUS CHECK) ---
+                        # Mostramos el estado exacto de las variables para descartar errores de caché o carga
+                        st.info(f"🔍 DIAGNÓSTICO EN VIVO: User='{email_user}' | TienePass={bool(email_pass)} | TieneKey={bool(api_key_sg)} (Len={len(api_key_sg)}) | Versión=1.6.0-PATCH-DEFINITIVO")
 
                         # Validation Logic: Requires User AND (Password OR API Key)
                         has_creds = email_user and (email_pass or api_key_sg)
