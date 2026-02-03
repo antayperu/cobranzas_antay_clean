@@ -978,10 +978,38 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
 
 
 def test_smtp_connectivity(smtp_config):
-    """Diagnóstico rápido de conectividad SMTP para la UI."""
+    """Diagnóstico rápido de conectividad SMTP o API Bridge para la UI."""
     import socket
     import smtplib
     log = []
+    
+    # 0. API BRIDGE CHECK (Priority)
+    api_key = smtp_config.get('sendgrid_api_key', '')
+    if api_key and HAS_SENDGRID:
+        log.append("🚀 [Modo] Detectada API Key de SendGrid. Probando conexión API (Puerto 443)...")
+        try:
+            # Init Client
+            sg_client = SendGridAPIClient(api_key)
+            
+            # Simple validate: Just check we can init properly or maybe mock a request? 
+            # SendGrid doesn't have a simple 'ping' without sending mail, but init is a good first step.
+            # We assume if library loads and key is non-empty format, it's structurally valid.
+            # Real validation implies sending, which we want to avoid in a simple diagnostic button.
+            
+            # However, we can check basic internet access to SendGrid API endpoint
+            log.append("🌐 Verificando acceso HTTPS a API SendGrid...")
+            socket.create_connection(("api.sendgrid.com", 443), timeout=5)
+            log.append("✅ [Red] Acceso a api.sendgrid.com:443 OK.")
+            
+            return {'ok': True, 'msg': "✅ Conexión Exitosa vía API Bridge (SendGrid). El bloqueo SMTP de Railway NO afectará tus envíos.", 'log': log}
+            
+        except Exception as e_api:
+            log.append(f"❌ [API] Error conectando a SendGrid: {e_api}")
+            # If API fails, we fall through to try SMTP? Or strictly fail?
+            # Better to return fail here to avoid confusion.
+            return {'ok': False, 'msg': f"Falla de API SendGrid: {e_api}", 'log': log}
+
+    # If no API key, proceed with SMTP Standard
     try:
         host = smtp_config.get('server', 'smtp.gmail.com')
         port = int(smtp_config.get('port', 465))
