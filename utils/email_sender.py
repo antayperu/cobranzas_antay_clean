@@ -14,6 +14,7 @@ import os
 import traceback
 import socket
 import ssl
+import base64
 try:
     from sendgrid import SendGridAPIClient
     from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition, ContentId
