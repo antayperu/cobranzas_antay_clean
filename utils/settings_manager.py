@@ -20,7 +20,8 @@ DEFAULT_SETTINGS = {
         "user": "",
         "password": "",
         "resend_api_key": "",
-        "sendgrid_api_key": ""
+        "sendgrid_api_key": "",
+        "force_smtp": False
     },
     "supervisor_config": {
         "email": "acamacho@integrens.com",

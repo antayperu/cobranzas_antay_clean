@@ -1897,9 +1897,7 @@ if st.session_state['data_ready']:
             new_smtp_pass = st.text_input("Contraseña App", value=CONFIG['smtp_config']['password'], type="password")
 
             st.markdown("---")
-            st.warning("🚀 **API Bridge (Opcional - Recomendado para Nube)**", icon="🚀")
-            new_resend_key = st.text_input("Resend API Key (Recomendado)", value=CONFIG['smtp_config'].get('resend_api_key', ''), type="password", help="Solución moderna y simple para saltar el bloqueo de Railway. Puerto 443.")
-            new_sg_key = st.text_input("SendGrid API Key", value=CONFIG['smtp_config'].get('sendgrid_api_key', ''), type="password", help="Alternativa si ya tienes cuenta en SendGrid. Puerto 443.")
+            force_smtp = st.checkbox("🔌 Usar Protocolo Local (Directo desde Laptop)", value=CONFIG['smtp_config'].get('force_smtp', True), help="Activa esta opción para usar tu conexión local y evitar bloqueos de Gmail.")
 
             # --- Botón de Diagnóstico (Interactive, No Form) ---
             if st.button("🔌 Probar Conexión (Diagnóstico)", help="Verifica DNS, Red, SMTP y API Key"):
@@ -1909,8 +1907,9 @@ if st.session_state['data_ready']:
                     "port": new_smtp_port,
                     "user": new_smtp_user,
                     "password": new_smtp_pass,
-                    "resend_api_key": new_resend_key,
-                    "sendgrid_api_key": new_sg_key
+                    "resend_api_key": "",
+                    "sendgrid_api_key": "",
+                    "force_smtp": force_smtp
                 }
                 with st.spinner("Realizando diagnóstico de red..."):
                     diag_stats = es_diag.test_smtp_connectivity(test_smtp_cfg)
@@ -1922,10 +1921,7 @@ if st.session_state['data_ready']:
                         for l in diag_stats['log']:
                             st.text(l)
 
-            st.markdown(f"""
-            > **Nota:** Si el diagnóstico SMTP da 'timed out', configura tu **Resend API Key** (o SendGrid) para saltar el bloqueo.  
-            > [Crear cuenta gratis en Resend](https://resend.com/signup)
-            """)
+            pass
 
         st.markdown("---")
         st.subheader("Plantilla de Correo")
@@ -1958,8 +1954,9 @@ if st.session_state['data_ready']:
                     "port": new_smtp_port,
                     "user": new_smtp_user,
                     "password": new_smtp_pass,
-                    "resend_api_key": new_resend_key,
-                    "sendgrid_api_key": new_sg_key
+                    "resend_api_key": "",
+                    "sendgrid_api_key": "",
+                    "force_smtp": force_smtp
                 }
             }
             if sm.save_settings(new_settings):

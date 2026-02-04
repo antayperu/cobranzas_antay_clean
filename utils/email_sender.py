@@ -636,10 +636,11 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     # NEW: First check if we should use API Bridge (Resend or SendGrid)
     resend_key = smtp_config.get('resend_api_key', '')
     sendgrid_key = smtp_config.get('sendgrid_api_key', '')
+    force_smtp = smtp_config.get('force_smtp', False)
     
-    # Prioritize Resend over SendGrid
-    use_resend = HAS_RESEND and bool(resend_key)
-    use_sendgrid = HAS_SENDGRID and bool(sendgrid_key) and not use_resend
+    # Prioritize Resend over SendGrid, but respect force_smtp
+    use_resend = HAS_RESEND and bool(resend_key) and not force_smtp
+    use_sendgrid = HAS_SENDGRID and bool(sendgrid_key) and not use_resend and not force_smtp
     use_api = use_resend or use_sendgrid
     
     if use_resend:
@@ -1026,8 +1027,9 @@ def test_smtp_connectivity(smtp_config):
     # 0. API BRIDGE CHECK (Priority)
     resend_key = smtp_config.get('resend_api_key', '')
     sg_key = smtp_config.get('sendgrid_api_key', '')
+    force_smtp = smtp_config.get('force_smtp', False)
     
-    if resend_key and HAS_RESEND:
+    if resend_key and HAS_RESEND and not force_smtp:
         log.append("🚀 [Modo] Detectada API Key de Resend. Probando conexión API (Puerto 443)...")
         try:
             log.append("🌐 Verificando acceso HTTPS a API Resend...")
@@ -1038,7 +1040,7 @@ def test_smtp_connectivity(smtp_config):
             log.append(f"❌ [API] Error conectando a Resend: {e_api}")
             return {'ok': False, 'msg': f"Falla de API Resend: {e_api}", 'log': log}
             
-    elif sg_key and HAS_SENDGRID:
+    elif sg_key and HAS_SENDGRID and not force_smtp:
         log.append("🚀 [Modo] Detectada API Key de SendGrid. Probando conexión API (Puerto 443)...")
         try:
             log.append("🌐 Verificando acceso HTTPS a API SendGrid...")
