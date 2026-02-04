@@ -18,7 +18,9 @@ DEFAULT_SETTINGS = {
         "server": "smtp.gmail.com",
         "port": "587",
         "user": "",
-        "password": ""
+        "password": "",
+        "resend_api_key": "",
+        "sendgrid_api_key": ""
     },
     "supervisor_config": {
         "email": "acamacho@integrens.com",
@@ -84,6 +86,8 @@ def load_settings():
                 "SMTP_PORT": ('smtp_config', 'port'),
                 "SMTP_USER": ('smtp_config', 'user'),
                 "SMTP_PASSWORD": ('smtp_config', 'password'),
+                "RESEND_API_KEY": ('smtp_config', 'resend_api_key'),
+                "SENDGRID_API_KEY": ('smtp_config', 'sendgrid_api_key'),
                 "SUPABASE_URL": ('supabase_config', 'url'),
                 "SUPABASE_KEY": ('supabase_config', 'key')
             }

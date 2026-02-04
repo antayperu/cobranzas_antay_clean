@@ -21,6 +21,12 @@ try:
     HAS_SENDGRID = True
 except ImportError:
     HAS_SENDGRID = False
+
+try:
+    import resend
+    HAS_RESEND = True
+except ImportError:
+    HAS_RESEND = False
 from . import helpers
 from . import db_manager
 
@@ -627,11 +633,18 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     db_manager.initialize_db()
 
     # --- RC-DEBUG-v2: Enhanced Connection & Egress Check ---
-    # NEW: First check if we should use API Bridge (SendGrid)
-    api_key = smtp_config.get('sendgrid_api_key', '')
-    use_api = HAS_SENDGRID and bool(api_key)
+    # NEW: First check if we should use API Bridge (Resend or SendGrid)
+    resend_key = smtp_config.get('resend_api_key', '')
+    sendgrid_key = smtp_config.get('sendgrid_api_key', '')
     
-    if use_api:
+    # Prioritize Resend over SendGrid
+    use_resend = HAS_RESEND and bool(resend_key)
+    use_sendgrid = HAS_SENDGRID and bool(sendgrid_key) and not use_resend
+    use_api = use_resend or use_sendgrid
+    
+    if use_resend:
+        stats['log'].append("🚀 [Modo] Usando BRIDGE API (Resend) para saltar bloqueos SMTP.")
+    elif use_sendgrid:
         stats['log'].append("🚀 [Modo] Usando BRIDGE API (SendGrid) para saltar bloqueos SMTP.")
     else:
         stats['log'].append("🔌 [Modo] Usando Protocolo SMTP Estándar.")
@@ -681,12 +694,17 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                 stats['failed'] = len(messages)
                 return stats
         else:
-            # SendGrid API Client
+            # API Client (Resend or SendGrid)
             try:
-                sg_client = SendGridAPIClient(api_key)
-                stats['log'].append("✅ [SendGrid] Cliente API inicializado.")
+                if use_resend:
+                    resend.api_key = resend_key
+                    stats['log'].append("✅ [Resend] Cliente API inicializado.")
+                elif use_sendgrid:
+                    sg_client = SendGridAPIClient(sendgrid_key)
+                    stats['log'].append("✅ [SendGrid] Cliente API inicializado.")
             except Exception as e_api_init:
-                stats['log'].append(f"❌ [Error] Falló inicialización de SendGrid: {e_api_init}")
+                api_name = "Resend" if use_resend else "SendGrid"
+                stats['log'].append(f"❌ [Error] Falló inicialización de {api_name}: {e_api_init}")
                 stats['failed'] = len(messages)
                 return stats
 
@@ -888,34 +906,55 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
 
                 # --- DELIVERY BRANCH ---
                 if use_api:
-                    # SendGrid Delivery
+                    # API Delivery (Resend or SendGrid)
                     try:
-                        message = Mail(
-                            from_email=smtp_config['user'],
-                            to_emails=unique_envelope_recipients,
-                            subject=msg_data['subject'],
-                            html_content=msg_data['html_body']
-                        )
+                        if use_resend:
+                            # Resend API Delivery
+                            params = {
+                                "from": smtp_config['user'],
+                                "to": unique_envelope_recipients,
+                                "subject": msg_data['subject'],
+                                "html": msg_data['html_body']
+                            }
+                            
+                            # Add logo attachment if exists
+                            if logo_path:
+                                with open(logo_path, 'rb') as f:
+                                    logo_data = f.read()
+                                params["attachments"] = [{
+                                    "filename": "logo.png",
+                                    "content": list(logo_data)  # Resend expects list of bytes
+                                }]
+                            
+                            response = resend.Emails.send(params)
+                            stats['log'].append(f"[{i+1}/{total}] ✅ [API] Enviado vía Resend (ID: {response.get('id', 'N/A')})")
                         
-                        # Manejo de CC/BCC explícito en SendGrid si es necesario (ya están en unique_envelope_recipients por ahora)
-                        # Nota: SendGrid maneja a todos como destinatarios en el sobre a menos que se especifique Personalization
-                        
-                        if logo_path:
-                             with open(logo_path, 'rb') as f:
-                                 encoded_file = base64.b64encode(f.read()).decode()
-                             attached_file = Attachment(
-                                 FileContent(encoded_file),
-                                 FileName('logo.png'),
-                                 FileType('image/png'),
-                                 Disposition('inline'),
-                                 ContentId('logo_dacta')
-                             )
-                             message.add_attachment(attached_file)
-                        
-                        response = sg_client.send(message)
-                        stats['log'].append(f"[{i+1}/{total}] ✅ [API] Enviado vía SendGrid (Status: {response.status_code})")
+                        elif use_sendgrid:
+                            # SendGrid API Delivery
+                            message = Mail(
+                                from_email=smtp_config['user'],
+                                to_emails=unique_envelope_recipients,
+                                subject=msg_data['subject'],
+                                html_content=msg_data['html_body']
+                            )
+                            
+                            if logo_path:
+                                with open(logo_path, 'rb') as f:
+                                    encoded_file = base64.b64encode(f.read()).decode()
+                                attached_file = Attachment(
+                                    FileContent(encoded_file),
+                                    FileName('logo.png'),
+                                    FileType('image/png'),
+                                    Disposition('inline'),
+                                    ContentId('logo_dacta')
+                                )
+                                message.add_attachment(attached_file)
+                            
+                            response = sg_client.send(message)
+                            stats['log'].append(f"[{i+1}/{total}] ✅ [API] Enviado vía SendGrid (Status: {response.status_code})")
                     except Exception as e_api:
-                        raise Exception(f"SendGrid API Error: {e_api}")
+                        api_name = "Resend" if use_resend else "SendGrid"
+                        raise Exception(f"{api_name} API Error: {e_api}")
                 else:
                     # Standard SMTP Delivery
                     # IMPORTANTE: Pasamos to_addrs explícitamente para que el Envelope incluya BCC (invisible en headers).
@@ -985,29 +1024,29 @@ def test_smtp_connectivity(smtp_config):
     log = []
     
     # 0. API BRIDGE CHECK (Priority)
-    api_key = smtp_config.get('sendgrid_api_key', '')
-    if api_key and HAS_SENDGRID:
+    resend_key = smtp_config.get('resend_api_key', '')
+    sg_key = smtp_config.get('sendgrid_api_key', '')
+    
+    if resend_key and HAS_RESEND:
+        log.append("🚀 [Modo] Detectada API Key de Resend. Probando conexión API (Puerto 443)...")
+        try:
+            log.append("🌐 Verificando acceso HTTPS a API Resend...")
+            socket.create_connection(("resend.com", 443), timeout=5)
+            log.append("✅ [Red] Acceso a resend.com:443 OK.")
+            return {'ok': True, 'msg': "✅ Conexión Exitosa vía API Bridge (Resend). El bloqueo SMTP de Railway NO afectará tus envíos.", 'log': log}
+        except Exception as e_api:
+            log.append(f"❌ [API] Error conectando a Resend: {e_api}")
+            return {'ok': False, 'msg': f"Falla de API Resend: {e_api}", 'log': log}
+            
+    elif sg_key and HAS_SENDGRID:
         log.append("🚀 [Modo] Detectada API Key de SendGrid. Probando conexión API (Puerto 443)...")
         try:
-            # Init Client
-            sg_client = SendGridAPIClient(api_key)
-            
-            # Simple validate: Just check we can init properly or maybe mock a request? 
-            # SendGrid doesn't have a simple 'ping' without sending mail, but init is a good first step.
-            # We assume if library loads and key is non-empty format, it's structurally valid.
-            # Real validation implies sending, which we want to avoid in a simple diagnostic button.
-            
-            # However, we can check basic internet access to SendGrid API endpoint
             log.append("🌐 Verificando acceso HTTPS a API SendGrid...")
             socket.create_connection(("api.sendgrid.com", 443), timeout=5)
             log.append("✅ [Red] Acceso a api.sendgrid.com:443 OK.")
-            
             return {'ok': True, 'msg': "✅ Conexión Exitosa vía API Bridge (SendGrid). El bloqueo SMTP de Railway NO afectará tus envíos.", 'log': log}
-            
         except Exception as e_api:
             log.append(f"❌ [API] Error conectando a SendGrid: {e_api}")
-            # If API fails, we fall through to try SMTP? Or strictly fail?
-            # Better to return fail here to avoid confusion.
             return {'ok': False, 'msg': f"Falla de API SendGrid: {e_api}", 'log': log}
 
     # If no API key, proceed with SMTP Standard

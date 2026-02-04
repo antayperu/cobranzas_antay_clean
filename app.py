@@ -1897,7 +1897,8 @@ if st.session_state['data_ready']:
 
             st.markdown("---")
             st.warning("🚀 **API Bridge (Opcional - Recomendado para Nube)**", icon="🚀")
-            new_sg_key = st.text_input("SendGrid API Key", value=CONFIG['smtp_config'].get('sendgrid_api_key', ''), type="password", help="Si Railway bloquea el puerto SMTP, usa una API Key de SendGrid para enviar por el puerto 443.")
+            new_resend_key = st.text_input("Resend API Key (Recomendado)", value=CONFIG['smtp_config'].get('resend_api_key', ''), type="password", help="Solución moderna y simple para saltar el bloqueo de Railway. Puerto 443.")
+            new_sg_key = st.text_input("SendGrid API Key", value=CONFIG['smtp_config'].get('sendgrid_api_key', ''), type="password", help="Alternativa si ya tienes cuenta en SendGrid. Puerto 443.")
 
             # --- Botón de Diagnóstico (Interactive, No Form) ---
             if st.button("🔌 Probar Conexión (Diagnóstico)", help="Verifica DNS, Red, SMTP y API Key"):
@@ -1907,6 +1908,7 @@ if st.session_state['data_ready']:
                     "port": new_smtp_port,
                     "user": new_smtp_user,
                     "password": new_smtp_pass,
+                    "resend_api_key": new_resend_key,
                     "sendgrid_api_key": new_sg_key
                 }
                 with st.spinner("Realizando diagnóstico de red..."):
@@ -1919,9 +1921,9 @@ if st.session_state['data_ready']:
                         for l in diag_stats['log']:
                             st.text(l)
 
-            st.markdown("""
-            > **Nota:** Si el diagnóstico SMTP da 'timed out', configura tu **SendGrid API Key** para saltar el bloqueo.  
-            > [Crear cuenta gratis en SendGrid](https://signup.sendgrid.com/)
+            st.markdown(f"""
+            > **Nota:** Si el diagnóstico SMTP da 'timed out', configura tu **Resend API Key** (o SendGrid) para saltar el bloqueo.  
+            > [Crear cuenta gratis en Resend](https://resend.com/signup)
             """)
 
         st.markdown("---")
@@ -1955,6 +1957,7 @@ if st.session_state['data_ready']:
                     "port": new_smtp_port,
                     "user": new_smtp_user,
                     "password": new_smtp_pass,
+                    "resend_api_key": new_resend_key,
                     "sendgrid_api_key": new_sg_key
                 }
             }
