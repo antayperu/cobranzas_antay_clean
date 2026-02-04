@@ -1542,12 +1542,13 @@ if st.session_state['data_ready']:
                         email_user = smtp_cfg.get('user', '')
                         email_pass = smtp_cfg.get('password', '')
                         api_key_sg = smtp_cfg.get('sendgrid_api_key', '')
+                        api_key_resend = smtp_cfg.get('resend_api_key', '')
 
                         # Validation: Requires User AND (Password OR API Key)
-                        has_creds = email_user and (email_pass or api_key_sg)
+                        has_creds = email_user and (email_pass or api_key_sg or api_key_resend)
 
                         if not has_creds:
-                             st.error("❌ Faltan credenciales. Configura SMTP (Usuario/Pass) o API Bridge (SendGrid Key) en 'Configuración'.")
+                             st.error("❌ Faltan credenciales. Configura SMTP (Usuario/Pass) o API Bridge (Resend/SendGrid Key) en 'Configuración'.")
                         else:
                             # --- Feedback Visual de Supervisión (RC-BUG-017) ---
                             # --- Pre-flight Checks (QA & Internal Copies) RC-BUG-020 ---
