@@ -4,7 +4,7 @@
 **Estado General**: ✅ STATUS: v1.5.6 (Estable / Producción)
 **Última Actualización:** 2026-02-01
 **Estado:** Estable (v1.5.6) | **En Proceso:** Entrega Final de Release 1.5.x
-**Repositorio**: [antayperu/cobranzas_antay](https://github.com/antayperu/cobranzas_antay)
+**Repositorio**: [antayperu/cobranzas_antay_clean](https://github.com/antayperu/cobranzas_antay_clean)
 
 ## 🎯 Objetivo
 Construir una aplicación web en Streamlit para consolidar reportes de cobranza, calcular detracciones y gestionar notificaciones masivas con altos estándares visuales.
