@@ -219,26 +219,26 @@ def get_last_sent_info(ledger_key):
     return None
 
 def reset_today_stats():
-    """Limpia el historial de hoy."""
+    """Limpia el control de tiempo (TTL) pero PRESERVA el historial visual (send_attempts)."""
     today_pattern = f"{datetime.now().strftime('%Y-%m-%d')}%"
     if is_cloud_mode():
         client = get_supabase_client()
         if client:
             try:
-                client.table("send_attempts").delete().like("timestamp", today_pattern).execute()
+                # Solo limpiamos el control de rate-limit (ledger_last_send)
                 client.table("ledger_last_send").delete().like("last_sent_at", today_pattern).execute()
-                return True, "Historial de hoy limpiado en Cloud."
+                return True, "Rate-limit reiniciado en Cloud. Historial preservado."
             except Exception as e: return False, str(e)
 
     # SQLite
     try:
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
-        c.execute("DELETE FROM send_attempts WHERE timestamp LIKE ?", (today_pattern,))
+        # Solo limpiamos el control de rate-limit
         c.execute("DELETE FROM ledger_last_send WHERE last_sent_at LIKE ?", (today_pattern,))
         conn.commit()
         conn.close()
-        return True, "Historial de hoy limpiado en Local."
+        return True, "Rate-limit reiniciado en Local. Historial preservado."
     except Exception as e: return False, str(e)
 
 def clear_all_ledger():

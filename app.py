@@ -537,14 +537,10 @@ if st.session_state['data_ready']:
                 unique_emails = df_filtered['CORREO'].dropna().unique().tolist()
                 unique_emails = [e for e in unique_emails if str(e).strip() != '']
                 
-                # Phase 5: Session Scoped Status (Rich Data)
-                session_ts = st.session_state.get('session_start_ts', None)
-                
-                status_map = {}
                 if unique_emails:
-                    # Consultar DB con Scope de Sesión
-                    # (Si session_ts es None, dbm usa default Today, que es seguro)
-                    status_map = dbm.get_status_map(unique_emails, min_timestamp=session_ts)
+                    # Consultar DB (Modo SSOT hoy)
+                    # Eliminamos el filtro de session_ts para que los marcadores persistan todo el día
+                    status_map = dbm.get_status_map(unique_emails)
                 
                 def get_email_status_icon(email):
                     if not email or str(email).strip() == '': return "SIN DATOS"
