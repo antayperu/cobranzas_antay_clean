@@ -42,3 +42,6 @@ config.json
 *.db
 .cache/
 email_ledger.db
+backups/
+nul
+devReporteCobranzas/
