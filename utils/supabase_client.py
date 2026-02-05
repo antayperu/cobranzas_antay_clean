@@ -53,7 +53,7 @@ class SupabaseClient:
             supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
             if not supabase_url or not supabase_key:
-                print("⚠️  Supabase credentials not found. Running in LOCAL mode with session_state.")
+                print("WARNING: Supabase credentials not found. Running in LOCAL mode with session_state.")
                 self._client = None
                 return
 
@@ -61,16 +61,16 @@ class SupabaseClient:
             try:
                 from supabase import create_client
                 self._client = create_client(supabase_url, supabase_key)
-                print("✅ Supabase client initialized successfully (CLOUD mode)")
+                print("SUCCESS: Supabase client initialized successfully (CLOUD mode)")
             except ImportError:
-                print("⚠️  Supabase package not installed. Install with: pip install supabase==2.3.0")
+                print("WARNING: Supabase package not installed. Install with: pip install supabase==2.3.0")
                 self._client = None
             except Exception as e:
-                print(f"❌ Error initializing Supabase client: {e}")
+                print(f"ERROR: Error initializing Supabase client: {e}")
                 self._client = None
 
         except Exception as e:
-            print(f"❌ Unexpected error during Supabase initialization: {e}")
+            print(f"ERROR: Unexpected error during Supabase initialization: {e}")
             self._client = None
 
     @classmethod
