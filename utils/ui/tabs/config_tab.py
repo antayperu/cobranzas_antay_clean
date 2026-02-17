@@ -9,7 +9,6 @@ import utils.settings_manager as sm
 import utils.helpers as helpers
 import utils.image_processor as img_proc
 import utils.email_sender as es_diag # For diagnostic test
-import utils.db_manager as dbm
 import utils.storage_manager as storage_mgr
 
 def render_tab(config):
@@ -181,93 +180,13 @@ def render_tab(config):
         else:
             st.error("Error al guardar configuración.")
 
-    # --- SUPABASE-MIG-005: Mantenimiento de Clientes ---
+    # --- CLIENTES PREMIUM TAB POINTER ---
     st.markdown("---")
-    st.subheader("👤 Mantenimiento de Clientes (Supabase)")
-    st.caption("Edita telefono, correo y estado de cliente sin recargar Excel.")
-
-    search_cliente = st.text_input(
-        "Buscar cliente (codigo, nombre o correo)",
-        value="",
-        key="cliente_mantenimiento_search",
+    st.subheader("👤 Cartera de Clientes")
+    st.info(
+        "La gestion completa de clientes (edicion total + migracion de cartera) "
+        "ahora se realiza en la TAB independiente: `6. Clientes Premium`."
     )
-
-    try:
-        clientes_admin = dbm.list_clientes_for_admin(search=search_cliente, limit=200)
-    except Exception as e_clientes:
-        clientes_admin = []
-        st.error("No se pudo cargar clientes desde Supabase.")
-        st.caption(str(e_clientes))
-
-    if clientes_admin:
-        option_labels = [
-            f"{c.get('cliente_id', '')} | {c.get('nombre', '')} | {c.get('email', '') or '-'}"
-            for c in clientes_admin
-        ]
-        selected_label = st.selectbox(
-            f"Clientes encontrados ({len(option_labels)})",
-            options=option_labels,
-            key="cliente_mantenimiento_selector",
-        )
-        selected_idx = option_labels.index(selected_label)
-        selected_cliente = clientes_admin[selected_idx]
-
-        cid = selected_cliente.get("cliente_id", "")
-        email_val = selected_cliente.get("email") or ""
-        telefono_val = selected_cliente.get("telefono") or ""
-        estado_val = (selected_cliente.get("estado") or "ACTIVO").upper()
-        estados_validos = ["ACTIVO", "INACTIVO", "MOROSO"]
-        estado_index = estados_validos.index(estado_val) if estado_val in estados_validos else 0
-
-        c_cli1, c_cli2, c_cli3 = st.columns(3)
-        with c_cli1:
-            nuevo_email = st.text_input(
-                "Correo del cliente",
-                value=email_val,
-                key=f"cliente_email_{cid}",
-            )
-        with c_cli2:
-            nuevo_telefono = st.text_input(
-                "Telefono del cliente",
-                value=telefono_val,
-                key=f"cliente_telefono_{cid}",
-            )
-        with c_cli3:
-            nuevo_estado = st.selectbox(
-                "Estado del cliente",
-                options=estados_validos,
-                index=estado_index,
-                key=f"cliente_estado_{cid}",
-            )
-
-        if st.button("💾 Guardar Cliente", type="primary", key="cliente_save_btn"):
-            ok, msg = dbm.update_cliente_fields(
-                cliente_id=cid,
-                email=nuevo_email,
-                telefono=nuevo_telefono,
-                estado=nuevo_estado,
-            )
-            if ok:
-                # Reflejar cambios en el dataset de sesión si está cargado.
-                if "df_final" in st.session_state and st.session_state.get("df_final") is not None:
-                    df_live = st.session_state["df_final"]
-                    mask = df_live["COD CLIENTE"].astype(str) == str(cid)
-                    if mask.any():
-                        if "CORREO" in df_live.columns:
-                            df_live.loc[mask, "CORREO"] = (nuevo_email or "").strip().lower()
-                        if "EMAIL_FINAL" in df_live.columns:
-                            df_live.loc[mask, "EMAIL_FINAL"] = (nuevo_email or "").strip().lower()
-                        if "TELÉFONO" in df_live.columns:
-                            df_live.loc[mask, "TELÉFONO"] = (nuevo_telefono or "").strip()
-                        st.session_state["df_final"] = df_live
-                st.success("✅ Cliente actualizado en Supabase.")
-                st.caption(msg)
-                st.rerun()
-            else:
-                st.error("❌ No se pudo actualizar cliente.")
-                st.caption(msg)
-    else:
-        st.info("Sin clientes para mostrar con ese filtro.")
             
     # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
     # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---

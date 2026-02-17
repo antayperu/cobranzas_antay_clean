@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import datetime, date
+import utils.state_manager as state_mgr
 
 def render_sidebar():
     """Renders the Enterprise Sidebar with Wizard Flow and No Sorpresas confirmation."""
@@ -47,6 +48,8 @@ def render_sidebar():
                         st.session_state['df_final'] = None
                         st.session_state['fresh_load'] = True
                         st.session_state['confirm_new_load'] = False
+                        # Clear persisted local cache to avoid auto-restore of old cycle.
+                        state_mgr.clear_session()
                         # FIX: Flag persistente para indicar que estamos cargando archivos nuevos
                         # Este flag NO se limpia hasta que los archivos se carguen exitosamente
                         st.session_state['loading_new_files'] = True
@@ -69,7 +72,17 @@ def render_sidebar():
             
             # Step 1: Upload
             with st.expander("📂 1. Carga de Archivos", expanded=True):
-                st.info("Sube los 3 reportes base para iniciar.")
+                st.info(
+                    "Modo principal: sube solo CtasxCobrar y Cobranza. "
+                    "La cartera se toma desde Supabase."
+                )
+
+                use_supabase_client_master = st.toggle(
+                    "Usar cartera maestra de clientes desde Supabase (recomendado)",
+                    value=st.session_state.get("use_supabase_client_master", True),
+                    help="Si activas esta opcion, no necesitas subir Excel de clientes en este ciclo.",
+                )
+                st.session_state["use_supabase_client_master"] = use_supabase_client_master
                 
                 # Init Files
                 if 'uploaded_files' not in st.session_state:
@@ -81,11 +94,26 @@ def render_sidebar():
                 f_cob = st.file_uploader("Cobranza", type=["xlsx"], key="u_cob")
                 if f_cob: st.session_state['uploaded_files']['cobranza'] = f_cob
 
-                f_cart = st.file_uploader("Cartera", type=["xlsx"], key="u_cart")
-                if f_cart: st.session_state['uploaded_files']['cartera'] = f_cart
+                f_cart = st.file_uploader(
+                    "Cartera",
+                    type=["xlsx"],
+                    key="u_cart",
+                    disabled=use_supabase_client_master,
+                )
+                if use_supabase_client_master:
+                    st.session_state["uploaded_files"]["cartera"] = None
+                if f_cart:
+                    st.session_state['uploaded_files']['cartera'] = f_cart
                 
                 # Check Status
-                files_ok = all(st.session_state['uploaded_files'].values())
+                files_ok = (
+                    st.session_state['uploaded_files']['ctas'] is not None
+                    and st.session_state['uploaded_files']['cobranza'] is not None
+                    and (
+                        st.session_state['uploaded_files']['cartera'] is not None
+                        or use_supabase_client_master
+                    )
+                )
                 if files_ok:
                     st.success("✅ Archivos listos")
                     step_1_done = True
