@@ -168,11 +168,30 @@ Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + par
   - [x] Quality gate de Storage agregado y en PASS.
 
 ### CONFIG-001: Configuracion en Supabase
-- Estado: Pendiente
+- Estado: Completado (pendiente ejecucion SQL `sql/07_create_app_config.sql` en entorno)
 - Dependencias: SUPABASE-MIG-001
+- Entregables:
+  - `sql/07_create_app_config.sql`
+  - `utils/settings_manager.py` (cloud-first: `app_config`)
+  - `tests/test_settings_manager.py`
 
 ### FEATURE-001: Dashboard de Analytics
 - Estado: Pendiente
+
+### FEATURE-002: Clientes Premium (Cartera Maestra + TAB Independiente)
+- Estado: En Progreso
+- Dependencias: SUPABASE-MIG-001, SUPABASE-MIG-005
+- Referencia FRD:
+  - `docs/FRD_CLIENTES_PREMIUM_v1.0.md`
+  - `docs/TICKET_FEATURE_002_CLIENTES_PREMIUM.md`
+- Descripcion:
+  - Crear TAB dedicada para mantenimiento de clientes con edicion total y migracion de cartera.
+  - Operacion principal orientada a carga de 2 archivos (CtasxCobrar + Cobranza) usando cartera maestra en Supabase.
+- Criterios de Aceptacion:
+  - [ ] TAB independiente de clientes habilitada.
+  - [ ] Edicion de cualquier campo operativo en `clientes`.
+  - [ ] Migracion de cartera desde Excel con reporte de errores.
+  - [ ] Flujo principal 2 archivos operativo con cartera maestra.
 
 ### FEATURE-003: Modo Multi-Tenant
 - Estado: Pendiente
