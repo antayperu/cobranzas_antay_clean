@@ -4,6 +4,50 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
 
+EXPORT_COLUMNS_BASELINE = [
+    'COD CLIENTE',
+    'EMPRESA',
+    'Enviar Email',
+    'ESTADO_EMAIL',
+    'FECHA_ULTIMO_ENVIO',
+    'NOTA',
+    'CORREO',
+    'TELÉFONO',
+    'TIPO PEDIDO',
+    'COMPROBANTE',
+    'FECH EMIS',
+    'FECH VENC',
+    'DÍAS MORA',
+    'ESTADO DEUDA',
+    'MONEDA',
+    'TIPO CAMBIO',
+    'MONT EMIT',
+    'DETRACCIÓN',
+    'ESTADO DETRACCION',
+    'AMORTIZACIONES',
+    'SALDO',
+    'SALDO REAL',
+    'MATCH_KEY',
+]
+
+
+def get_export_columns(df: pd.DataFrame) -> list[str]:
+    """Retorna columnas de export en el orden baseline, filtrando las inexistentes."""
+    return [col for col in EXPORT_COLUMNS_BASELINE if col in df.columns]
+
+
+def build_export_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Construye el DataFrame exportable bajo contrato de paridad:
+    mismas columnas baseline + mismo orden.
+    """
+    export_cols = get_export_columns(df)
+    df_export = df[export_cols].copy()
+    df_export.reset_index(drop=True, inplace=True)
+    df_export.index = df_export.index + 1
+    return df_export
+
+
 def generate_excel(df: pd.DataFrame) -> bytes:
     """
     Genera un archivo Excel en memoria con formato profesional.
