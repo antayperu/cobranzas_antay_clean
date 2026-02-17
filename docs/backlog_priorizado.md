@@ -157,6 +157,7 @@ Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + par
 - Dependencias: SUPABASE-MIG-001
 - Evidencia:
   - `docs/EVIDENCIA_STORAGE_SUPABASE_002.md`
+  - `docs/EVIDENCIA_MERGE_GITFLOW_SUPABASE_002.md`
 - Entregables:
   - `utils/storage_manager.py`
   - `scripts/setup_supabase_storage.py`
