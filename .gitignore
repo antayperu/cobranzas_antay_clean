@@ -39,6 +39,25 @@ Thumbs.db
 # Project specific
 config.json
 .env
+.mcp.json
 *.db
 .cache/
 email_ledger.db
+backups/
+nul
+devReporteCobranzas/
+
+# Backups manuales
+*_backup.py
+*_old.py
+*.bak
+
+# Archivos temporales
+*.tmp
+*.log
+full_log_v2.txt
+final_report.txt
+ssot_output.txt
+docops_evidence.txt
+schema_keys.txt
+secrets.txt

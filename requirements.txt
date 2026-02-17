@@ -5,3 +5,4 @@ pillow
 python-dotenv
 sendgrid
 resend
+supabase==2.3.0
