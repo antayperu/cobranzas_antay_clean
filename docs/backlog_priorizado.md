@@ -1,278 +1,209 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-**Última actualización:** 2026-02-14  
-**Versión actual:** v1.5.6  
-**Integración Supabase:** 40%
+Ultima actualizacion: 2026-02-17  
+Version actual: v1.5.6  
+Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + paridad de export + notificaciones por cliente + integridad/no-match + mantenimiento de clientes + reporte premium + quality gates + seguridad operacional + backup/restore completados. Iniciativa de Storage (SUPABASE-002) completada.
 
 ---
 
-## 🔴 Prioridad CRÍTICA (Sprint Actual - Febrero 2026)
+## 1. Prioridad Critica (Sprint Actual)
 
-### SUPABASE-001: Migración de Datos Notion → Supabase
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 8 puntos (2-3 días)
-- **Dependencias:** Ninguna
-- **Asignado:** Por definir
-- **Descripción:** Migrar datos de clientes y documentos desde Notion a tablas de Supabase
-- **Valor de Negocio:** ALTO - Habilita persistencia en la nube y reduce dependencia de Notion API
-- **Criterios de Aceptación:**
-  - [ ] Tabla `clientes` poblada desde Notion con todos los campos
-  - [ ] Tabla `documentos` poblada desde Notion con relaciones FK
-  - [ ] Script de sincronización bidireccional funcionando
-  - [ ] Tests de integridad de datos (100% de registros migrados)
-  - [ ] Documentación de proceso de migración
-- **Notas Técnicas:**
-  - Usar `utils/notion_reader.py` como base
-  - Implementar en `scripts/migrate_notion_to_supabase.py`
-  - Considerar migración incremental para datasets grandes
+### SUPABASE-MIG-000: Bootstrap Inicial de Datos (Excel -> Supabase)
+- Estado: Completado
+- Esfuerzo: 5 puntos
+- Resultado:
+  - clientes: 199
+  - documentos: 231
+  - cobranzas: 165
+- Entregables:
+  - Script `scripts/migrate_excel_to_supabase.py`
+  - Regla de integridad: no insertar cobranzas huerfanas
 
 ---
 
-### CODE-001: Refactorizar app.py (Eliminar Código Espaguetti)
-- **Estado:** 🟢 En Progreso
-- **Esfuerzo:** 5 puntos (1-2 días)
-- **Dependencias:** Ninguna
-- **Asignado:** En ejecución
-- **Descripción:** Reducir complejidad de app.py de 2,395 líneas a ~1,500 líneas
-- **Valor de Negocio:** MEDIO - Mejora mantenibilidad y facilita colaboración
-- **Criterios de Aceptación:**
-  - [x] Eliminar backups manuales y archivos duplicados
-  - [x] Actualizar `.gitignore`
-  - [ ] Consolidar CSS inline en `utils/ui/styles.py`
-  - [ ] Consolidar lógica de Session Recovery (eliminar duplicados)
-  - [ ] Extraer configuración de tabs a módulo separado
-  - [ ] Tests de regresión pasando (todos los existentes)
-  - [ ] Reducción de líneas verificada (objetivo: -900 líneas)
-- **Progreso:**
-  - ✅ Fase 1: Limpieza de archivos (Completado)
-  - 🔄 Fase 2: Refactorización de app.py (En progreso)
+### SUPABASE-MIG-001: Integracion de Carga desde UI (3 Excel)
+- Estado: Completado
+- Esfuerzo: 8 puntos (2-3 dias)
+- Dependencias: SUPABASE-MIG-000
+- Descripcion: Conectar la carga desde la interfaz actual (sidebar) para persistir automaticamente en Supabase sin cambiar UX.
+- Criterios de Aceptacion:
+  - [x] Se mantienen los mismos uploaders actuales.
+  - [x] Flujo de usuario no cambia (cargar -> revisar -> exportar -> enviar).
+  - [x] Al cargar 3 archivos se ejecuta persistencia en `clientes`, `documentos`, `cobranzas`.
+  - [x] En fallo de Supabase, app aplica bloqueo controlado (sin fallback local).
 
 ---
 
-## 🟠 Prioridad ALTA (Próximo Sprint - Marzo 2026)
-
-### SUPABASE-002: Storage de Archivos e Imágenes
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 5 puntos (1-2 días)
-- **Dependencias:** SUPABASE-001
-- **Descripción:** Migrar logos, imágenes generadas y exports a Supabase Storage
-- **Valor de Negocio:** MEDIO - Centraliza assets y habilita compartir entre usuarios
-- **Criterios de Aceptación:**
-  - [ ] Bucket `logos` creado en Supabase Storage
-  - [ ] Bucket `exports` creado para archivos Excel/PDF
-  - [ ] Bucket `whatsapp-images` para imágenes generadas
-  - [ ] Migrar logos existentes desde `assets/`
-  - [ ] Actualizar `image_processor.py` para usar Storage
-  - [ ] Actualizar `excel_export.py` para guardar en Storage
-- **Notas Técnicas:**
-  - Configurar políticas de acceso (RLS)
-  - Implementar cleanup de archivos antiguos (>30 días)
+### SUPABASE-MIG-002: Paridad Funcional del Excel de Salida (No Regresion)
+- Estado: Completado
+- Esfuerzo: 5 puntos (1-2 dias)
+- Dependencias: SUPABASE-MIG-001
+- Descripcion: Garantizar que el export Excel mantenga campos, orden y calculos actuales.
+- Evidencia:
+  - `docs/EVIDENCIA_PARIDAD_EXPORT_SUPABASE_MIG002.md`
+- Criterios de Aceptacion:
+  - [x] Mismas columnas que baseline.
+  - [x] Mismo orden de columnas.
+  - [x] Mismos calculos de deuda/detraccion/saldo.
+  - [x] Mismo comportamiento con filtros.
+  - [x] Evidencia de comparacion pre/post migracion.
 
 ---
 
-### CONFIG-001: Configuración en Supabase
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 3 puntos (1 día)
-- **Dependencias:** SUPABASE-001
-- **Descripción:** Migrar `config.json` a tabla `configuraciones` en Supabase
-- **Valor de Negocio:** MEDIO - Permite configuración por usuario y versionado
-- **Criterios de Aceptación:**
-  - [ ] Tabla `configuraciones` creada con esquema
-  - [ ] Migrar configuración actual de `config.json`
-  - [ ] Actualizar `settings_manager.py` para leer/escribir en Supabase
-  - [ ] Soporte para configuración por usuario
-  - [ ] Historial de cambios de configuración
-- **Esquema propuesto:**
-  ```sql
-  CREATE TABLE configuraciones (
-    id UUID PRIMARY KEY,
-    user_id TEXT,
-    key TEXT NOT NULL,
-    value JSONB NOT NULL,
-    created_at TIMESTAMP DEFAULT now(),
-    updated_at TIMESTAMP DEFAULT now()
-  );
-  ```
+### SUPABASE-MIG-003: Persistencia de Notificaciones por Cliente
+- Estado: Completado
+- Esfuerzo: 8 puntos (2-3 dias)
+- Dependencias: SUPABASE-MIG-001
+- Descripcion: Registrar cada envio en `notificaciones` con `cliente_id` y contexto de envio.
+- Criterios de Aceptacion:
+  - [x] Cada envio Email crea registro en `notificaciones`.
+  - [x] Se persiste `cliente_id`, `destinatario`, `estado`, `fecha_envio`, metadata.
+  - [x] Cuando aplique, se vincula `documento_id`.
+  - [x] Se puede consultar historial por cliente.
 
 ---
 
-### SYNC-001: Sincronización Bidireccional Notion ↔ Supabase
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 8 puntos (2-3 días)
-- **Dependencias:** SUPABASE-001
-- **Descripción:** Sistema de sincronización automática entre Notion y Supabase
-- **Valor de Negocio:** ALTO - Mantiene ambos sistemas actualizados
-- **Criterios de Aceptación:**
-  - [ ] Webhook de Notion para detectar cambios
-  - [ ] Job programado para sync cada N horas
-  - [ ] Resolución de conflictos (last-write-wins)
-  - [ ] Logging de sincronizaciones
-  - [ ] Dashboard de estado de sync
-- **Consideraciones:**
-  - Notion no tiene webhooks nativos - usar polling
-  - Implementar con Supabase Edge Functions
+### SUPABASE-MIG-004: Integridad de Datos y Reporte de No-Match
+- Estado: Completado
+- Esfuerzo: 3 puntos (1 dia)
+- Dependencias: SUPABASE-MIG-001
+- Descripcion: Formalizar reporte de cobranzas no matcheadas y chequeos de integridad.
+- Evidencia:
+  - `docs/EVIDENCIA_INTEGRIDAD_NO_MATCH_SUPABASE_MIG004.md`
+- Criterios de Aceptacion:
+  - [x] Query de control de huerfanos retorna cero.
+  - [x] Se genera reporte de filas de cobranza sin documento asociado.
+  - [x] Runbook operativo documentado en `docs/PLAN_MIGRACION_SUPABASE_PREMIUM_v1.0.md`.
 
 ---
 
-## 🟡 Prioridad MEDIA (Backlog - Abril 2026)
+## 2. Prioridad Alta (Siguiente Sprint)
 
-### TESTING-001: Suite de Tests Automatizados
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 8 puntos (2-3 días)
-- **Descripción:** Crear suite completa de tests unitarios e integración
-- **Valor de Negocio:** ALTO - Previene regresiones y mejora calidad
-- **Criterios de Aceptación:**
-  - [ ] Tests unitarios para todos los módulos en `utils/`
-  - [ ] Tests de integración para flujos principales
-  - [ ] Coverage mínimo del 70%
-  - [ ] CI/CD configurado en GitHub Actions
-  - [ ] Tests corriendo en cada PR
-- **Módulos prioritarios:**
-  1. `supabase_client.py` (crítico)
-  2. `db_manager.py` (crítico)
-  3. `processing.py` (alto)
-  4. `email_sender.py` (alto)
-  5. `whatsapp_sender.py` (alto)
+### SUPABASE-MIG-005: Mantenimiento de Clientes desde App
+- Estado: Completado
+- Esfuerzo: 5 puntos (1-2 dias)
+- Dependencias: SUPABASE-MIG-001
+- Descripcion: Permitir editar telefono/email/estado de cliente sin recargar excels.
+- Evidencia:
+  - `docs/EVIDENCIA_MANTENIMIENTO_CLIENTES_SUPABASE_MIG005.md`
+- Criterios de Aceptacion:
+  - [x] UI para editar cliente.
+  - [x] Update persistente en tabla `clientes`.
+  - [x] Auditoria minima de cambios.
 
 ---
 
-### DOCS-001: Documentación de API y Arquitectura
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 3 puntos (1 día)
-- **Descripción:** Documentar endpoints, funciones y arquitectura del sistema
-- **Valor de Negocio:** MEDIO - Facilita onboarding y mantenimiento
-- **Criterios de Aceptación:**
-  - [ ] README.md actualizado con arquitectura
-  - [ ] Docstrings en todos los módulos principales
-  - [ ] Diagramas de arquitectura (Mermaid)
-  - [ ] Guía de contribución
-  - [ ] Documentación de API en Notion
-- **Herramientas:**
-  - Sphinx para generar docs
-  - Mermaid para diagramas
+### SUPABASE-MIG-006: Reporte Premium de Notificaciones
+- Estado: Completado
+- Esfuerzo: 5 puntos (1-2 dias)
+- Dependencias: SUPABASE-MIG-003
+- Descripcion: Dashboard operativo por cliente para envios, estados y fechas.
+- Evidencia:
+  - `docs/EVIDENCIA_REPORTE_PREMIUM_NOTIFICACIONES_SUPABASE_MIG006.md`
+- Criterios de Aceptacion:
+  - [x] Reporte por cliente.
+  - [x] Filtros por fecha/estado/canal.
+  - [x] KPIs de enviados, fallidos y pendientes.
 
 ---
 
-### PERF-001: Optimización de Performance
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 5 puntos (1-2 días)
-- **Descripción:** Optimizar carga de datos y procesamiento
-- **Valor de Negocio:** MEDIO - Mejora experiencia de usuario
-- **Criterios de Aceptación:**
-  - [ ] Cachear resultados de Notion (Redis/Supabase)
-  - [ ] Lazy loading de datos grandes
-  - [ ] Optimizar queries de Supabase (índices)
-  - [ ] Reducir tiempo de carga inicial <3s
-  - [ ] Profiling de performance
-- **Métricas objetivo:**
-  - Carga inicial: <3 segundos
-  - Filtrado: <500ms
-  - Exportación Excel: <2 segundos
+### SUPABASE-MIG-007: Quality Gates Automatizados de Migracion
+- Estado: Completado
+- Esfuerzo: 8 puntos (2-3 dias)
+- Dependencias: SUPABASE-MIG-001, SUPABASE-MIG-002, SUPABASE-MIG-003
+- Descripcion: Crear pruebas automatizadas para paridad, integridad y resiliencia.
+- Evidencia:
+  - `docs/EVIDENCIA_QUALITY_GATES_SUPABASE_MIG007.md`
+- Criterios de Aceptacion:
+  - [x] Test de paridad de export.
+  - [x] Test de integridad FK.
+  - [x] Test de idempotencia de cargas.
+  - [x] Test de politica cloud-only (retry y bloqueo controlado).
 
 ---
 
-## 🟢 Prioridad BAJA (Futuro - Mayo+ 2026)
+## 3. Prioridad Media
+
+### SUPABASE-MIG-008: Seguridad Operacional (RLS + Politicas)
+- Estado: Completado
+- Esfuerzo: 5 puntos
+- Dependencias: SUPABASE-MIG-001
+- Evidencia:
+  - `docs/EVIDENCIA_SEGURIDAD_SUPABASE_MIG008.md`
+- Criterios de Aceptacion:
+  - [x] Politicas RLS definidas para tablas operativas.
+  - [x] Uso de llaves revisado por entorno.
+  - [x] Checklist de seguridad documentado.
+
+---
+
+### SUPABASE-MIG-009: Backups y Recuperacion
+- Estado: Completado
+- Esfuerzo: 3 puntos
+- Dependencias: SUPABASE-MIG-008
+- Evidencia:
+  - `docs/EVIDENCIA_BACKUP_RESTORE_SUPABASE_MIG009.md`
+- Criterios de Aceptacion:
+  - [x] Procedimiento de backup.
+  - [x] Procedimiento de restore validado.
+  - [x] Evidencia de prueba de recuperacion.
+
+---
+
+## 4. Iniciativas Relacionadas (No bloqueantes de migracion)
+
+### SUPABASE-002: Storage de Archivos e Imagenes
+- Estado: Completado
+- Dependencias: SUPABASE-MIG-001
+- Evidencia:
+  - `docs/EVIDENCIA_STORAGE_SUPABASE_002.md`
+- Entregables:
+  - `utils/storage_manager.py`
+  - `scripts/setup_supabase_storage.py`
+- Criterios de Aceptacion:
+  - [x] Buckets `logos`, `exports`, `whatsapp-images` creados.
+  - [x] Logo sincronizable en Storage desde UI de Configuracion.
+  - [x] Export Excel guarda copia en bucket `exports`.
+  - [x] Quality gate de Storage agregado y en PASS.
+
+### CONFIG-001: Configuracion en Supabase
+- Estado: Pendiente
+- Dependencias: SUPABASE-MIG-001
 
 ### FEATURE-001: Dashboard de Analytics
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 13 puntos (3-5 días)
-- **Descripción:** Dashboard interactivo de métricas de envío y cobranza
-- **Valor de Negocio:** MEDIO - Insights de negocio
-- **Criterios de Aceptación:**
-  - [ ] Gráficos de envíos por día/semana/mes
-  - [ ] Tasa de apertura de emails
-  - [ ] Tasa de respuesta de WhatsApp
-  - [ ] Efectividad de cobranza por canal
-  - [ ] Exportar reportes de analytics
-- **Stack tecnológico:**
-  - Plotly/Altair para gráficos
-  - Supabase para queries agregadas
-
----
-
-### FEATURE-002: Notificaciones Push en Tiempo Real
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 8 puntos (2-3 días)
-- **Descripción:** Sistema de notificaciones en tiempo real para eventos importantes
-- **Valor de Negocio:** BAJO - Nice to have
-- **Criterios de Aceptación:**
-  - [ ] Notificaciones de nuevos pagos
-  - [ ] Alertas de documentos vencidos
-  - [ ] Notificaciones de errores de envío
-  - [ ] Configuración de preferencias de notificación
-- **Tecnología:**
-  - Supabase Realtime
-  - Streamlit toast notifications
-
----
+- Estado: Pendiente
 
 ### FEATURE-003: Modo Multi-Tenant
-- **Estado:** 🟡 Pendiente
-- **Esfuerzo:** 13 puntos (3-5 días)
-- **Descripción:** Soporte para múltiples empresas/usuarios
-- **Valor de Negocio:** ALTO (futuro) - Escalabilidad
-- **Criterios de Aceptación:**
-  - [ ] Autenticación de usuarios (Supabase Auth)
-  - [ ] Aislamiento de datos por tenant
-  - [ ] Roles y permisos (admin, usuario, viewer)
-  - [ ] Dashboard de administración
-- **Consideraciones:**
-  - Requiere rediseño de esquema de BD
-  - RLS policies en Supabase
+- Estado: Pendiente
 
 ---
 
-## 📊 Resumen de Prioridades
+## 5. Roadmap de Ejecucion
 
-| Prioridad | Tareas | Puntos Totales | Tiempo Estimado |
-|-----------|--------|----------------|-----------------|
-| 🔴 CRÍTICA | 2 | 13 | 3-5 días |
-| 🟠 ALTA | 3 | 16 | 4-7 días |
-| 🟡 MEDIA | 3 | 16 | 4-7 días |
-| 🟢 BAJA | 3 | 34 | 8-13 días |
-| **TOTAL** | **11** | **79** | **19-32 días** |
+### Fase A (Cierre migracion funcional)
+1. SUPABASE-MIG-001
+2. SUPABASE-MIG-002
+3. SUPABASE-MIG-003
+4. SUPABASE-MIG-004
 
----
+### Fase B (Operacion premium)
+1. SUPABASE-MIG-005
+2. SUPABASE-MIG-006
+3. SUPABASE-MIG-007
 
-## 🎯 Roadmap Sugerido
-
-### Sprint 1 (Febrero 2026) - Fundamentos
-- CODE-001: Refactorizar app.py ✅ En progreso
-- SUPABASE-001: Migración de datos
-
-### Sprint 2 (Marzo 2026) - Storage y Config
-- SUPABASE-002: Storage de archivos
-- CONFIG-001: Configuración en Supabase
-- SYNC-001: Sincronización Notion
-
-### Sprint 3 (Abril 2026) - Calidad
-- TESTING-001: Suite de tests
-- DOCS-001: Documentación
-- PERF-001: Optimización
-
-### Sprint 4+ (Mayo 2026) - Features Avanzados
-- FEATURE-001: Dashboard Analytics
-- FEATURE-002: Notificaciones Push
-- FEATURE-003: Multi-Tenant
+### Fase C (Gobierno y seguridad)
+1. SUPABASE-MIG-008
+2. SUPABASE-MIG-009
 
 ---
 
-## 📝 Notas Generales
+## 6. Definicion de Cierre de Migracion
 
-### Definición de Esfuerzo (Story Points)
-- 1-2 puntos: Tarea simple (< 4 horas)
-- 3-5 puntos: Tarea media (1-2 días)
-- 8 puntos: Tarea compleja (2-3 días)
-- 13 puntos: Tarea muy compleja (3-5 días)
-- 21+ puntos: Epic (dividir en tareas más pequeñas)
+La migracion se considera cerrada cuando:
 
-### Estados
-- 🟢 En Progreso
-- 🟡 Pendiente
-- 🔴 Bloqueado
-- ✅ Completado
-
----
-
-**Última actualización:** 2026-02-14  
-**Próxima revisión:** 2026-02-21
+1. El flujo de 3 Excel opera desde UI sin regresiones.
+2. El Excel de salida conserva funcionalidad y campos.
+3. Notificaciones se registran por cliente en Supabase.
+4. Existen reportes operativos por cliente.
+5. Gates de calidad pasan en E2E.
+6. Backups y restore operativos validados.

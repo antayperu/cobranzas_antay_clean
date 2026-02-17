@@ -1,146 +1,50 @@
-# STATUS HANDOFF - Tracking Implementation (CORREGIDO)
+## STATUS VIGENTE - Supabase Storage + GitFlow (2026-02-17)
 
-**Última Actualización:** 2025-12-31 19:20:00 (UTC-5)  
-**Estado:** 🟡 MODO ESTABILIZACIÓN - Pendiente Gate 3 Validation
+- Fecha/Hora: 2026-02-17
+- Rama activa de trabajo: `feature/SUPABASE-002-storage-assets`
+- Ticket cerrado en este bloque: `SUPABASE-002` (Storage de archivos e imagenes)
+- Estado global tecnico: `SUPABASE-MIG-000` a `SUPABASE-MIG-009` + `SUPABASE-002` completados
 
----
+### Avance confirmado del bloque
 
-## Estado Actual del Proyecto
+1. Storage manager implementado en `utils/storage_manager.py`.
+2. Setup de buckets implementado en `scripts/setup_supabase_storage.py`.
+3. Integracion de logo storage en:
+   - `utils/ui/tabs/config_tab.py`
+   - `utils/ui/tabs/email_notifications.py`
+   - `utils/ui/tabs/whatsapp.py`
+   - `app.py`
+4. Integracion de export backup a bucket `exports` en:
+   - `utils/ui/tabs/general_report.py`
+   - `utils/ui/tab_report.py`
+5. Quality gate de storage agregado:
+   - `scripts/run_migration_quality_gates.py` (`GATE-STORAGE`)
+6. Evidencia formal:
+   - `docs/EVIDENCIA_STORAGE_SUPABASE_002.md`
 
-### ✅ Implementado (FASE 1 & 2 - CORREGIDO)
+### Evidencia tecnica ejecutada
 
-1. **FASE 1 - Restauración Tab Email (COMPLETADO)**
-   - Fixed `df_filtered` → `df_final` scope issue (5 occurrences)
-   - Tab "5. Notificaciones Email" ahora usa SSOT directamente
-   - Funciona independientemente del tab visitado primero
-   - **Archivos:** `app.py` (líneas 1090, 1096, 1101, 1106, 1140, 1268)
+1. Compilacion:
+   - `python -m py_compile utils/storage_manager.py scripts/setup_supabase_storage.py app.py utils/ui/tabs/config_tab.py utils/ui/tabs/general_report.py utils/ui/tabs/email_notifications.py utils/ui/tabs/whatsapp.py utils/ui/tab_report.py` -> OK
+2. Tests Storage:
+   - `pytest tests/test_storage_manager.py -q -p no:cacheprovider` -> `5 passed`
+3. Buckets reales creados:
+   - `python scripts/setup_supabase_storage.py`
+   - Resultado: `logos`, `exports`, `whatsapp-images` -> `CREATED`
+4. Smoke upload:
+   - `python -c "import utils.storage_manager as sm; print(sm.upload_export_excel(...))"` -> upload exitoso a bucket `exports`
+5. Gates consolidados:
+   - `python scripts/run_migration_quality_gates.py` -> `RESULTADO: PASS`
 
-2. **FASE 2 - Tracking Post-Envío (CORREGIDO - Pendiente Gate 3)**
-   - **CORRECCIÓN CRÍTICA:** Eliminadas columnas extras, ahora **SOLO 2 columnas**:
-     - `ESTADO_EMAIL`: "PENDIENTE" | "ENVIADO" | "FALLIDO"
-     - `FECHA_ULTIMO_ENVIO`: "" (vacío) o timestamp
-   - Actualización de tracking solo después de envío exitoso
-   - Solo actualiza registros con `Estado == 'Enviado'`
-   - Maneja QA mode correctamente (usa 'Email Original')
-   - **Archivos modificados:**
-     - `utils/processing.py` (líneas 454-457, 460-476)
-     - `utils/ui/report_view.py` (reescritura completa)
-     - `app.py` (líneas 488-493, 552-553)
+### Documentos actualizados
 
-3. **Debug Toggle (QA)**
-   - Agregado en tab "Reporte General"
-   - Muestra: Total Registros, Enviados, Pendientes
-   - Muestra última actualización con timestamp
-   - **Archivos:** `app.py` (líneas 529-547)
+1. `docs/backlog_priorizado.md`
+2. `docs/PLAN_MIGRACION_SUPABASE_PREMIUM_v1.0.md`
+3. `docs/EVIDENCIA_STORAGE_SUPABASE_002.md`
+4. `README_SUPABASE.md`
 
-4. **SSOT Integrity Maintained**
-   - `processing.py` solo inicializa 2 tracking columns (PENDIENTE + vacío)
-   - No se agregaron nuevas columnas ni flujos
-   - Vista Ejecutiva NO muestra tracking (limpia)
-   - Vista Completa SÍ muestra tracking (2 columnas con labels claros)
+### Proximo bloque operativo
 
-5. **Quality Gates**
-   - ✅ Gate 0: PASS (app levanta sin errores, py_compile exitoso)
-   - ⏳ Gate 3: PENDIENTE (requiere validación manual del usuario)
-
----
-
-## ⏳ Pendiente
-
-### Gate 3 - Smoke Test Manual (CRÍTICO)
-**Checklist:** Ver `GATE3_CHECKLIST.md` en artifacts
-
-**Tests requeridos:**
-- **Test A:** Carga inicial → tracking vacío (PENDIENTE + fecha vacía)
-- **Test B:** Tab Email lista clientes
-- **Test C:** Envío → tracking actualiza solo enviados (2 columnas)
-- **Test D:** Reset → vuelve a PENDIENTE
-- **Test E:** Nueva carga → tracking limpio
-
-**Evidencia requerida:** Screenshots + resultados de cada test
-
----
-
-## 🚫 NO Hacer (Hasta Gate 3 PASS)
-
-- ❌ NO avanzar a FASE 3 (No Sorpresas)
-- ❌ NO avanzar a FASE 4 (Reset Tracking)
-- ❌ NO agregar nuevas columnas de tracking (solo 2 permitidas)
-- ❌ NO modificar lógica de negocio
-- ❌ NO declarar FASE 2 completa sin Gate 3 PASS
-
----
-
-## 📁 Documentación y Artifacts
-
-### Artifacts Clave
-- **Auditoría:** `AUDIT_FASE0.md`
-- **FASE 1:** `FASE1_COMPLETE.md`
-- **FASE 2:** `FASE2_COMPLETE.md`
-- **Gate 3 Checklist:** `GATE3_CHECKLIST.md`
-- **Flujo Tracking:** `FLOW_TRACKING_SSOT.md` ✨ NUEVO
-
-### Archivos Modificados (v1.5.2-tracking-fix)
-- `utils/processing.py` (tracking init: solo 2 columnas)
-- `utils/ui/report_view.py` (reescritura completa: eliminadas columnas derivadas)
-- `app.py` (eliminadas referencias a ESTADO_ENVIO_TEXTO)
-
----
-
-## 🔄 Pasos para Retomar
-
-### 1. Validar Estado Actual
-```bash
-cd c:\Users\corte\OneDrive\CamiloOrtegaFR\02_AntayPeru\2.3_Divisiones\3.4_Consultoria_Antay\Recursos_Tecnicos\Python\ReporteCobranzas
-python -m py_compile utils/processing.py
-python -m py_compile utils/ui/report_view.py
-python -m py_compile app.py
-python tests/test_gate0_boot.py
-```
-**Expected:** ✅ Gate 0 PASS (CONFIRMADO 2025-12-31 19:19)
-
-### 2. Ejecutar Gate 3 Manual
-```bash
-streamlit run app.py
-```
-- Seguir checklist en `GATE3_CHECKLIST.md`
-- Tomar screenshots de cada test (A-E)
-- Anotar resultados Expected vs Actual
-
-### 3. Reportar Resultados
-- Si Gate 3 PASS → Autorizar FASE 3/4
-- Si Gate 3 FAIL → Rollback y fix
-
-### 4. Próximas Fases (Solo si Gate 3 PASS)
-- **FASE 3:** "No Sorpresas" confirmación (ya implementado en sidebar)
-- **FASE 4:** Reset tracking (ya implementado en app.py)
-- **Validación final:** Gate 3 end-to-end completo
-
-### 5. Commit Final
-```bash
-git add .
-git commit -m "FIX: Tracking simplificado a 2 columnas (STOP THE LINE compliance)"
-git tag v1.5.2-tracking-fix
-```
-
----
-
-## 🎯 Objetivo Inmediato
-
-**Cerrar Gate 3 con evidencia** → Decidir si:
-- ✅ FASE 2 COMPLETA → Avanzar FASE 3/4
-- ❌ FASE 2 FAIL → Rollback y fix
-
-**Principio SSOT:** No inventar, no romper, solo 2 columnas de tracking mínimo.
-
----
-
-## 📞 Contacto de Continuidad
-
-**Última sesión:** 2025-12-31 19:20:00  
-**Próxima acción:** Ejecutar Gate 3 checklist  
-**Bloqueador:** Pendiente validación manual del usuario  
-
-**Artifacts directory:**  
-`c:\Users\corte\.gemini\antigravity\brain\adfeb715-c99d-4acc-a60d-61addeee4314\`
-
+1. Cierre formal de merges por ticket segun metodologia:
+   - `feature/SUPABASE-002-storage-assets` -> `dev` -> `main`
+2. Actualizacion de estado de ticket en Notion via sync de backlog.

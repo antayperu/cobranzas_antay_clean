@@ -62,7 +62,7 @@ La aplicación detecta automáticamente qué modo usar basándose en la presenci
    - Fallback automático a session_state
 
 2. **Scripts SQL** (`sql/`)
-   - 4 tablas principales
+   - 6 tablas (4 de dominio + 2 de tracking)
    - Índices optimizados
    - Triggers para updated_at
 
@@ -122,6 +122,7 @@ pip install -r requirements.txt
    -- 2. sql/02_create_documentos.sql
    -- 3. sql/03_create_cobranzas.sql
    -- 4. sql/04_create_notificaciones.sql
+   -- 5. sql/05_create_tracking_tables.sql
    ```
 
 3. Verificar que las tablas se crearon:
@@ -129,7 +130,14 @@ pip install -r requirements.txt
    SELECT table_name
    FROM information_schema.tables
    WHERE table_schema = 'public'
-     AND table_name IN ('clientes', 'documentos', 'cobranzas', 'notificaciones')
+  AND table_name IN (
+    'clientes',
+    'documentos',
+    'cobranzas',
+    'notificaciones',
+    'ledger_last_send',
+    'send_attempts'
+  )
    ORDER BY table_name;
    ```
 
@@ -290,39 +298,52 @@ if is_cloud_mode():
 
 ## 🔄 Migración de Datos
 
-### De SQLite a Supabase
+### De Notion a Supabase (clientes/documentos)
 
-```python
-import sqlite3
-import pandas as pd
-from utils.supabase_client import SupabaseClient
+Usa el script `scripts/migrate_notion_to_supabase.py`.
 
-def migrate_to_supabase():
-    """Migra datos de SQLite local a Supabase."""
-    client = SupabaseClient.get_instance()
-
-    if not client.is_available():
-        print("❌ Supabase no disponible")
-        return
-
-    # Conectar a SQLite
-    conn = sqlite3.connect("email_ledger.db")
-
-    # Migrar send_attempts
-    df = pd.read_sql_query("SELECT * FROM send_attempts", conn)
-    records = df.to_dict('records')
-
-    for record in records:
-        client.from_('cobranzas').insert({
-            'tipo_gestion': 'EMAIL',
-            'estado_gestion': record['status'],
-            'fecha_gestion': record['timestamp'],
-            # Mapear campos según necesidad
-        }).execute()
-
-    conn.close()
-    print("✅ Migración completada")
+1. Ejecuta primero en modo seguro (dry-run):
+```bash
+python scripts/migrate_notion_to_supabase.py ^
+  --clientes-db-id TU_DB_CLIENTES ^
+  --documentos-db-id TU_DB_DOCUMENTOS
 ```
+
+2. Si el resumen es correcto, aplicar migracion real:
+```bash
+python scripts/migrate_notion_to_supabase.py ^
+  --clientes-db-id TU_DB_CLIENTES ^
+  --documentos-db-id TU_DB_DOCUMENTOS ^
+  --apply
+```
+
+3. Para migrar solo clientes:
+```bash
+python scripts/migrate_notion_to_supabase.py ^
+  --clientes-db-id TU_DB_CLIENTES ^
+  --skip-documentos ^
+  --apply
+```
+
+---
+
+## 🗂️ Supabase Storage (SUPABASE-002)
+
+Buckets operativos:
+1. `logos`
+2. `exports`
+3. `whatsapp-images`
+
+Setup de buckets:
+
+```bash
+python scripts/setup_supabase_storage.py
+```
+
+Comportamiento integrado:
+1. Al guardar logo en Configuración, se sincroniza en bucket `logos`.
+2. Al descargar Excel desde Reporte General, se guarda copia en bucket `exports`.
+3. Si el logo local no existe, la app intenta recuperarlo desde Storage.
 
 ---
 
@@ -417,6 +438,7 @@ print(f"SUPABASE_KEY: {os.getenv('SUPABASE_SERVICE_ROLE_KEY')[:20]}...")
 1. clientes
 2. documentos
 3. cobranzas/notificaciones
+4. ledger_last_send/send_attempts
 
 ---
 
