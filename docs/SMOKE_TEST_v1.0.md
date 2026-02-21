@@ -8,13 +8,13 @@ Este documento define las pruebas rápidas "de humo" para validar la estabilidad
 Para ejecutar estas pruebas, utiliza el dataset estándar de prueba o crea uno pequeño:
 *   **CtasxCobrar.xlsx**: Al menos 2 empresas, 5 documentos (soles y dólares).
 *   **Cobranza.xlsx**: Vacío o con 1 registro.
-*   **cartera_clientes.xlsx**: Mapeo básico de teléfonos para esas 2 empresas.
+*   **Cartera maestra en Supabase**: Clientes cargados previamente en TAB Clientes Premium.
 
 ## 2. Checklist de Pruebas (End-to-End)
 
 | ID | Caso de Prueba | Pasos | Resultado Esperado | Estado |
 | :--- | :--- | :--- | :--- | :--- |
-| **ST-01** | **Carga de Archivos** | 1. Subir los 3 Excels.<br>2. Click en "Procesar Archivos". | Aparece mensaje "Actualizado" y se cargan los datos en tabla. Sin errores rojos. | [ ] |
+| **ST-01** | **Carga de Archivos** | 1. Subir CtasxCobrar + Cobranza.<br>2. Click en "Procesar Archivos". | Aparece mensaje "Actualizado" y se cargan los datos en tabla. Sin errores rojos. | [ ] |
 | **ST-02** | **Tabla Principal** | Visualizar la tabla de "Reporte General". | Las columnas clave (Empresa, Saldo Real, Vencimiento) tienen datos correctos. Índices empiezan en 1. | [ ] |
 | **ST-03** | **Filtros Básicos** | 1. Filtrar por una "Empresa X".<br>2. Filtrar por Moneda "Soles". | La tabla se reduce correctamente. Los KPIs (Tarjetas superiores) se recalculan. | [ ] |
 | **ST-04** | **Excel No-Regresión** | Descargar Excel y abrir. | **Validar 3 Puntos:**<br>1. `SUMA(SALDO)` y otros montos funciona.<br>2. `DETRACCIÓN` siempre es S/.<br>3. `AMORTIZACIONES` coincide texto con UI (Match Key). | [ ] |
@@ -38,10 +38,10 @@ Antes de marcar como "Done" el ticket RC-QA-001, verifica estos 5 puntos finales
 
 1.  **Versión Confirmada**: v4.6.1-hotfix (Etiquetado en `ESTADO_PROYECTO.md`).
 2.  **Comando de Ejecución**: `streamlit run app.py` (debe correr sin errores de importación).
-3.  **Archivos Requeridos**:
+3.  **Insumos Requeridos**:
     *   `CtasxCobrar.xlsx` (Headers: COD CLIENTE, EMPRESA, SALDO, etc.)
     *   `Cobranza.xlsx` (Headers: COMPROBANTE, IMPORTE)
-    *   `cartera_clientes.xlsx` (Headers: COD CLIENTE, TELÉFONO)
+    *   Cartera maestra existente en Supabase (gestionada desde TAB `Clientes Premium`)
 4.  **Funciones Deshabilitadas**:
     *   El modo "Imagen Ejecutiva" NO debe intentar generar imágenes.
     *   El modo "PDF" NO debe intentar adjuntar archivos.

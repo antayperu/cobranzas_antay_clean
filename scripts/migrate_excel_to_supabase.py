@@ -88,6 +88,17 @@ def clean_numeric_text(value: Any) -> str:
     return text
 
 
+def normalize_enviar_email(value: Any) -> str:
+    raw = clean_str(value).upper()
+    if raw in {"SI", "SÍ", "YES", "Y", "1", "TRUE", "ENVIAR"}:
+        return "SI"
+    if raw in {"NO", "N", "0", "FALSE", "NO ENVIAR"}:
+        return "NO"
+    if raw in {"", "NAN", "NONE", "NAT", "NULL", "SIN CONFIGURAR", "SINCONFIGURAR"}:
+        return "SIN CONFIGURAR"
+    return raw
+
+
 def format_client_code(value: Any) -> str:
     text = clean_str(value)
     if not text:
@@ -352,10 +363,18 @@ def build_clientes(df_ctas: pd.DataFrame, df_cartera: pd.DataFrame) -> Tuple[Lis
     )
     c_email = get_column(df_cartera, ["email", "correo", "mail", "correo_electronico"])
     c_tel = get_column(df_cartera, ["telefono", "celular", "phone"])
+    c_dni = get_column(df_cartera, ["dni", "documento_identidad", "doc_identidad"])
     c_ruc = get_column(df_cartera, ["ruc"])
     c_dir = get_column(df_cartera, ["direccion", "address"])
     c_est = get_column(df_cartera, ["estado_cliente", "estado", "status"])
     c_not = get_column(df_cartera, ["nota", "notas", "observaciones"])
+    c_send = get_column(df_cartera, ["enviar email", "enviar_email", "enviarcorreo"])
+
+    mapped_cols = {
+        c
+        for c in [c_cod, c_nom, c_email, c_tel, c_dni, c_ruc, c_dir, c_est, c_not, c_send]
+        if c is not None
+    }
 
     if c_cod is None:
         errors.append("Cartera sin columna codigo_cliente/codcli.")
@@ -373,15 +392,35 @@ def build_clientes(df_ctas: pd.DataFrame, df_cartera: pd.DataFrame) -> Tuple[Lis
                 estado = "MOROSO"
             if estado not in {"ACTIVO", "INACTIVO", "MOROSO"}:
                 estado = "ACTIVO"
+
+            email_value = clean_str(row.get(c_email)).lower() if c_email else None
+            enviar_value = (
+                normalize_enviar_email(row.get(c_send))
+                if c_send
+                else ("SI" if email_value else "NO")
+            )
+
+            extra_fields: Dict[str, Any] = {}
+            for col in df_cartera.columns:
+                if col in mapped_cols:
+                    continue
+                value = row.get(col)
+                text = clean_str(value)
+                if text:
+                    extra_fields[str(col)] = text
+
             record = {
                 "cliente_id": cliente_id,
                 "nombre": clean_str(row.get(c_nom)) if c_nom else "",
-                "email": clean_str(row.get(c_email)).lower() if c_email else None,
+                "email": email_value,
                 "telefono": clean_numeric_text(row.get(c_tel)) if c_tel else None,
+                "dni": clean_numeric_text(row.get(c_dni)) if c_dni else None,
                 "ruc": clean_numeric_text(row.get(c_ruc)) if c_ruc else None,
                 "direccion": clean_str(row.get(c_dir)) if c_dir else None,
+                "enviar_email": enviar_value,
                 "estado": estado,
                 "notas": clean_str(row.get(c_not)) if c_not else None,
+                "extra_fields": (extra_fields or None),
             }
             if not record["nombre"]:
                 record["nombre"] = f"Cliente {cliente_id}"
@@ -412,10 +451,13 @@ def build_clientes(df_ctas: pd.DataFrame, df_cartera: pd.DataFrame) -> Tuple[Lis
                     "nombre": nombre or f"Cliente {cliente_id}",
                     "email": None,
                     "telefono": None,
+                    "dni": None,
                     "ruc": None,
                     "direccion": None,
+                    "enviar_email": "NO",
                     "estado": "ACTIVO",
                     "notas": None,
+                    "extra_fields": None,
                 }
 
     return list(records.values()), errors

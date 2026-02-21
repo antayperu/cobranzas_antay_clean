@@ -12,6 +12,9 @@ from scripts.backup_restore_supabase import (
 
 def _sample_table_rows():
     return {
+        "app_config": [
+            {"config_key": "global", "payload": {"company_name": "Demo Co"}},
+        ],
         "clientes": [
             {"cliente_id": "000001", "nombre": "Cliente A", "estado": "ACTIVO"},
             {"cliente_id": "000002", "nombre": "Cliente B", "estado": "MOROSO"},
@@ -58,7 +61,7 @@ def test_build_manifest_and_verify_bundle_ok():
     errors = verify_backup_bundle(manifest=manifest, table_rows=table_rows, table_specs=TABLE_SPECS)
 
     assert errors == []
-    assert manifest["total_rows"] == 8
+    assert manifest["total_rows"] == 9
     assert manifest["tables"]["clientes"]["row_count"] == 2
 
 
@@ -90,8 +93,8 @@ def test_build_restore_plan_orders_truncate_then_restore():
     assert len(restore_steps) == len(TABLE_SPECS)
     assert plan[0]["phase"] == "truncate"
     assert plan[-1]["phase"] == "restore"
-    assert restore_steps[0]["table"] == "clientes"
-    assert restore_steps[1]["table"] == "documentos"
+    assert restore_steps[0]["table"] == "app_config"
+    assert restore_steps[1]["table"] == "clientes"
 
 
 def test_compute_orphan_document_ids_returns_only_unmatched_values():

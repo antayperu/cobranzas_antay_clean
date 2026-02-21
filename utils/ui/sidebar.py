@@ -1,137 +1,131 @@
 import streamlit as st
-from datetime import datetime, date
+from datetime import date
+
 import utils.state_manager as state_mgr
 
+
+def _render_sidebar_header() -> None:
+    today_label = date.today().strftime("%d %b %Y")
+    st.markdown(
+        f"""
+        <div class="antay-sidebar-card antay-animate-in">
+            <div class="antay-sidebar-card__top">
+                <span class="antay-pill">Enterprise</span>
+                <span class="antay-version">v1.7.0</span>
+            </div>
+            <h3>Cobranzas Antay</h3>
+            <p>Operacion principal con 2 archivos y cartera maestra en Supabase.</p>
+            <small>Actualizado: {today_label}</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_sidebar():
-    """Renders the Enterprise Sidebar with Wizard Flow and No Sorpresas confirmation."""
+    """Render sidebar with 2-file workflow and explicit replace confirmation."""
     with st.sidebar:
-        # --- 1. HEADER (Brand) ---
-        st.markdown("### 🏢 Cobranzas Antay")
-        st.caption(f"v1.6.0 | {date.today().strftime('%d %b %Y')}")
+        _render_sidebar_header()
         st.markdown("---")
 
-        # --- 2. SESIÓN (Persistence) ---
-        # Initialize confirmation states
-        if 'confirm_new_load' not in st.session_state:
-            st.session_state['confirm_new_load'] = False
-        
-        # Mostrar solo si hay datos listos (Resume Mode)
-        if st.session_state.get('data_ready', False):
-            ts = st.session_state.get('session_start_ts', None)
-            ts_str = ts.strftime('%H:%M') if ts else "--:--"
-            st.success(f"⚡ Sesión Activa desde {ts_str}")
-            
-            # --- NO SORPRESAS: Confirmation for New Load ---
-            if not st.session_state['confirm_new_load']:
-                # Step 1: Show "Cargar Nuevos Archivos" button
-                if st.button("📂 Cargar Nuevos Archivos", type="secondary", help="Reemplazar datos actuales con nuevos archivos"):
-                    st.session_state['confirm_new_load'] = True
+        if "confirm_new_load" not in st.session_state:
+            st.session_state["confirm_new_load"] = False
+
+        if st.session_state.get("data_ready", False):
+            ts = st.session_state.get("session_start_ts")
+            ts_str = ts.strftime("%d/%m %H:%M") if ts else "--:--"
+            row_count = len(st.session_state.get("df_final", []))
+            cloud_label = " ☁️" if st.session_state.get("restored_from_cloud", False) else ""
+            st.success(f"Sesion activa: {ts_str} ({row_count} filas){cloud_label}")
+
+            if not st.session_state["confirm_new_load"]:
+                if st.button(
+                    "Cargar nuevos archivos",
+                    type="secondary",
+                    help="Reemplazar datos actuales con nuevos archivos",
+                ):
+                    st.session_state["confirm_new_load"] = True
                     st.rerun()
             else:
-                # Step 2: Show confirmation dialog
-                st.warning("""
-                ⚠️ **Confirmación Requerida**
-                
-                Cargar nuevos archivos **reemplazará el reporte actual** y reiniciará el ciclo.
-                
-                Se perderá el estado de la sesión actual (enviados/pendientes).
-                
-                ¿Deseas continuar?
-                """)
-                
+                st.warning(
+                    """
+                    Confirmacion requerida:
+                    cargar nuevos archivos reemplazara el reporte actual y reiniciara el ciclo.
+                    """
+                )
                 col_yes, col_no = st.columns(2)
                 with col_yes:
-                    if st.button("✅ Sí, reemplazar", type="primary"):
-                        # Clear SSOT and all tracking
-                        st.session_state['uploaded_files'] = {'ctas': None, 'cobranza': None, 'cartera': None}
-                        st.session_state['data_ready'] = False
-                        st.session_state['df_final'] = None
-                        st.session_state['fresh_load'] = True
-                        st.session_state['confirm_new_load'] = False
-                        # Clear persisted local cache to avoid auto-restore of old cycle.
+                    if st.button("Si, reemplazar", type="primary"):
+                        st.session_state["uploaded_files"] = {"ctas": None, "cobranza": None}
+                        st.session_state["data_ready"] = False
+                        st.session_state["df_final"] = None
+                        st.session_state["fresh_load"] = True
+                        st.session_state["confirm_new_load"] = False
                         state_mgr.clear_session()
-                        # FIX: Flag persistente para indicar que estamos cargando archivos nuevos
-                        # Este flag NO se limpia hasta que los archivos se carguen exitosamente
-                        st.session_state['loading_new_files'] = True
-                        st.toast("🔄 Sesión limpiada. Listo para nuevos archivos.", icon="✅")
+                        st.session_state["loading_new_files"] = True
+                        st.toast("Sesion limpiada. Lista para nuevo ciclo.")
                         st.rerun()
-                
+
                 with col_no:
-                    if st.button("❌ Cancelar", type="secondary"):
-                        st.session_state['confirm_new_load'] = False
+                    if st.button("Cancelar", type="secondary"):
+                        st.session_state["confirm_new_load"] = False
                         st.rerun()
-            
+
             st.markdown("---")
 
-        # --- 3. WIZARD: CARGA DE DATOS ---
-        # Only show uploaders if NO data exists OR user confirmed replacement
-        show_uploaders = not st.session_state.get('data_ready', False)
-        
+        show_uploaders = not st.session_state.get("data_ready", False)
         if show_uploaders:
             step_1_done = False
-            
-            # Step 1: Upload
-            with st.expander("📂 1. Carga de Archivos", expanded=True):
-                st.info(
-                    "Modo principal: sube solo CtasxCobrar y Cobranza. "
-                    "La cartera se toma desde Supabase."
+            with st.expander("1. Carga base (2 archivos)", expanded=True):
+                st.markdown(
+                    """
+                    <div class="antay-inline-note antay-animate-in">
+                        Flujo oficial: carga <strong>CtasxCobrar</strong> y <strong>Cobranza</strong>.
+                        La cartera de clientes se administra en <strong>6. Clientes Premium</strong>.
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.caption(
+                    "Si no existe cartera maestra en Supabase, migra clientes primero desde la TAB Clientes Premium."
                 )
 
-                use_supabase_client_master = st.toggle(
-                    "Usar cartera maestra de clientes desde Supabase (recomendado)",
-                    value=st.session_state.get("use_supabase_client_master", True),
-                    help="Si activas esta opcion, no necesitas subir Excel de clientes en este ciclo.",
-                )
-                st.session_state["use_supabase_client_master"] = use_supabase_client_master
-                
-                # Init Files
-                if 'uploaded_files' not in st.session_state:
-                    st.session_state['uploaded_files'] = {'ctas': None, 'cobranza': None, 'cartera': None}
+                if "uploaded_files" not in st.session_state:
+                    st.session_state["uploaded_files"] = {"ctas": None, "cobranza": None}
 
-                f_ctas = st.file_uploader("CtasxCobrar", type=["xlsx"], key="u_ctas")
-                if f_ctas: st.session_state['uploaded_files']['ctas'] = f_ctas
-                
-                f_cob = st.file_uploader("Cobranza", type=["xlsx"], key="u_cob")
-                if f_cob: st.session_state['uploaded_files']['cobranza'] = f_cob
+                f_ctas = st.file_uploader("CtasxCobrar (.xlsx)", type=["xlsx"], key="u_ctas")
+                if f_ctas:
+                    st.session_state["uploaded_files"]["ctas"] = f_ctas
 
-                f_cart = st.file_uploader(
-                    "Cartera",
-                    type=["xlsx"],
-                    key="u_cart",
-                    disabled=use_supabase_client_master,
-                )
-                if use_supabase_client_master:
-                    st.session_state["uploaded_files"]["cartera"] = None
-                if f_cart:
-                    st.session_state['uploaded_files']['cartera'] = f_cart
-                
-                # Check Status
+                f_cob = st.file_uploader("Cobranza (.xlsx)", type=["xlsx"], key="u_cob")
+                if f_cob:
+                    st.session_state["uploaded_files"]["cobranza"] = f_cob
+
                 files_ok = (
-                    st.session_state['uploaded_files']['ctas'] is not None
-                    and st.session_state['uploaded_files']['cobranza'] is not None
-                    and (
-                        st.session_state['uploaded_files']['cartera'] is not None
-                        or use_supabase_client_master
-                    )
+                    st.session_state["uploaded_files"]["ctas"] is not None
+                    and st.session_state["uploaded_files"]["cobranza"] is not None
                 )
                 if files_ok:
-                    st.success("✅ Archivos listos")
+                    st.success("Archivos operativos listos")
                     step_1_done = True
-            
-            # Step 2: Parametros (Solo si step 1 ok)
-            if step_1_done:
-                with st.expander("⚙️ 2. Parámetros", expanded=True):
-                    fecha_corte = st.date_input("Fecha de Corte", value=date.today())
-                    st.session_state['config_fecha_corte'] = fecha_corte
-                    
-                    # Validation Action
-                    if not st.session_state.get('data_ready', False):
-                        if st.button("🚀 Procesar y Validar", type="primary"):
-                            return "PROCESS_TRIGGERED" # Signal to App to run processing
-        
-        # Step 3: Navigation (Result)
-        if st.session_state.get('data_ready', False):
-            pass # App.py handles main tabs
-            
-    return None
 
+            if step_1_done:
+                with st.expander("2. Parametros de ciclo", expanded=True):
+                    fecha_corte = st.date_input("Fecha de corte", value=date.today())
+                    st.session_state["config_fecha_corte"] = fecha_corte
+
+                    if not st.session_state.get("data_ready", False):
+                        if st.button("Procesar y validar", type="primary"):
+                            return "PROCESS_TRIGGERED"
+
+        if st.session_state.get("data_ready", False):
+            st.markdown(
+                """
+                <div class="antay-inline-note">
+                    Ciclo activo. Para editar clientes, usa la TAB <strong>Clientes Premium</strong>.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    return None

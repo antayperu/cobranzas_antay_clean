@@ -24,10 +24,9 @@ Validar que al cargar nuevos archivos, el tracking se inicializa correctamente y
 
 ### Pasos
 1. Iniciar app limpia (`streamlit run app.py`)
-2. Cargar 3 archivos Excel:
+2. Cargar 2 archivos Excel:
    - CtasxCobrar.xlsx
    - Cobranza.xlsx
-   - Cartera.xlsx
 3. Click "🚀 Procesar y Validar"
 4. Esperar a que se genere el Reporte General
 5. Ir al tab "Notificaciones Email"
@@ -153,7 +152,7 @@ Validar que la funcionalidad de "Pantalla Completa" no rompe la sesión ni oblig
 - [ ] **CA-5.2:** Botón "✖ Cerrar" funciona y regresa a la app sin error
 - [ ] **CA-5.3:** Al regresar, la sesión sigue activa (se ve "⚡ Sesión Activa desde HH:MM")
 - [ ] **CA-5.4:** NO obliga a recargar archivos
-- [ ] **CA-5.5:** Botón "Cargar Nuevos Archivos" funciona y muestra los 3 uploaders al confirmar
+- [ ] **CA-5.5:** Botón "Cargar Nuevos Archivos" funciona y muestra los 2 uploaders al confirmar
 
 ### Resultado CA-5
 - [ ] ✅ PASS

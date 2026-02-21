@@ -54,6 +54,7 @@ devReporteCobranzas/
 
 # Archivos temporales
 *.tmp
+*.tmp.*
 *.log
 full_log_v2.txt
 final_report.txt
@@ -61,3 +62,10 @@ ssot_output.txt
 docops_evidence.txt
 schema_keys.txt
 secrets.txt
+
+# Reportes generados
+reports/
+
+# Archivos de datos Excel (no deben versionarse)
+*.xlsx
+*.xls
