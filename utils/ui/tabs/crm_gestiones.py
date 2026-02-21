@@ -688,23 +688,33 @@ def _render_register_gestion():
         unsafe_allow_html=True,
     )
 
-    # Client lookup
-    client_input = st.text_input(
-        "Buscar cliente",
-        placeholder="Codigo o nombre del cliente",
+    # ── Cargar todos los clientes: Supabase + ciclo activo ──────────────────
+    nombre_map_reg: Dict[str, str] = dbm.get_clientes_nombres_map()
+    df_ciclo_reg = st.session_state.get("df_final", pd.DataFrame())
+    if not df_ciclo_reg.empty and "COD CLIENTE" in df_ciclo_reg.columns and "EMPRESA" in df_ciclo_reg.columns:
+        for _, _r in df_ciclo_reg[["COD CLIENTE", "EMPRESA"]].drop_duplicates().iterrows():
+            _c = str(_r["COD CLIENTE"]).strip()
+            if _c and _c not in nombre_map_reg:
+                nombre_map_reg[_c] = str(_r["EMPRESA"]).strip()
+
+    client_options = sorted(
+        [f"{cid} — {nombre}" for cid, nombre in nombre_map_reg.items() if cid],
+        key=lambda x: x.split(" — ")[0],
+    )
+
+    # ── Selectbox con búsqueda nativa (filtra al escribir) ──────────────────
+    selected_option = st.selectbox(
+        f"Buscar cliente ({len(client_options)} disponibles):",
+        options=[None] + client_options,
+        index=0,
+        placeholder="Escribe código o nombre para buscar...",
         key="crm_reg_client",
+        format_func=lambda x: "— Selecciona un cliente —" if x is None else x,
     )
 
     cliente_id_selected = None
-    if client_input:
-        matches = dbm.list_clientes_full(search=client_input, limit=10)
-        if matches:
-            options = [f"{m['cliente_id']} — {m.get('nombre', '')}" for m in matches]
-            selected = st.selectbox("Seleccionar", options, key="crm_reg_select")
-            cliente_id_selected = selected.split(" — ")[0].strip()
-        else:
-            st.warning("No se encontro cliente. Puedes escribir el codigo directamente.")
-            cliente_id_selected = client_input.strip()
+    if selected_option:
+        cliente_id_selected = selected_option.split(" — ")[0].strip()
 
     # Form
     fc1, fc2, fc3 = st.columns(3)
