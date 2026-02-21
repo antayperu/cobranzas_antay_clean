@@ -5,4 +5,5 @@ pillow
 python-dotenv
 sendgrid
 resend
-supabase==2.3.0
+supabase>=2.27.3
+websockets>=13.0,<16
