@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import os
 
-from utils.processing import load_data, process_data
+from utils.processing import process_data
 # utils.excel_export moved to specific tabs
 
 # Configuración de Página
@@ -18,9 +18,11 @@ import utils.ui.tabs.whatsapp as tab_whatsapp # WhatsApp Tab Module
 import utils.ui.tabs.general_report as tab_general # General Report Tab Module
 import utils.ui.tabs.email_notifications as tab_email # Email Notifications Tab Module
 import utils.ui.tabs.clientes_premium as tab_clientes_premium # Premium Clients Tab Module
+import utils.ui.tabs.crm_gestiones as tab_crm  # CRM & Gestiones Tab Module
 import utils.ui.tabs.config_tab as tab_config # Configuration Tab Module
 import utils.supabase_cycle_service as supabase_cycle_service
 import utils.storage_manager as storage_mgr
+import utils.state_manager as state_mgr
 import utils.qa_mode as qa_lib
 import streamlit.components.v1 as components
 
@@ -74,9 +76,9 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # --- WIZARD DE CARGA (solo si no hay datos) ---
+    # --- RECOVERY: Mostrar opcion de restaurar sesion anterior ---
     if not st.session_state.get('data_ready', False):
-        pass
+        session_lib.render_recovery_options()
     
 
 
@@ -97,45 +99,81 @@ if wizard_action == "PROCESS_TRIGGERED":
     # Get files from session (set by sidebar)
     file_ctas = st.session_state['uploaded_files']['ctas']
     file_cobranza = st.session_state['uploaded_files']['cobranza']
-    file_cartera = st.session_state['uploaded_files']['cartera']
-    use_supabase_client_master = st.session_state.get("use_supabase_client_master", False)
     
-    if file_ctas and file_cobranza and (file_cartera or use_supabase_client_master):
+    if file_ctas and file_cobranza:
         with st.spinner("🚀 Procesando Motor de Datos..."):
-            # Reuse EXACT Core Logic
-            if file_cartera:
-                df_ctas_raw, df_cartera_raw, df_cobranza_raw, error = load_data(
-                    file_ctas, file_cartera, file_cobranza
-                )
-            else:
-                # Modo 2 archivos: cartera maestra desde Supabase.
-                try:
-                    df_ctas_raw = pd.read_excel(file_ctas)
-                    df_cobranza_raw = pd.read_excel(file_cobranza)
-                    cartera_rows = dbm.get_clientes_master(limit=50000)
-                    if not cartera_rows:
-                        error = (
-                            "No hay cartera maestra en Supabase. "
-                            "Carga cartera en la TAB Clientes Premium y vuelve a procesar."
-                        )
-                        df_cartera_raw = pd.DataFrame()
-                    else:
-                        df_cartera_raw = pd.DataFrame(cartera_rows).rename(
-                            columns={
-                                "cliente_id": "codigo_cliente",
-                                "nombre": "nombre_cliente",
-                                "notas": "nota",
-                            }
-                        )
-                        error = None
-                except Exception as e_load_2files:
-                    df_ctas_raw, df_cartera_raw, df_cobranza_raw = None, None, None
-                    error = str(e_load_2files)
+            # Flujo oficial: 2 archivos + cartera maestra en Supabase.
+            try:
+                df_ctas_raw = pd.read_excel(file_ctas)
+                df_cobranza_raw = pd.read_excel(file_cobranza)
+                cartera_rows = dbm.get_clientes_master(limit=50000)
+                if not cartera_rows:
+                    error = (
+                        "No hay cartera maestra en Supabase. "
+                        "Gestiona o migra clientes en la TAB Clientes Premium y vuelve a procesar."
+                    )
+                    df_cartera_raw = pd.DataFrame()
+                else:
+                    df_cartera_raw = pd.DataFrame(cartera_rows).rename(
+                        columns={
+                            "cliente_id": "codigo_cliente",
+                            "nombre": "nombre_cliente",
+                            "email": "correo",
+                            "enviar_email": "Enviar Email",
+                            "estado": "estado_cliente",
+                            "notas": "nota",
+                        }
+                    )
+                    error = None
+            except Exception as e_load_2files:
+                df_ctas_raw, df_cartera_raw, df_cobranza_raw = None, None, None
+                error = str(e_load_2files)
             
             if error:
                 st.error(f"❌ Error de Carga: {error}")
                 st.session_state['data_ready'] = False
             else:
+                # ── VALIDACIÓN DE INTEGRIDAD: todos los COD CLIENTE del CxC deben existir en clientes ──
+                if 'codcli' in df_ctas_raw.columns:
+                    _cxc_codes = set(
+                        df_ctas_raw['codcli'].astype(str).str.strip().str.zfill(6)
+                    )
+                    _clientes_codes = set(
+                        str(r['cliente_id']).strip()
+                        for r in cartera_rows
+                        if r.get('cliente_id')
+                    )
+                    _missing_codes = _cxc_codes - _clientes_codes
+
+                    if _missing_codes:
+                        _names_map = {}
+                        if 'nomcli' in df_ctas_raw.columns:
+                            _names_map = (
+                                df_ctas_raw
+                                .assign(_cod=df_ctas_raw['codcli'].astype(str).str.strip().str.zfill(6))
+                                .groupby('_cod')['nomcli'].first()
+                                .to_dict()
+                            )
+                        _df_missing = pd.DataFrame({
+                            'COD CLIENTE': sorted(_missing_codes),
+                            'EMPRESA (según CxC)': [_names_map.get(c, '—') for c in sorted(_missing_codes)],
+                        })
+                        st.error(
+                            f"⛔ Error de Integridad: {len(_missing_codes)} cliente(s) del archivo CxC "
+                            "no están registrados en la tabla maestra de clientes (Supabase)."
+                        )
+                        st.warning(
+                            "El proceso ha sido **cancelado**. Ve a la pestaña **Clientes Premium → Importar** "
+                            "para registrar los clientes faltantes y vuelve a intentar."
+                        )
+                        st.dataframe(_df_missing, use_container_width=True, hide_index=True)
+                        st.caption(
+                            "💡 Consejo: Anota o exporta estos códigos, agrégalos en Clientes Premium, "
+                            "luego presiona 'Procesar' nuevamente."
+                        )
+                        st.session_state['data_ready'] = False
+                        st.stop()
+
                 try:
                     df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
                     
@@ -192,10 +230,28 @@ if wizard_action == "PROCESS_TRIGGERED":
                     
                     # Mark session start
                     st.session_state['session_start_ts'] = datetime.now()
-                    
+
                     # Mark as fresh load (for tracking init)
                     st.session_state['fresh_load'] = True
-                    
+                    st.session_state['restored_from_cloud'] = False
+
+                    # --- GUARDAR SESION EN CLOUD ---
+                    ok_cloud, msg_cloud = state_mgr.save_session_cloud(
+                        df=df_final,
+                        cycle_id=cycle_id,
+                        metadata={
+                            "cycle_id": cycle_id,
+                            "file_ctas": file_ctas.name if file_ctas else None,
+                            "file_cobranza": file_cobranza.name if file_cobranza else None,
+                            "fecha_corte": str(st.session_state.get('config_fecha_corte', '')),
+                            "row_count": len(df_final),
+                            "columns": list(df_final.columns),
+                            "cycle_timestamp": cycle_timestamp,
+                        },
+                    )
+                    if ok_cloud:
+                        st.toast("Sesion guardada en la nube", icon="☁️")
+
                     st.success("✅ Datos procesados exitosamente")
                     st.rerun()
                 except Exception as e:
@@ -205,7 +261,6 @@ if wizard_action == "PROCESS_TRIGGERED":
     # Main Area Placeholder if no data
     if not st.session_state.get('data_ready', False):
         st.info("👈 Utiliza el panel lateral para cargar tus archivos y comenzar.")
-        st.markdown(styles.get_welcome_html(), unsafe_allow_html=True)
 
 # --- PASO 2: VISUALIZACIÓN Y FILTROS ---
 if st.session_state['data_ready']:
@@ -237,7 +292,8 @@ if st.session_state['data_ready']:
             "4. Marketing WhatsApp",
             "5. Notificaciones Email",
             "6. Clientes Premium",
-            "7. Configuración",
+            "7. Centro de Gestiones",
+            "8. Configuración",
         ]
     )
     
@@ -273,17 +329,27 @@ if st.session_state['data_ready']:
     with tab_map["6. Clientes Premium"]:
         tab_clientes_premium.render_tab(df_final, CONFIG)
 
-    # --- TAB 7: CONFIGURACIÓN GLOBAL ---
-    with tab_map["7. Configuración"]:
+    # --- TAB 7: CENTRO DE GESTIONES (CRM) ---
+    with tab_map["7. Centro de Gestiones"]:
+        tab_crm.render_tab(df_final, CONFIG)
+
+    # --- TAB 8: CONFIGURACIÓN GLOBAL ---
+    with tab_map["8. Configuración"]:
         # Logic extracted to utils/ui/tabs/config_tab.py
         tab_config.render_tab(CONFIG)
 
 else:
-    # Mensaje de bienvenida inicial cuando no hay datos
-    st.markdown("""
-    <div style='text-align: center; padding: 50px;'>
-        <h3>Bienvenido</h3>
-        <p>Por favor utiliza el menú lateral para cargar tus archivos de <strong>CtasxCobrar y Cobranza</strong>.</p>
-        <p style='color: gray; font-size: 0.9em;'>El sistema procesará automáticamente la información.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # Permitir operacion de clientes/config/CRM incluso sin ciclo cargado.
+    base_tabs = st.tabs(["Inicio", "6. Clientes Premium", "7. Centro de Gestiones", "8. Configuración"])
+
+    with base_tabs[0]:
+        st.markdown(styles.get_welcome_html(), unsafe_allow_html=True)
+
+    with base_tabs[1]:
+        tab_clientes_premium.render_tab(pd.DataFrame(), CONFIG)
+
+    with base_tabs[2]:
+        tab_crm.render_tab(pd.DataFrame(), CONFIG)
+
+    with base_tabs[3]:
+        tab_config.render_tab(CONFIG)

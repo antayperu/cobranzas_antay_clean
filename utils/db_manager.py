@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import json
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -522,7 +523,12 @@ def get_notifications_report(
 
 
 CLIENTE_ESTADOS_VALIDOS = {"ACTIVO", "INACTIVO", "MOROSO"}
-CLIENTES_SELECT_FIELDS = "cliente_id, nombre, email, telefono, ruc, direccion, estado, notas, updated_at"
+CLIENTE_ENVIAR_EMAIL_VALIDOS = {"SI", "NO", "SIN CONFIGURAR"}
+LEGACY_EXTRA_PREFIX = "[EXTRA_FIELDS]"
+CLIENTES_SELECT_FIELDS = (
+    "cliente_id, nombre, email, telefono, dni, ruc, direccion, "
+    "estado, enviar_email, notas, extra_fields, updated_at"
+)
 
 
 def _clean_optional_text(value: Any, *, lower: bool = False) -> Optional[str]:
@@ -559,21 +565,86 @@ def _normalize_cliente_estado(value: Any) -> str:
     return "ACTIVO"
 
 
+def _normalize_cliente_enviar_email(value: Any) -> str:
+    raw = str(value or "").strip().upper()
+    if raw in {"SI", "SÍ", "YES", "Y", "1", "TRUE", "ENVIAR"}:
+        return "SI"
+    if raw in {"NO", "N", "0", "FALSE", "NO ENVIAR"}:
+        return "NO"
+    if raw in {"", "NAN", "NONE", "NAT", "NULL", "SIN CONFIGURAR", "SINCONFIGURAR"}:
+        return "SIN CONFIGURAR"
+    return raw if raw in CLIENTE_ENVIAR_EMAIL_VALIDOS else "SIN CONFIGURAR"
+
+
+def _extract_legacy_extra_from_notas(value: Any) -> Tuple[Optional[str], Dict[str, Any]]:
+    text = str(value or "").strip()
+    if not text or LEGACY_EXTRA_PREFIX not in text:
+        return _clean_optional_text(text), {}
+
+    idx = text.rfind(LEGACY_EXTRA_PREFIX)
+    base_note = text[:idx].strip()
+    payload = text[idx + len(LEGACY_EXTRA_PREFIX) :].strip()
+
+    extras: Dict[str, Any] = {}
+    if payload:
+        try:
+            parsed = json.loads(payload)
+            if isinstance(parsed, dict):
+                extras = {str(k): v for k, v in parsed.items()}
+        except Exception:
+            extras = {}
+
+    return _clean_optional_text(base_note), extras
+
+
+def _merge_legacy_extra_into_notas(row: Dict[str, Any], extra_payload: Dict[str, Any]) -> None:
+    if not isinstance(extra_payload, dict) or not extra_payload:
+        return
+
+    note_clean, note_extra = _extract_legacy_extra_from_notas(row.get("notas"))
+    merged = dict(note_extra)
+    for k, v in extra_payload.items():
+        key = str(k).strip()
+        value = _clean_optional_text(v)
+        if key and value is not None:
+            merged[key] = value
+
+    if not merged:
+        if note_clean is not None:
+            row["notas"] = note_clean
+        return
+
+    packed = f"{LEGACY_EXTRA_PREFIX}{json.dumps(merged, ensure_ascii=False)}"
+    row["notas"] = f"{note_clean}\n{packed}".strip() if note_clean else packed
+
+
 def _normalize_cliente_record(row: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     cliente_id = _normalize_cliente_id(row.get("cliente_id"))
     if not cliente_id:
         return None, "cliente_id es obligatorio"
 
     nombre = _clean_optional_text(row.get("nombre")) or f"Cliente {cliente_id}"
+    extra_fields = row.get("extra_fields")
+    if isinstance(extra_fields, dict):
+        clean_extra = {
+            str(k): str(v).strip()
+            for k, v in extra_fields.items()
+            if str(k).strip() and str(v).strip()
+        }
+    else:
+        clean_extra = {}
     payload = {
         "cliente_id": cliente_id,
         "nombre": nombre,
         "email": _clean_optional_text(row.get("email"), lower=True),
         "telefono": _clean_optional_text(row.get("telefono")),
+        "dni": _clean_optional_text(row.get("dni")),
         "ruc": _clean_optional_text(row.get("ruc")),
         "direccion": _clean_optional_text(row.get("direccion")),
+        "enviar_email": _normalize_cliente_enviar_email(row.get("enviar_email")),
         "estado": _normalize_cliente_estado(row.get("estado")),
         "notas": _clean_optional_text(row.get("notas")),
+        "extra_fields": clean_extra,
         "updated_at": _now_str(),
     }
     return payload, None
@@ -595,15 +666,25 @@ def _filter_client_rows(rows: List[Dict[str, Any]], *, search: str = "", estado:
                 continue
 
         if search_norm:
+            extra_blob = row.get("extra_fields")
+            if isinstance(extra_blob, dict):
+                extra_text = " ".join(
+                    [f"{k} {v}" for k, v in extra_blob.items() if str(v).strip()]
+                )
+            else:
+                extra_text = str(extra_blob or "")
             haystack = " ".join(
                 [
                     str(row.get("cliente_id", "")),
                     str(row.get("nombre", "")),
                     str(row.get("email", "")),
                     str(row.get("telefono", "")),
+                    str(row.get("dni", "")),
                     str(row.get("ruc", "")),
                     str(row.get("direccion", "")),
+                    str(row.get("enviar_email", "")),
                     str(row.get("notas", "")),
+                    extra_text,
                 ]
             ).lower()
             if search_norm not in haystack:
@@ -624,13 +705,43 @@ def list_clientes_full(search: str = "", estado: str = "", limit: int = 1000) ->
         return []
 
     try:
-        res = _safe_execute(
-            client.table("clientes")
-            .select(CLIENTES_SELECT_FIELDS)
-            .order("nombre")
-            .limit(limit)
-        )
+        try:
+            res = _safe_execute(
+                client.table("clientes")
+                .select(CLIENTES_SELECT_FIELDS)
+                .order("nombre")
+                .limit(limit)
+            )
+        except Exception:
+            # Compatibilidad con esquemas legacy que aun no tengan campos nuevos.
+            legacy_fields = "cliente_id, nombre, email, telefono, ruc, direccion, estado, notas, updated_at"
+            res = _safe_execute(
+                client.table("clientes")
+                .select(legacy_fields)
+                .order("nombre")
+                .limit(limit)
+            )
         rows = list(res.data or [])
+        for row in rows:
+            raw_note = row.get("notas")
+            note_clean, note_extra = _extract_legacy_extra_from_notas(raw_note)
+            if isinstance(raw_note, str) and LEGACY_EXTRA_PREFIX in raw_note:
+                row["notas"] = note_clean or ""
+            elif note_clean is not None:
+                row["notas"] = note_clean
+            row.setdefault("dni", None)
+            row.setdefault("enviar_email", None)
+            row.setdefault("extra_fields", {})
+            if not isinstance(row.get("extra_fields"), dict):
+                row["extra_fields"] = {}
+            if note_extra:
+                row["extra_fields"].update(note_extra)
+            if not row.get("dni"):
+                row["dni"] = _clean_optional_text(row["extra_fields"].get("dni"))
+            enviar_source = _clean_optional_text(row.get("enviar_email"))
+            if not enviar_source:
+                enviar_source = row["extra_fields"].get("enviar_email")
+            row["enviar_email"] = _normalize_cliente_enviar_email(enviar_source)
         return _filter_client_rows(rows, search=search, estado=estado)
     except Exception as e:
         print(f"list_clientes_full Error: {e}")
@@ -646,13 +757,44 @@ def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
         _set_last_error("Supabase no disponible para obtener cartera maestra.")
         return []
     try:
-        res = _safe_execute(
-            client.table("clientes")
-            .select("cliente_id, nombre, email, telefono, ruc, direccion, estado, notas")
-            .order("cliente_id")
-            .limit(limit)
-        )
-        return list(res.data or [])
+        try:
+            res = _safe_execute(
+                client.table("clientes")
+                .select(
+                    "cliente_id, nombre, email, telefono, dni, ruc, direccion, estado, enviar_email, notas, extra_fields"
+                )
+                .order("cliente_id")
+                .limit(limit)
+            )
+        except Exception:
+            res = _safe_execute(
+                client.table("clientes")
+                .select("cliente_id, nombre, email, telefono, ruc, direccion, estado, notas")
+                .order("cliente_id")
+                .limit(limit)
+            )
+        rows = list(res.data or [])
+        for row in rows:
+            raw_note = row.get("notas")
+            note_clean, note_extra = _extract_legacy_extra_from_notas(raw_note)
+            if isinstance(raw_note, str) and LEGACY_EXTRA_PREFIX in raw_note:
+                row["notas"] = note_clean or ""
+            elif note_clean is not None:
+                row["notas"] = note_clean
+            row.setdefault("dni", None)
+            row.setdefault("enviar_email", None)
+            row.setdefault("extra_fields", {})
+            if not isinstance(row.get("extra_fields"), dict):
+                row["extra_fields"] = {}
+            if note_extra:
+                row["extra_fields"].update(note_extra)
+            if not row.get("dni"):
+                row["dni"] = _clean_optional_text(row["extra_fields"].get("dni"))
+            enviar_source = _clean_optional_text(row.get("enviar_email"))
+            if not enviar_source:
+                enviar_source = row["extra_fields"].get("enviar_email")
+            row["enviar_email"] = _normalize_cliente_enviar_email(enviar_source)
+        return rows
     except Exception as e:
         print(f"get_clientes_master Error: {e}")
         return []
@@ -664,8 +806,10 @@ def update_cliente_fields(
     nombre: Optional[str] = None,
     email: Optional[str] = None,
     telefono: Optional[str] = None,
+    dni: Optional[str] = None,
     ruc: Optional[str] = None,
     direccion: Optional[str] = None,
+    enviar_email: Optional[str] = None,
     estado: Optional[str] = None,
     notas: Optional[str] = None,
 ) -> Tuple[bool, str]:
@@ -680,10 +824,14 @@ def update_cliente_fields(
         payload["email"] = _clean_optional_text(email, lower=True)
     if telefono is not None:
         payload["telefono"] = _clean_optional_text(telefono)
+    if dni is not None:
+        payload["dni"] = _clean_optional_text(dni)
     if ruc is not None:
         payload["ruc"] = _clean_optional_text(ruc)
     if direccion is not None:
         payload["direccion"] = _clean_optional_text(direccion)
+    if enviar_email is not None:
+        payload["enviar_email"] = _normalize_cliente_enviar_email(enviar_email)
     if estado is not None:
         estado_raw = str(estado or "").strip().upper()
         alias = {
@@ -746,7 +894,50 @@ def upsert_clientes_rows(rows: List[Dict[str, Any]], batch_size: int = 200) -> T
     safe_batch_size = max(int(batch_size or 200), 1)
     try:
         for batch in _chunk_list(normalized_rows, safe_batch_size):
-            _safe_execute(client.table("clientes").upsert(batch, on_conflict="cliente_id"))
+            fallback_batch = [dict(row) for row in batch]
+            while True:
+                try:
+                    _safe_execute(client.table("clientes").upsert(fallback_batch, on_conflict="cliente_id"))
+                    break
+                except Exception as e_upsert:
+                    # Compatibilidad con esquemas legacy sin columnas nuevas.
+                    msg = str(e_upsert).lower()
+                    changed = False
+
+                    def _drop_optional(field: str) -> bool:
+                        removed_any = False
+                        for row in fallback_batch:
+                            if field not in row:
+                                continue
+                            value = row.get(field)
+                            if value not in (None, "", {}):
+                                if "extra_fields" in row:
+                                    if not isinstance(row.get("extra_fields"), dict):
+                                        row["extra_fields"] = {}
+                                    row["extra_fields"][field] = value
+                                else:
+                                    _merge_legacy_extra_into_notas(row, {field: value})
+                            row.pop(field, None)
+                            removed_any = True
+                        return removed_any
+
+                    if "dni" in msg:
+                        changed = _drop_optional("dni") or changed
+                    if "enviar_email" in msg:
+                        changed = _drop_optional("enviar_email") or changed
+                    if "extra_fields" in msg:
+                        removed_extra = False
+                        for row in fallback_batch:
+                            if "extra_fields" not in row:
+                                continue
+                            extra_payload = row.pop("extra_fields", None)
+                            if isinstance(extra_payload, dict) and extra_payload:
+                                _merge_legacy_extra_into_notas(row, extra_payload)
+                            removed_extra = True
+                        changed = removed_extra or changed
+
+                    if not changed:
+                        raise
         message = f"Clientes guardados: {len(normalized_rows)}"
         if errors:
             message += f" | filas ignoradas: {len(errors)}"
@@ -803,3 +994,237 @@ def migrate_clientes_from_cartera_df(df_cartera: pd.DataFrame, batch_size: int =
         "counts": {"rows": len(rows), "errors": len(errors)},
         "error_samples": errors[:10],
     }
+
+
+# ---------------------------------------------------------------------------
+# CRM: Gestiones (interactions tracking)
+# ---------------------------------------------------------------------------
+
+GESTION_TIPOS_VALIDOS = {"EMAIL", "WHATSAPP", "LLAMADA", "VISITA", "NOTA", "OTRO"}
+GESTION_RESULTADOS_VALIDOS = {"EXITOSO", "FALLIDO", "PENDIENTE", "SIN_RESPUESTA", "REPROGRAMADO"}
+
+
+def insert_gestion(
+    *,
+    cliente_id: str,
+    tipo_gestion: str,
+    resultado: str = "PENDIENTE",
+    notas: Optional[str] = None,
+    usuario: Optional[str] = None,
+    duracion_minutos: Optional[int] = None,
+    fecha: Optional[str] = None,
+    metadata_extra: Optional[Dict[str, Any]] = None,
+) -> Tuple[bool, str]:
+    """Insert a manual gestion/interaction record."""
+    client = get_supabase_client()
+    if not client:
+        _set_last_error("Supabase no disponible para registrar gestion.")
+        return False, _last_error or "Supabase no disponible"
+
+    tipo_norm = str(tipo_gestion or "").strip().upper()
+    if tipo_norm not in GESTION_TIPOS_VALIDOS:
+        return False, f"Tipo de gestion invalido: {tipo_gestion}"
+
+    resultado_norm = str(resultado or "PENDIENTE").strip().upper()
+    if resultado_norm not in GESTION_RESULTADOS_VALIDOS:
+        resultado_norm = "PENDIENTE"
+
+    payload: Dict[str, Any] = {
+        "cliente_id": str(cliente_id).strip(),
+        "tipo_gestion": tipo_norm,
+        "canal": tipo_norm,
+        "resultado": resultado_norm,
+        "notas": str(notas or "").strip() or None,
+        "usuario": str(usuario or "").strip() or None,
+        "duracion_minutos": duracion_minutos if duracion_minutos and duracion_minutos > 0 else None,
+        "metadata": metadata_extra or {},
+    }
+    if fecha:
+        payload["fecha"] = fecha
+
+    try:
+        _safe_execute(client.table("gestiones").insert(payload))
+        return True, "Gestion registrada correctamente."
+    except Exception as e:
+        print(f"insert_gestion Error: {e}")
+        return False, f"No se pudo registrar gestion: {e}"
+
+
+def get_gestiones_list(
+    *,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    tipo: Optional[str] = None,
+    cliente_id: Optional[str] = None,
+    limit: int = 500,
+) -> List[Dict[str, Any]]:
+    """Fetch gestiones with optional filters."""
+    client = get_supabase_client()
+    if not client:
+        _set_last_error("Supabase no disponible para consultar gestiones.")
+        return []
+
+    try:
+        query = (
+            client.table("gestiones")
+            .select("id, cliente_id, tipo_gestion, canal, fecha, resultado, notas, usuario, duracion_minutos, metadata, created_at")
+            .order("fecha", desc=True)
+            .limit(limit)
+        )
+        if cliente_id:
+            query = query.eq("cliente_id", str(cliente_id).strip())
+        if tipo and tipo.upper() != "TODOS":
+            query = query.eq("tipo_gestion", tipo.upper())
+
+        res = _safe_execute(query)
+        rows = list(res.data or [])
+
+        # Client-side date filtering
+        if date_from or date_to:
+            filtered = []
+            for row in rows:
+                row_date = str(row.get("fecha", "") or row.get("created_at", ""))[:10]
+                if date_from and row_date < str(date_from):
+                    continue
+                if date_to and row_date > str(date_to):
+                    continue
+                filtered.append(row)
+            rows = filtered
+
+        return rows
+    except Exception as e:
+        print(f"get_gestiones_list Error: {e}")
+        return []
+
+
+def get_gestiones_by_client(cliente_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    """Fetch all gestiones for a specific client."""
+    return get_gestiones_list(cliente_id=cliente_id, limit=limit)
+
+
+def get_clientes_nombres_map() -> Dict[str, str]:
+    """Retorna {cliente_id: nombre} desde la tabla maestra clientes. Ligero, sin JOINs."""
+    client = get_supabase_client()
+    if not client:
+        return {}
+    try:
+        res = _safe_execute(
+            client.table("clientes")
+            .select("cliente_id, nombre")
+            .order("cliente_id")
+            .limit(50000)
+        )
+        return {
+            str(r["cliente_id"]).strip(): str(r["nombre"]).strip()
+            for r in (res.data or [])
+            if r.get("cliente_id") and r.get("nombre")
+        }
+    except Exception:
+        return {}
+
+
+def get_gestiones_stats() -> Dict[str, Any]:
+    """Aggregate stats for gestiones: counts by tipo and resultado."""
+    client = get_supabase_client()
+    if not client:
+        return {}
+
+    try:
+        res = _safe_execute(
+            client.table("gestiones")
+            .select("tipo_gestion, resultado, fecha")
+            .order("fecha", desc=True)
+            .limit(5000)
+        )
+        rows = res.data or []
+
+        by_tipo: Dict[str, int] = {}
+        by_resultado: Dict[str, int] = {}
+        today_str = _now_str()[:10]
+        today_count = 0
+
+        for row in rows:
+            tipo = row.get("tipo_gestion", "OTRO")
+            by_tipo[tipo] = by_tipo.get(tipo, 0) + 1
+            resultado = row.get("resultado", "PENDIENTE")
+            by_resultado[resultado] = by_resultado.get(resultado, 0) + 1
+            if str(row.get("fecha", ""))[:10] == today_str:
+                today_count += 1
+
+        return {
+            "total": len(rows),
+            "today": today_count,
+            "by_tipo": by_tipo,
+            "by_resultado": by_resultado,
+        }
+    except Exception as e:
+        print(f"get_gestiones_stats Error: {e}")
+        return {}
+
+
+def get_crm_dashboard_stats() -> Dict[str, Any]:
+    """Combined stats from notificaciones + gestiones for CRM dashboard KPIs."""
+    client = get_supabase_client()
+    if not client:
+        return {}
+
+    stats: Dict[str, Any] = {
+        "last_mass_notification": None,
+        "total_notifications": 0,
+        "notifications_today": 0,
+        "notifications_week": 0,
+        "notifications_last_active_date": None,
+        "notifications_last_active_count": 0,
+        "success_rate": 0.0,
+        "total_gestiones": 0,
+        "gestiones_today": 0,
+    }
+
+    try:
+        # Latest notification
+        res = _safe_execute(
+            client.table("notificaciones")
+            .select("fecha_envio, estado, created_at")
+            .order("created_at", desc=True)
+            .limit(3000)
+        )
+        notifs = res.data or []
+        stats["total_notifications"] = len(notifs)
+
+        if notifs:
+            stats["last_mass_notification"] = notifs[0].get("fecha_envio") or notifs[0].get("created_at")
+
+        today_str = _now_str()[:10]
+        from datetime import datetime, timedelta
+        week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+        sent_count = 0
+        for n in notifs:
+            n_date = str(n.get("fecha_envio", "") or n.get("created_at", ""))[:10]
+            if n_date == today_str:
+                stats["notifications_today"] += 1
+            if n_date >= week_ago:
+                stats["notifications_week"] += 1
+            if str(n.get("estado", "")).upper() == "ENVIADO":
+                sent_count += 1
+
+        if notifs:
+            stats["success_rate"] = round(sent_count / len(notifs) * 100, 1)
+            # Último día con actividad (distinto de hoy puede ser ayer u otro día)
+            last_active = str(notifs[0].get("fecha_envio") or notifs[0].get("created_at", ""))[:10]
+            stats["notifications_last_active_date"] = last_active
+            stats["notifications_last_active_count"] = sum(
+                1 for n in notifs
+                if str(n.get("fecha_envio", "") or n.get("created_at", ""))[:10] == last_active
+            )
+
+        # Gestiones stats
+        gestiones_stats = get_gestiones_stats()
+        stats["total_gestiones"] = gestiones_stats.get("total", 0)
+        stats["gestiones_today"] = gestiones_stats.get("today", 0)
+        stats["gestiones_by_tipo"] = gestiones_stats.get("by_tipo", {})
+
+    except Exception as e:
+        print(f"get_crm_dashboard_stats Error: {e}")
+
+    return stats
