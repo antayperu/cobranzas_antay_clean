@@ -2,6 +2,7 @@
 Backup and restore utilities for Supabase operational tables.
 
 Scope:
+- app_config
 - clientes
 - documentos
 - cobranzas
@@ -49,6 +50,7 @@ class TableSpec:
 
 
 TABLE_SPECS: List[TableSpec] = [
+    TableSpec(name="app_config", conflict_key="config_key", restore_order=5, truncate_order=70),
     TableSpec(name="clientes", conflict_key="cliente_id", restore_order=10, truncate_order=60),
     TableSpec(name="documentos", conflict_key="documento_id", restore_order=20, truncate_order=50),
     TableSpec(name="cobranzas", conflict_key="id", restore_order=30, truncate_order=40),

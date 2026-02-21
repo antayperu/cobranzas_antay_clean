@@ -14,6 +14,7 @@ from scripts.migrate_excel_to_supabase import (
     build_documentos,
     upsert_records,
 )
+import utils.db_manager as dbm
 from utils.supabase_client import SupabaseClient
 
 
@@ -112,13 +113,25 @@ def persist_cycle_to_supabase(
 
     supabase = wrapper.get_client()
     try:
-        count_clientes = upsert_records(
-            supabase=supabase,
-            table="clientes",
-            rows=clientes_rows,
-            on_conflict="cliente_id",
-            batch_size=batch_size,
-        )
+        ok_clientes, msg_clientes = dbm.upsert_clientes_rows(clientes_rows, batch_size=batch_size)
+        if not ok_clientes:
+            return {
+                "ok": False,
+                "message": f"Error durante persistencia en Supabase: {msg_clientes}",
+                "counts": {},
+                "errors": {
+                    "clientes": len(clientes_errors),
+                    "documentos": len(documentos_errors),
+                    "cobranzas": len(cobranzas_errors),
+                },
+                "error_samples": {
+                    "clientes": clientes_errors[:10],
+                    "documentos": documentos_errors[:10],
+                    "cobranzas": cobranzas_errors[:10],
+                },
+            }
+
+        count_clientes = len(clientes_rows)
         count_documentos = upsert_records(
             supabase=supabase,
             table="documentos",

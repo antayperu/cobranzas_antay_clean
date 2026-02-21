@@ -70,6 +70,27 @@ class _FakeClient:
         return _FakeTableClientes(self.rows, self.sinks)
 
 
+class _FakeLegacyMissingColumnsTable(_FakeTableClientes):
+    def execute(self):
+        if self.upsert_payload is not None:
+            self.sinks["upserts"].append({"payload": self.upsert_payload, "query": dict(self.query)})
+            keys = set()
+            for row in self.upsert_payload:
+                keys.update(row.keys())
+            if "enviar_email" in keys:
+                raise Exception("Could not find the 'enviar_email' column of 'clientes' in the schema cache")
+            if "extra_fields" in keys:
+                raise Exception("Could not find the 'extra_fields' column of 'clientes' in the schema cache")
+            return SimpleNamespace(data=list(self.upsert_payload))
+        return super().execute()
+
+
+class _FakeLegacyMissingColumnsClient(_FakeClient):
+    def table(self, name):
+        assert name == "clientes"
+        return _FakeLegacyMissingColumnsTable(self.rows, self.sinks)
+
+
 def _make_state(rows):
     return {
         "rows": rows,
@@ -155,6 +176,29 @@ def test_get_clientes_master_returns_rows(monkeypatch):
     assert result[0]["cliente_id"] == "000001"
 
 
+def test_list_clientes_full_reads_enviar_email_from_legacy_notas(monkeypatch):
+    state = _make_state(
+        [
+            {
+                "cliente_id": "000023",
+                "nombre": "ALMACO PERU SAC",
+                "notas": '[EXTRA_FIELDS]{"enviar_email":"SI","dni":"12345678","empresa":"1"}',
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        dbm,
+        "get_supabase_client",
+        lambda: _FakeClient(state["rows"], state["sinks"]),
+    )
+
+    result = dbm.list_clientes_full(search="", estado="", limit=100)
+    assert len(result) == 1
+    assert result[0]["enviar_email"] == "SI"
+    assert result[0]["dni"] == "12345678"
+    assert result[0]["notas"] == ""
+
+
 def test_upsert_clientes_rows_normalizes_email_and_estado(monkeypatch):
     state = _make_state([])
     monkeypatch.setattr(
@@ -181,6 +225,35 @@ def test_upsert_clientes_rows_normalizes_email_and_estado(monkeypatch):
     assert payload["cliente_id"] == "000010"
     assert payload["email"] == "cliente@mail.com"
     assert payload["estado"] == "ACTIVO"
+
+
+def test_upsert_clientes_rows_retries_when_schema_is_legacy(monkeypatch):
+    state = _make_state([])
+    monkeypatch.setattr(
+        dbm,
+        "get_supabase_client",
+        lambda: _FakeLegacyMissingColumnsClient(state["rows"], state["sinks"]),
+    )
+
+    ok, msg = dbm.upsert_clientes_rows(
+        [
+            {
+                "cliente_id": "11",
+                "nombre": "Cliente 11",
+                "enviar_email": "SI",
+                "notas": "VIP",
+            }
+        ]
+    )
+
+    assert ok is True
+    assert "guardados" in msg.lower()
+    assert len(state["sinks"]["upserts"]) == 3
+    final_payload = state["sinks"]["upserts"][-1]["payload"][0]
+    assert "enviar_email" not in final_payload
+    assert "extra_fields" not in final_payload
+    assert "[EXTRA_FIELDS]" in (final_payload.get("notas") or "")
+    assert '"enviar_email": "SI"' in (final_payload.get("notas") or "")
 
 
 def test_delete_clientes_by_ids_uses_in_filter(monkeypatch):

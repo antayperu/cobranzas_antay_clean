@@ -1,37 +1,50 @@
-# TICKET FEATURE-002 - Clientes Premium
+# TICKET FEATURE-002 - Clientes Premium + Home 2 Archivos
 
-Fecha: 2026-02-17  
+Fecha: 2026-02-19  
 Estado: In Progress  
-Prioridad: Alta
+Prioridad: Alta  
+Referencia FRD: `docs/FRD_CLIENTES_PREMIUM_v1.0.md`
 
 ## Objetivo
 
-Separar el mantenimiento de clientes en una TAB dedicada con experiencia premium, permitiendo:
+Completar la separacion operativa:
 
-1. Edicion total de registros/campos en `clientes`.
-2. Migracion de cartera desde Excel.
-3. Operacion principal con 2 archivos usando cartera maestra Supabase.
+1. Home principal solo procesa con `CtasxCobrar + Cobranza`.
+2. Clientes se gestionan en TAB independiente `Clientes Premium`.
+3. UI principal adopta un patron corporativo premium alineado a Antay.
 
-## Alcance Tecnico
+## Subtickets generados
 
-1. Nueva TAB `6. Clientes Premium`.
-2. Backend `db_manager` con:
-   - listado full
-   - update extendido
-   - upsert masivo
-   - delete controlado
-   - migracion de cartera
-3. Sidebar en modo recomendado de 2 archivos por defecto.
+1. `FEATURE-004`: Home operativo estricto de 2 archivos.
+2. `FEATURE-005`: Rediseno UX corporativo premium (sidebar + bienvenida).
 
-## Criterios de Aceptacion
+## Alcance tecnico
 
-1. Usuario puede editar cualquier campo en grilla y persistir cambios.
-2. Usuario puede migrar cartera con feedback de errores.
-3. Carga principal procesa con `CtasxCobrar + Cobranza` si existe cartera maestra.
-4. Configuracion ya no duplica mantenimiento de clientes.
+1. `app.py`
+   - Eliminar dependencia de uploader de cartera en el flujo principal.
+   - Consumir cartera maestra desde Supabase por defecto.
+2. `utils/ui/sidebar.py`
+   - Mantener solo 2 uploaders.
+   - Mensajeria operativa clara hacia `Clientes Premium`.
+3. `utils/session.py`
+   - Alinear estado de `uploaded_files` al nuevo flujo.
+4. `utils/ui/styles.py`
+   - Upgrade visual premium para sidebar, acciones y bienvenida.
+5. Documentacion
+   - FRD + backlog + tickets sincronizados con el nuevo proceso.
 
-## Evidencia Esperada
+## Criterios de aceptacion
+
+1. No existe uploader de cartera en Home.
+2. El ciclo corre con 2 archivos y cartera maestra Supabase.
+3. Si no hay cartera maestra, la app bloquea y guia al tab correcto.
+4. La UI principal comunica visualmente el flujo corporativo de forma clara.
+5. `Clientes Premium` sigue siendo la unica via de mantenimiento/migracion de clientes.
+
+## Evidencia esperada
 
 1. `docs/FRD_CLIENTES_PREMIUM_v1.0.md`
-2. `utils/ui/tabs/clientes_premium.py`
-3. `tests/test_db_manager_clients.py`
+2. `docs/backlog_priorizado.md`
+3. `app.py`
+4. `utils/ui/sidebar.py`
+5. `utils/ui/styles.py`

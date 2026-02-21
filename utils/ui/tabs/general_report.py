@@ -9,6 +9,18 @@ import utils.storage_manager as storage_mgr
 from utils.excel_export import build_export_dataframe, generate_excel
 from datetime import datetime
 
+
+def _normalize_enviar_email(value) -> str:
+    raw = str(value).strip().upper()
+    if raw in {"SI", "SÍ", "YES", "Y", "1", "TRUE", "ENVIAR"}:
+        return "SI"
+    if raw in {"NO", "N", "0", "FALSE", "NO ENVIAR"}:
+        return "NO"
+    if raw in {"", "NAN", "NAT", "NONE", "NULL", "SIN CONFIGURAR", "SINCONFIGURAR"}:
+        return "SIN CONFIGURAR"
+    return raw
+
+
 def render_tab(df_final, config):
     """
     Renders the General Report tab with filters, KPIs, and the main table.
@@ -97,13 +109,17 @@ def render_tab(df_final, config):
         
         # Filtro ENVIAR EMAIL (nueva fila)
         if 'Enviar Email' in df_final.columns:
-            valores_enviar = sorted(df_final['Enviar Email'].astype(str).unique().tolist())
-            default_enviar = [v for v in valores_enviar if v.upper() not in ['NO', 'SIN CONFIGURAR']]
+            enviar_norm = df_final['Enviar Email'].apply(_normalize_enviar_email)
+            valores_set = set(enviar_norm.tolist())
+            preferred = ["SI", "NO", "SIN CONFIGURAR"]
+            valores_enviar = [v for v in preferred if v in valores_set]
+            valores_enviar.extend(sorted(v for v in valores_set if v not in preferred))
+            default_enviar = ["SI"] if "SI" in valores_enviar else []
             sel_enviar_email = st.multiselect(
-                "Enviar Email (por defecto excluye 'NO' y 'SIN CONFIGURAR')", 
+                "Enviar Email (por defecto: 'SI')", 
                 valores_enviar, 
                 default=default_enviar,
-                help="Filtra por el campo 'Enviar Email'. Por defecto excluye registros con valor 'NO' o 'SIN CONFIGURAR'."
+                help="Filtra por el campo 'Enviar Email'. Por defecto selecciona 'SI'."
             )
         else:
             sel_enviar_email = None
@@ -126,7 +142,10 @@ def render_tab(df_final, config):
         
         # Aplicar filtro Enviar Email
         if sel_enviar_email and 'Enviar Email' in df_filtered.columns:
-            df_filtered = df_filtered[df_filtered['Enviar Email'].astype(str).isin(sel_enviar_email)]
+            enviar_norm_filtered = df_filtered['Enviar Email'].apply(_normalize_enviar_email)
+            df_filtered = df_filtered[
+                enviar_norm_filtered.isin(sel_enviar_email)
+            ]
     
     # --- KPI DASHBOARD (Separación de Monedas & Conteo) ---
     def safe_sum(df, col): return df[col].sum() if col in df.columns else 0.0

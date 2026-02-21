@@ -1,7 +1,7 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-02-17  
-Version actual: v1.5.6  
+Ultima actualizacion: 2026-02-19  
+Version actual: v1.7.0  
 Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + paridad de export + notificaciones por cliente + integridad/no-match + mantenimiento de clientes + reporte premium + quality gates + seguridad operacional + backup/restore completados. Iniciativa de Storage (SUPABASE-002) completada.
 
 ---
@@ -188,10 +188,39 @@ Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + par
   - Crear TAB dedicada para mantenimiento de clientes con edicion total y migracion de cartera.
   - Operacion principal orientada a carga de 2 archivos (CtasxCobrar + Cobranza) usando cartera maestra en Supabase.
 - Criterios de Aceptacion:
-  - [ ] TAB independiente de clientes habilitada.
-  - [ ] Edicion de cualquier campo operativo en `clientes`.
-  - [ ] Migracion de cartera desde Excel con reporte de errores.
-  - [ ] Flujo principal 2 archivos operativo con cartera maestra.
+  - [x] TAB independiente de clientes habilitada.
+  - [x] Edicion de cualquier campo operativo en `clientes`.
+  - [x] Migracion de cartera desde Excel con reporte de errores.
+  - [x] Flujo principal 2 archivos operativo con cartera maestra.
+
+### FEATURE-004: Home Operativo Estricto (2 Archivos)
+- Estado: In Progress
+- Dependencias: FEATURE-002
+- Referencia FRD:
+  - `docs/FRD_CLIENTES_PREMIUM_v1.0.md`
+  - `docs/TICKET_FEATURE_002_CLIENTES_PREMIUM.md`
+  - `docs/TICKET_FEATURE_004_HOME_2_ARCHIVOS.md`
+- Descripcion:
+  - Eliminar carga de cartera en sidebar principal.
+  - Procesar solo `CtasxCobrar + Cobranza` con cartera maestra de Supabase.
+- Criterios de Aceptacion:
+  - [x] Sidebar muestra solo uploaders de `CtasxCobrar` y `Cobranza`.
+  - [x] Boton de procesamiento se habilita solo con esos 2 archivos.
+  - [x] Si no hay cartera maestra, se bloquea ciclo con mensaje operativo.
+
+### FEATURE-005: UX Corporativo Premium del Home
+- Estado: In Progress
+- Dependencias: FEATURE-004
+- Referencia FRD:
+  - `docs/FRD_CLIENTES_PREMIUM_v1.0.md`
+  - `docs/TICKET_FEATURE_005_UX_HOME_PREMIUM.md`
+- Descripcion:
+  - Renovar visual de sidebar y bienvenida para reflejar flujo empresarial de 2 archivos.
+  - Estandarizar guias de operacion y feedback visual en el punto de entrada.
+- Criterios de Aceptacion:
+  - [x] Cabecera de sidebar con identidad corporativa premium.
+  - [x] Tarjeta de bienvenida principal actualizada a 2 archivos.
+  - [x] Mensajeria clara de derivacion a TAB `Clientes Premium`.
 
 ### FEATURE-003: Modo Multi-Tenant
 - Estado: Pendiente
@@ -221,7 +250,7 @@ Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + par
 
 La migracion se considera cerrada cuando:
 
-1. El flujo de 3 Excel opera desde UI sin regresiones.
+1. El flujo de 2 Excel opera desde UI sin regresiones.
 2. El Excel de salida conserva funcionalidad y campos.
 3. Notificaciones se registran por cliente en Supabase.
 4. Existen reportes operativos por cliente.

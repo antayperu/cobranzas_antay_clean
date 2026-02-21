@@ -7,17 +7,19 @@ import utils.settings_manager as sm
 # --- COLUMN DEFINITIONS ---
 # Listado maestro de todas las posibles columnas (para el configurador)
 ALL_POSSIBLE_COLS = [
-    'COD CLIENTE', 'EMPRESA', 'COMPROBANTE', 'FECH EMIS', 'MONEDA', 
-    'MONT EMIT', 'TIPO CAMBIO', 'SALDO', 'DETRACCIÓN', 'ESTADO DETRACCION', 
-    'AMORTIZACIONES', 'SALDO REAL', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 
+    'COD CLIENTE', 'EMPRESA', 'COMPROBANTE', 'FECH EMIS', 'MONEDA',
+    'MONT EMIT', 'TIPO CAMBIO', 'SALDO', 'DETRACCIÓN', 'ESTADO DETRACCION',
+    'AMORTIZACIONES', 'SALDO REAL', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO',
+    'ESTADO_WHATSAPP', 'FECHA_ULTIMO_WA',
     'NOTA', 'ENVIAR EMAIL', 'CORREO', 'TELÉFONO', 'FECH VENC', 'ESTADO DEUDA'
 ]
 
 # Vista Ejecutiva: Orden histórico (fallback)
 EXECUTIVE_COLS_DEFAULT = [
-    'COD CLIENTE', 'EMPRESA', 'COMPROBANTE', 'FECH EMIS', 'MONEDA', 
-    'MONT EMIT', 'TIPO CAMBIO', 'SALDO', 'DETRACCIÓN', 'ESTADO DETRACCION', 
-    'AMORTIZACIONES', 'SALDO REAL', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO', 
+    'COD CLIENTE', 'EMPRESA', 'COMPROBANTE', 'FECH EMIS', 'MONEDA',
+    'MONT EMIT', 'TIPO CAMBIO', 'SALDO', 'DETRACCIÓN', 'ESTADO DETRACCION',
+    'AMORTIZACIONES', 'SALDO REAL', 'ESTADO_EMAIL', 'FECHA_ULTIMO_ENVIO',
+    'ESTADO_WHATSAPP', 'FECHA_ULTIMO_WA',
     'NOTA', 'ENVIAR EMAIL'
 ]
 
@@ -30,7 +32,16 @@ COLUMN_CONFIG = {
         help="Estado de Notificación: PENDIENTE | ENVIADO | FALLIDO"
     ),
     "FECHA_ULTIMO_ENVIO": st.column_config.TextColumn(
-        "Último Envío", 
+        "Último Email",
+        width="medium"
+    ),
+    "ESTADO_WHATSAPP": st.column_config.TextColumn(
+        "WA Estado",
+        width="small",
+        help="Estado de WhatsApp: PENDIENTE | ENVIADO | FALLIDO"
+    ),
+    "FECHA_ULTIMO_WA": st.column_config.TextColumn(
+        "Último WA",
         width="medium"
     ),
     "ESTADO DETRACCION": st.column_config.TextColumn(
@@ -146,7 +157,7 @@ def render_report(df_filtered):
     """
     Renders the Main Report Table with Customizable Enterprise UX.
     - User can configure visible columns and their order.
-    - Settings are preserved in config.json.
+    - Settings are preserved in Supabase app_config.
     """
     # 0. Cargar configuración de vistas
     settings = sm.load_settings()
@@ -229,13 +240,21 @@ def render_report(df_filtered):
     # --- 3. PREPARE DISPLAY DATA ---
     df_display = df_filtered[cols_to_show].copy()
 
-    # Apply Human Date to FECHA_ULTIMO_ENVIO
+    # Apply Human Date to FECHA_ULTIMO_ENVIO and FECHA_ULTIMO_WA
     if 'FECHA_ULTIMO_ENVIO' in df_display.columns:
         df_display['FECHA_ULTIMO_ENVIO'] = df_display['FECHA_ULTIMO_ENVIO'].apply(format_human_date)
+    if 'FECHA_ULTIMO_WA' in df_display.columns:
+        df_display['FECHA_ULTIMO_WA'] = df_display['FECHA_ULTIMO_WA'].apply(format_human_date)
 
     # Add Visual Badges to Status columns
     if 'ESTADO_EMAIL' in df_display.columns:
         df_display['ESTADO_EMAIL'] = df_display['ESTADO_EMAIL'].replace({
+            'ENVIADO': '🟢 ENVIADO',
+            'PENDIENTE': '⚪ PENDIENTE',
+            'FALLIDO': '🔴 FALLIDO'
+        })
+    if 'ESTADO_WHATSAPP' in df_display.columns:
+        df_display['ESTADO_WHATSAPP'] = df_display['ESTADO_WHATSAPP'].replace({
             'ENVIADO': '🟢 ENVIADO',
             'PENDIENTE': '⚪ PENDIENTE',
             'FALLIDO': '🔴 FALLIDO'
@@ -267,6 +286,10 @@ def render_report(df_filtered):
     # Colores por estado de email
     if 'ESTADO_EMAIL' in df_display.columns:
         styler = styler.map(highlight_status, subset=['ESTADO_EMAIL'])
+
+    # Colores por estado de WhatsApp
+    if 'ESTADO_WHATSAPP' in df_display.columns:
+        styler = styler.map(highlight_status, subset=['ESTADO_WHATSAPP'])
         
     # Colores por estado detracción
     if 'ESTADO DETRACCION' in df_display.columns:
@@ -313,6 +336,8 @@ def parse_full_columns(all_cols):
         'SALDO REAL',
         'ESTADO_EMAIL',
         'FECHA_ULTIMO_ENVIO',
+        'ESTADO_WHATSAPP',
+        'FECHA_ULTIMO_WA',
         'NOTA',
         'ENVIAR EMAIL'
     ]
