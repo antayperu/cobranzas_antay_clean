@@ -85,92 +85,7 @@ def render_tab(df_final, df_filtered, config):
                 st.rerun()
             
             st.divider()
-
-        with st.expander("📈 Reporte Premium de Notificaciones", expanded=False):
-            c_r1, c_r2, c_r3, c_r4 = st.columns(4)
-            from_default = date.today() - timedelta(days=30)
-            rpt_from = c_r1.date_input("Desde", value=from_default, key="notif_report_from")
-            rpt_to = c_r2.date_input("Hasta", value=date.today(), key="notif_report_to")
-            estado_sel = c_r3.selectbox(
-                "Estado",
-                options=["TODOS", "ENVIADO", "PENDIENTE", "LEIDO", "ARCHIVADO"],
-                key="notif_report_estado",
-            )
-            canal_sel = c_r4.selectbox(
-                "Canal",
-                options=["TODOS", "EMAIL", "WHATSAPP"],
-                key="notif_report_canal",
-            )
-
-            try:
-                rows_report = dbm.get_notifications_report(
-                    date_from=str(rpt_from),
-                    date_to=str(rpt_to),
-                    estado=(None if estado_sel == "TODOS" else estado_sel),
-                    canal=(None if canal_sel == "TODOS" else canal_sel),
-                    limit=3000,
-                )
-            except Exception as e_report:
-                rows_report = []
-                st.error("No se pudo cargar el reporte de notificaciones.")
-                st.caption(str(e_report))
-
-            if rows_report:
-                df_report = pd.DataFrame(rows_report)
-                if "metadata" in df_report.columns:
-                    df_report["canal"] = df_report["metadata"].apply(
-                        lambda m: str((m or {}).get("channel", ""))
-                    )
-                    df_report["status_code"] = df_report["metadata"].apply(
-                        lambda m: str((m or {}).get("status_code", ""))
-                    )
-                else:
-                    df_report["canal"] = ""
-                    df_report["status_code"] = ""
-
-                sent_count = (df_report["estado"].astype(str).str.upper() == "ENVIADO").sum()
-                pending_count = (df_report["estado"].astype(str).str.upper() == "PENDIENTE").sum()
-                failed_count = (
-                    (df_report["tipo_notificacion"].astype(str).str.upper() == "GESTION_FALLIDA")
-                    | (df_report["status_code"].astype(str).str.upper() == "FAILED")
-                ).sum()
-
-                k1, k2, k3 = st.columns(3)
-                k1.metric("✅ Enviados", int(sent_count))
-                k2.metric("❌ Fallidos", int(failed_count))
-                k3.metric("⏳ Pendientes", int(pending_count))
-
-                if "cliente_id" in df_report.columns:
-                    grp = (
-                        df_report.groupby("cliente_id", dropna=False)
-                        .agg(
-                            total_notificaciones=("cliente_id", "count"),
-                            enviados=("estado", lambda s: (s.astype(str).str.upper() == "ENVIADO").sum()),
-                            pendientes=("estado", lambda s: (s.astype(str).str.upper() == "PENDIENTE").sum()),
-                        )
-                        .reset_index()
-                    )
-                    grp = grp.sort_values(by=["total_notificaciones", "cliente_id"], ascending=[False, True])
-                    st.caption("Vista por cliente")
-                    st.dataframe(grp, use_container_width=True, hide_index=True)
-
-                cols = [
-                    c
-                    for c in [
-                        "cliente_id",
-                        "destinatario",
-                        "estado",
-                        "tipo_notificacion",
-                        "canal",
-                        "fecha_envio",
-                        "created_at",
-                    ]
-                    if c in df_report.columns
-                ]
-                st.caption("Detalle operativo")
-                st.dataframe(df_report[cols], use_container_width=True, hide_index=True)
-            else:
-                st.info("Sin notificaciones para los filtros seleccionados.")
+        st.caption("La trazabilidad y el historial de notificaciones ahora se gestionan en la TAB 'Centro de Gestiones'.")
         
         c_mail1, c_mail2 = st.columns([1, 1])
         
@@ -186,7 +101,7 @@ def render_tab(df_final, df_filtered, config):
                 # We use a lambda to check ESTADO DETRACCION == 'PENDIENTE'
                 df_email_view = df_filtered.copy()  # Trabajar sobre vista filtrada
                 df_email_view['DETR_PENDIENTE_AMOUNT'] = df_email_view.apply(
-                    lambda x: float(x['DETRACCIÓN']) if str(x['ESTADO DETRACCION']).upper().strip() == 'PENDIENTE' else 0.0, 
+                    lambda x: float(x['DETRACCIÓN']) if str(x['ESTADO DETRACCION']).upper().strip() == 'PENDIENTE' else 0.0,
                     axis=1
                 )
                 
@@ -206,7 +121,6 @@ def render_tab(df_final, df_filtered, config):
                 
                 # --- KPIs de Envío (TAB Notificaciones Email) ---
                 # Calcular por COD_CLIENTE único para evitar confusión con emails compartidos
-                from datetime import date
                 today_str = date.today().strftime('%Y-%m-%d')
                 
                 # Contar clientes enviados HOY
@@ -228,7 +142,6 @@ def render_tab(df_final, df_filtered, config):
                 
                 if hide_sent_today:
                     # Obtener COD_CLIENTE de clientes enviados HOY desde df_final (SSOT)
-                    from datetime import date
                     today_str = date.today().strftime('%Y-%m-%d')
                     
                     if 'ESTADO_EMAIL' in df_final.columns and 'FECHA_ULTIMO_ENVIO' in df_final.columns:
@@ -360,31 +273,6 @@ def render_tab(df_final, df_filtered, config):
                         """, unsafe_allow_html=True)
                     st.markdown("---")
 
-                    # Historial operativo por cliente desde Supabase.
-                    selected_clientes = [email_map[x]['cod'] for x in sel_emails if x in email_map]
-                    with st.expander("🗂️ Historial por Cliente (Supabase)", expanded=False):
-                        try:
-                            history_rows = dbm.get_notifications_history(selected_clientes, limit=200)
-                            if history_rows:
-                                df_hist = pd.DataFrame(history_rows)
-                                cols_hist = [
-                                    c for c in [
-                                        'cliente_id',
-                                        'destinatario',
-                                        'tipo_notificacion',
-                                        'prioridad',
-                                        'estado',
-                                        'fecha_envio',
-                                        'asunto',
-                                        'created_at',
-                                    ] if c in df_hist.columns
-                                ]
-                                st.dataframe(df_hist[cols_hist], use_container_width=True, hide_index=True)
-                            else:
-                                st.info("Sin historial de notificaciones para la selección actual.")
-                        except Exception as e_hist:
-                            st.error("No se pudo consultar historial de notificaciones en Supabase.")
-                            st.caption(str(e_hist))
         
         st.markdown("---")
         
@@ -601,6 +489,7 @@ def render_tab(df_final, df_filtered, config):
                         with st.spinner(f"Enviando con Business Lock (Fecha: {fecha_corte})..."):
                             # Obtener cycle_id del session_state
                             current_cycle_id = st.session_state.get('cycle_id', 'default_cycle')
+                            qa_mode_enabled = bool(config.get('qa_config', {}).get('enabled', False))
                             
                             results = es.send_email_batch(
                                 smtp_cfg, 
@@ -609,9 +498,85 @@ def render_tab(df_final, df_filtered, config):
                                 logo_path=batch_logo_path,
                                 force_resend=force_resend_ttl,
                                 internal_copies_config=config.get('internal_copies', {}),
-                                qa_settings=(qa_cfg if is_qa else None),
+                                qa_settings=(qa_cfg if qa_mode_enabled else None),
                                 cycle_id=current_cycle_id
                             )
+
+                        # Persistir resultado de envio en tabla notificaciones (Supabase).
+                        persisted_events = 0
+                        persist_errors = 0
+                        if 'details' in results and results['details']:
+                            msg_lookup = {m.get('msg_id'): m for m in messages_to_send if m.get('msg_id')}
+                            qa_enabled = bool(config.get('qa_config', {}).get('enabled', False))
+
+                            for detail in results['details']:
+                                status_label = str(detail.get('Estado', '')).upper()
+                                if 'ENVIADO' in status_label:
+                                    status_code = 'SENT'
+                                elif 'BLOQUE' in status_label:
+                                    status_code = 'BLOCKED'
+                                elif 'FALL' in status_label or 'ERROR' in status_label:
+                                    status_code = 'FAILED'
+                                else:
+                                    status_code = 'PENDING'
+
+                                detail_msg_id = detail.get('msg_id')
+                                msg_ctx = msg_lookup.get(detail_msg_id)
+                                if msg_ctx is None:
+                                    sent_client = detail.get('Cliente')
+                                    msg_ctx = next(
+                                        (m for m in messages_to_send if m.get('client_name') == sent_client),
+                                        None
+                                    )
+
+                                cliente_id_ctx = str(msg_ctx.get('cod_cliente')).strip() if msg_ctx and msg_ctx.get('cod_cliente') else None
+                                destinatario_ctx = (
+                                    msg_ctx.get('original_email')
+                                    if msg_ctx and msg_ctx.get('original_email')
+                                    else detail.get('Email', '')
+                                )
+                                asunto_ctx = (
+                                    msg_ctx.get('subject')
+                                    if msg_ctx and msg_ctx.get('subject')
+                                    else f"Estado de Cuenta {config.get('company_name', 'Antay')}"
+                                )
+                                mensaje_ctx = str(detail.get('Detalle') or '')
+
+                                documento_id_ctx = None
+                                if msg_ctx and cliente_id_ctx and msg_ctx.get('documento_numero'):
+                                    documento_id_ctx = dbm.get_documento_id_by_numero(
+                                        cliente_id=cliente_id_ctx,
+                                        numero_documento=str(msg_ctx.get('documento_numero')),
+                                    )
+
+                                ok_persist = dbm.persist_notification_event(
+                                    cliente_id=cliente_id_ctx,
+                                    destinatario=str(destinatario_ctx),
+                                    asunto=str(asunto_ctx),
+                                    mensaje=mensaje_ctx,
+                                    status_code=status_code,
+                                    run_id=str(current_batch_id),
+                                    notification_key=(msg_ctx.get('notification_key') if msg_ctx else None),
+                                    match_keys=(msg_ctx.get('match_keys') if msg_ctx else None),
+                                    documento_id=documento_id_ctx,
+                                    metadata_extra={
+                                        "ui_batch_id": str(current_batch_id),
+                                        "qa_mode": qa_enabled,
+                                        "msg_id": detail_msg_id,
+                                    },
+                                )
+                                if ok_persist:
+                                    persisted_events += 1
+                                else:
+                                    persist_errors += 1
+
+                        if persist_errors > 0:
+                            st.warning(
+                                f"No se pudieron guardar {persist_errors} eventos en notificaciones."
+                            )
+                            st.caption(dbm.get_last_error() or "")
+                        elif persisted_events > 0:
+                            st.caption(f"Notificaciones persistidas en Supabase: {persisted_events}")
                         
                         # Marcar como enviado para prevenir duplicados
                         if results['success'] > 0:
@@ -735,3 +700,4 @@ def render_tab(df_final, df_filtered, config):
 
     else:
             st.info("Sube los archivos y filtra para ver las notificaciones.")
+

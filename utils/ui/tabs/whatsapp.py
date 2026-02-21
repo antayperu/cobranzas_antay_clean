@@ -1,10 +1,12 @@
 import streamlit as st
 import pandas as pd
 import utils.settings_manager as sm
+import utils.db_manager as dbm
 import base64
 import os
 import streamlit.components.v1 as components
 import utils.storage_manager as storage_mgr
+from datetime import datetime, date
 
 def render_tab(df_filtered, config):
     """
@@ -16,6 +18,31 @@ def render_tab(df_filtered, config):
     """
     st.subheader("Gestión de WhatsApp")
 
+    # --- Panel post-envío persistente (igual que Email tab) ---
+    if 'last_wa_send_results' in st.session_state and st.session_state['last_wa_send_results']:
+        wa_res = st.session_state['last_wa_send_results']
+        st.success("✅ Envío WhatsApp completado. Resultados del último proceso:")
+        st.divider()
+        st.subheader("📊 Resumen del Proceso WA")
+        c_r1, c_r2 = st.columns(2)
+        c_r1.metric("✅ Enviados", wa_res.get('exitosos', 0))
+        c_r2.metric("❌ Fallidos", wa_res.get('fallidos', 0))
+        if wa_res.get('details'):
+            df_wa_res = pd.DataFrame(wa_res['details'])
+            st.write("📝 **Detalle por Cliente:**")
+            st.dataframe(df_wa_res, use_container_width=True, hide_index=True)
+            csv_wa = df_wa_res.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "📄 Descargar Reporte WA (CSV)",
+                data=csv_wa,
+                file_name=f"reporte_wa_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv"
+            )
+        if st.button("✅ Cerrar Reporte WA"):
+            del st.session_state['last_wa_send_results']
+            st.rerun()
+        st.divider()
+
     if not df_filtered.empty:
         c1, c2 = st.columns([1, 1])
         
@@ -25,8 +52,9 @@ def render_tab(df_filtered, config):
             # Cargar plantilla de CONFIG o usar default si no existe
             saved_template = config.get('whatsapp_template', (
                 "Estimados *{EMPRESA}*,\n\n"
-                "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"
-                "**Detalle de Documentos:**\n"
+                "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes de pago:\n\n"
+                "{RESUMEN_DEUDA}\n\n"
+                "*Detalle de Documentos:*\n"
                 "{DETALLE_DOCS}\n\n"
                 "Agradeceremos gestionar el pago a la brevedad.\n\n"
                 "_DACTA S.A.C. | RUC: 20375779448 Este es un mensaje automático de notificación de deuda. Consultas: +51 998 080 797_"
@@ -45,7 +73,7 @@ def render_tab(df_filtered, config):
                 else:
                     st.error("❌ No se pudo guardar la plantilla.")
             
-            st.caption("Variables: `{EMPRESA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
+            st.caption("Variables: `{EMPRESA}`, `{RESUMEN_DEUDA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
 
         with c2:
             st.markdown("##### Enviar Mensajes")
@@ -56,6 +84,31 @@ def render_tab(df_filtered, config):
             # Filtrar solo clientes con deuda positiva (opcional, pero lógico para cobrar)
             client_group = client_group[client_group['SALDO REAL'] > 0]
 
+            # --- RC-FEAT-WA-UX: KPIs + "Ocultar ya enviados hoy" (estándar con Email tab) ---
+            today_str_wa = date.today().strftime('%Y-%m-%d')
+            df_ssot = st.session_state.get('df_final', pd.DataFrame())
+            if not df_ssot.empty and 'ESTADO_WHATSAPP' in df_ssot.columns and 'FECHA_ULTIMO_WA' in df_ssot.columns:
+                mask_wa_env = df_ssot['ESTADO_WHATSAPP'] == 'ENVIADO'
+                mask_wa_hoy = df_ssot['FECHA_ULTIMO_WA'].astype(str).str.startswith(today_str_wa)
+                clientes_wa_hoy_count = df_ssot[mask_wa_env & mask_wa_hoy]['COD CLIENTE'].nunique()
+                cods_wa_env_hoy = df_ssot[mask_wa_env & mask_wa_hoy]['COD CLIENTE'].unique()
+            else:
+                clientes_wa_hoy_count = 0
+                cods_wa_env_hoy = []
+
+            c_wa_s1, c_wa_s2, c_wa_ctrl = st.columns([1, 1, 2])
+            hide_wa_sent = c_wa_ctrl.toggle(
+                "🙈 Ocultar ya enviados hoy", value=True,
+                help="Oculta clientes que ya recibieron WhatsApp hoy."
+            )
+            if hide_wa_sent and len(cods_wa_env_hoy) > 0:
+                client_group = client_group[~client_group['COD CLIENTE'].isin(cods_wa_env_hoy)]
+
+            pendientes_wa = len(client_group)
+            c_wa_s1.metric("⏳ Pendientes WA", pendientes_wa)
+            c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count)
+            st.markdown("---")
+
             # Crear lista de opciones formateada
             client_options = []
             client_map = {}
@@ -64,16 +117,23 @@ def render_tab(df_filtered, config):
                 client_options.append(label)
                 client_map[label] = row['COD CLIENTE']
             
-            # Checkbox para seleccionar todos
+            # Multiselect con session_state (igual que Email tab para consistencia)
+            if "wa_sel_key" not in st.session_state:
+                st.session_state["wa_sel_key"] = []
+            # Limpiar selección si las opciones cambiaron (evita crash de Streamlit)
+            valid_wa_opts = set(client_options)
+            st.session_state["wa_sel_key"] = [x for x in st.session_state["wa_sel_key"] if x in valid_wa_opts]
+
+            def select_all_wa_callback():
+                st.session_state["wa_sel_key"] = client_options
+
             col_sel1, col_sel2 = st.columns([3, 1])
             selected_labels = col_sel1.multiselect(
-                "Seleccione Clientes a Notificar:",
+                f"Seleccione Clientes a Notificar ({len(client_options)} disponibles):",
                 options=client_options,
-                default=[] # Por defecto ninguno seleccionado para evitar spam accidental
+                key="wa_sel_key"
             )
-            
-            if col_sel2.button("Seleccionar Todos"):
-                selected_labels = client_options
+            col_sel2.button("Seleccionar Todos", on_click=select_all_wa_callback)
 
             st.info(f"Se generarán enlaces para **{len(selected_labels)}** clientes seleccionados.")
             
@@ -220,7 +280,29 @@ def render_tab(df_filtered, config):
                     sum_d_cli = df_dol_cli['SALDO REAL'].sum() if len(df_dol_cli) > 0 else 0
                     count_s_cli = len(df_sol_cli)
                     count_d_cli = len(df_dol_cli)
-                    
+
+                    # RC-FEAT-019: Detracciones pendientes (igual que email_sender.py)
+                    try:
+                        mask_det_cli = (
+                            (docs_cli['DETRACCIÓN'] > 0.01) &
+                            (docs_cli['ESTADO DETRACCION'].astype(str).str.strip().str.upper() == 'PENDIENTE')
+                        )
+                        df_detr_cli = docs_cli[mask_det_cli]
+                        sum_detr_cli = df_detr_cli['DETRACCIÓN'].sum()
+                        count_detr_cli = len(df_detr_cli)
+                    except Exception:
+                        sum_detr_cli, count_detr_cli = 0.0, 0
+
+                    # RC-FEAT-019: Bloque resumen igual al correo (3 líneas estándar)
+                    kpi_s_wa = f"S/ {sum_s_cli:,.2f} ({count_s_cli:02d} documentos)" if (sum_s_cli > 0 or count_s_cli > 0) else "S/ 0.00 (00 documentos)"
+                    kpi_d_wa = f"US$ {sum_d_cli:,.2f} ({count_d_cli:02d} documentos)" if (sum_d_cli > 0 or count_d_cli > 0) else "US$ 0.00 (00 documentos)"
+                    kpi_sunat_wa = f"S/ {sum_detr_cli:,.2f} ({count_detr_cli:02d} documentos afectos)"
+                    resumen_deuda_wa = (
+                        f"• Deuda Total Soles: {kpi_s_wa}\n"
+                        f"• Deuda Total Dólares: {kpi_d_wa}\n"
+                        f"• Detracciones SUNAT Pendientes: {kpi_sunat_wa}"
+                    )
+
                     # Data dict for replacement (and sending)
                     contact_data = {
                         'nombre_cliente': empresa,
@@ -229,7 +311,7 @@ def render_tab(df_filtered, config):
                         'DETALLE_DOCS': txt_detalle,
                         'TOTAL_SALDO_REAL': total_real_str,
                         'TOTAL_SALDO_ORIGINAL': f"{total_orig_val:,.2f}",
-                        'venta_neta': total_orig_val, 
+                        'venta_neta': total_orig_val,
                         'numero_transacciones': len(docs_cli),
                         # NUEVO v5.0: Datos para tarjeta ejecutiva y PDF
                         'docs_df': docs_cli,  # DataFrame completo de documentos
@@ -237,11 +319,13 @@ def render_tab(df_filtered, config):
                         'TOTAL_SALDO_D': f"$ {sum_d_cli:,.2f}",
                         'COUNT_DOCS_S': count_s_cli,
                         'COUNT_DOCS_D': count_d_cli,
-                        'cod_cliente': cod_cli  # Para referencia
+                        'cod_cliente': cod_cli,  # Para referencia
+                        'RESUMEN_DEUDA': resumen_deuda_wa,  # RC-FEAT-019
                     }
                     
                     msg_preview = template
                     msg_preview = msg_preview.replace("{EMPRESA}", str(empresa))
+                    msg_preview = msg_preview.replace("{RESUMEN_DEUDA}", contact_data['RESUMEN_DEUDA'])
                     msg_preview = msg_preview.replace("{DETALLE_DOCS}", txt_detalle)
                     msg_preview = msg_preview.replace("{TOTAL_SALDO_REAL}", contact_data['TOTAL_SALDO_REAL'])
                     msg_preview = msg_preview.replace("{TOTAL_SALDO_ORIGINAL}", contact_data['TOTAL_SALDO_ORIGINAL'])
@@ -402,11 +486,24 @@ def render_tab(df_filtered, config):
                 
 
             
-            # Separador eliminado por solicitud de UI limpia
+            # --- Batch lock (igual que Email tab) ---
+            if contacts_to_send:
+                current_wa_batch_id = f"{len(contacts_to_send)}_{hash(tuple(sorted(c['nombre_cliente'] for c in contacts_to_send)))}"
+            else:
+                current_wa_batch_id = None
 
-            
-            # BOTON NUEVO: ENVIAR WHATSAPP (Selenium)
-            if st.button("Enviar Mensajes por WhatsApp", type="primary"):
+            if 'last_wa_batch_id' not in st.session_state:
+                st.session_state['last_wa_batch_id'] = None
+            is_wa_processed = bool(current_wa_batch_id and st.session_state['last_wa_batch_id'] == current_wa_batch_id)
+
+            if is_wa_processed:
+                st.info("ℹ️ Este lote WA ya fue procesado. Cambia la selección o recarga (F5) para enviar otro.")
+                if st.button("🔄 Resetear Bloqueo WA"):
+                    st.session_state['last_wa_batch_id'] = None
+                    st.rerun()
+
+            # BOTON ENVIAR WHATSAPP
+            if st.button("Enviar Mensajes por WhatsApp", type="primary", disabled=is_wa_processed):
                 # --- DEDUPLICACIÓN DE SEGURIDAD ---
                 # Aseguramos que no se envíen mensajes dobles si hubo duplicados en la lista UI
                 seen_keys = set()
@@ -491,15 +588,51 @@ def render_tab(df_filtered, config):
                         logo_path=logo_path          # NUEVO v5.0: Ruta al logo
                     )
                     
-                    st.success("✅ Proceso Finalizado")
-                    
-                    # Mostrar resumen final limpio
-                    col_res1, col_res2 = st.columns(2)
-                    col_res1.metric("Exitosos", results['exitosos'])
-                    col_res2.metric("Fallidos", results['fallidos'])
-                    
-                    if results['fallidos'] > 0:
-                        st.error("Algunos mensajes fallaron. Revisa el log técnico.")
+                    # --- RC-FEAT-018: Persistir envíos en gestiones (Supabase) ---
+                    now_wa = datetime.now()
+                    resultado_lote = 'EXITOSO' if results['exitosos'] > 0 else 'FALLIDO'
+                    persisted_wa = 0
+                    for contact in contacts_to_send:
+                        cod = str(contact.get('cod_cliente', '')).strip()
+                        if not cod:
+                            continue
+                        ok, _ = dbm.insert_gestion(
+                            cliente_id=cod,
+                            tipo_gestion='WHATSAPP',
+                            resultado=resultado_lote,
+                            notas=f"WA masivo | {contact.get('TOTAL_SALDO_REAL', '')} | Tel: {contact.get('telefono', '')}",
+                            fecha=now_wa.isoformat(),
+                        )
+                        if ok:
+                            persisted_wa += 1
+
+                    # Actualizar df_final en session_state con tracking WA
+                    if 'df_final' in st.session_state and not st.session_state['df_final'].empty:
+                        cods_enviados = {str(c.get('cod_cliente', '')).strip() for c in contacts_to_send}
+                        wa_ts = now_wa.strftime('%Y-%m-%d %H:%M:%S')
+                        mask_wa = st.session_state['df_final']['COD CLIENTE'].astype(str).str.strip().isin(cods_enviados)
+                        if 'ESTADO_WHATSAPP' in st.session_state['df_final'].columns:
+                            st.session_state['df_final'].loc[mask_wa, 'ESTADO_WHATSAPP'] = 'ENVIADO'
+                        if 'FECHA_ULTIMO_WA' in st.session_state['df_final'].columns:
+                            st.session_state['df_final'].loc[mask_wa, 'FECHA_ULTIMO_WA'] = wa_ts
+
+                    # --- RC-FEAT-WA-UX: Guardar resultados + rerun (igual que Email tab) ---
+                    wa_details = []
+                    for c in contacts_to_send:
+                        wa_details.append({
+                            'Cliente': c['nombre_cliente'],
+                            'Teléfono': c['telefono'],
+                            'Estado': '✅ Enviado' if resultado_lote == 'EXITOSO' else '❌ Fallido',
+                            'Deuda': c.get('TOTAL_SALDO_REAL', ''),
+                        })
+                    st.session_state['last_wa_send_results'] = {
+                        'exitosos': results['exitosos'],
+                        'fallidos': results['fallidos'],
+                        'details': wa_details,
+                    }
+                    if current_wa_batch_id:
+                        st.session_state['last_wa_batch_id'] = current_wa_batch_id
+                    st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
                     import traceback

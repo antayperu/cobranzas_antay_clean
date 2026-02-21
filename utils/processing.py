@@ -1,5 +1,16 @@
 import pandas as pd
 import numpy as np
+
+
+def _normalize_enviar_email(value) -> str:
+    raw = str(value).strip().upper()
+    if raw in {"SI", "SÍ", "YES", "Y", "1", "TRUE", "ENVIAR"}:
+        return "SI"
+    if raw in {"NO", "N", "0", "FALSE", "NO ENVIAR"}:
+        return "NO"
+    if raw in {"", "NAN", "NAT", "NONE", "NULL", "SIN CONFIGURAR", "SINCONFIGURAR"}:
+        return "SIN CONFIGURAR"
+    return raw
 from datetime import date
 
 def format_phone(phone):
@@ -107,7 +118,7 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     # Validar Columna NOTA
     col_nota = None
     for c in df_cartera.columns:
-        if str(c).upper().strip() == 'NOTA':
+        if str(c).upper().strip() in {'NOTA', 'NOTAS'}:
             col_nota = c
             break
             
@@ -121,17 +132,19 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     # Validar Columna ENVIAR EMAIL (RC-FEAT-EMAIL-FILTER)
     col_enviar_email = None
     for c in df_cartera.columns:
-        if str(c).strip() == 'Enviar Email':
+        col_norm = str(c).strip().upper().replace("_", " ")
+        if col_norm == 'ENVIAR EMAIL':
             col_enviar_email = c
             break
             
     if col_enviar_email:
-        df_cartera['Enviar Email'] = df_cartera[col_enviar_email].astype(str)
-        # Limpiar 'nan' strings
-        df_cartera['Enviar Email'] = df_cartera['Enviar Email'].replace({'nan': '', 'nat': '', 'none': ''})
+        df_cartera['Enviar Email'] = df_cartera[col_enviar_email].apply(_normalize_enviar_email)
     else:
-        # Si no existe la columna, crear con valor por defecto
-        df_cartera['Enviar Email'] = "SIN CONFIGURAR"
+        # Si no existe columna en cartera maestra, inferir por disponibilidad de correo.
+        # Regla operativa: con correo -> SI, sin correo -> NO.
+        df_cartera['Enviar Email'] = df_cartera['EMAIL_FINAL'].apply(
+            lambda v: "SI" if str(v).strip() else "NO"
+        )
 
     df_merged = pd.merge(
         df_ctas, 
@@ -466,14 +479,17 @@ def process_data(df_ctas, df_cartera, df_cobranza):
     # Se usa EMAIL_FINAL como fuente (limpia), pero se expone como CORREO
     df_merged['CORREO'] = df_merged['EMAIL_FINAL']
 
-    # --- SSOT: Initialize Email Tracking Columns (ONLY 2 as per STOP THE LINE) ---
-    # These columns track email send status and should ONLY be updated after actual sends
-    df_merged['ESTADO_EMAIL'] = "PENDIENTE"  # Default status: PENDIENTE | ENVIADO | FALLIDO
-    df_merged['FECHA_ULTIMO_ENVIO'] = ""  # Empty by default, will be timestamp string after send
+    # --- SSOT: Initialize Tracking Columns ---
+    # Email tracking
+    df_merged['ESTADO_EMAIL'] = "PENDIENTE"  # PENDIENTE | ENVIADO | FALLIDO
+    df_merged['FECHA_ULTIMO_ENVIO'] = ""
+    # WhatsApp tracking (RC-FEAT-018)
+    df_merged['ESTADO_WHATSAPP'] = "PENDIENTE"  # PENDIENTE | ENVIADO | FALLIDO
+    df_merged['FECHA_ULTIMO_WA'] = ""
 
     final_cols = [
-        'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'NOTA', 'CORREO', 'TELÉFONO', 
-        'TIPO PEDIDO', 
+        'COD CLIENTE', 'EMPRESA', 'Enviar Email', 'NOTA', 'CORREO', 'TELÉFONO',
+        'TIPO PEDIDO',
         'COMPROBANTE', 'FECH EMIS', 'FECH VENC',
         'DÍAS MORA', 'ESTADO DEUDA',
         'MONEDA',
@@ -482,12 +498,14 @@ def process_data(df_ctas, df_cartera, df_cobranza):
         'SALDO REAL', 'SALDO REAL_DISPLAY',
         'SALDO', 'SALDO_DISPLAY',
         'DETRACCIÓN', 'DETRACCIÓN_DISPLAY',
-        'ESTADO DETRACCION', 
+        'ESTADO DETRACCION',
         'AMORTIZACIONES',
         'MATCH_KEY',
         'EMAIL_FINAL',
-        'ESTADO_EMAIL',  # SSOT tracking column (1 of 2)
-        'FECHA_ULTIMO_ENVIO'  # SSOT tracking column (2 of 2)
+        'ESTADO_EMAIL',
+        'FECHA_ULTIMO_ENVIO',
+        'ESTADO_WHATSAPP',   # RC-FEAT-018: WhatsApp tracking
+        'FECHA_ULTIMO_WA',   # RC-FEAT-018: WhatsApp tracking
     ]
     
     # Filtrar solo columnas existentes (por seguridad, aunque deberian estar todas)

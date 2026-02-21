@@ -186,11 +186,15 @@ def resolve_logo_path(config: Dict[str, Any], target_local_path: Optional[str] =
     output_path = Path(
         target_local_path or os.path.join(os.getcwd(), "assets", "logo_dacta_processed.png")
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    file_bytes = storage.from_(bucket).download(_normalize_storage_path(storage_path))
-    output_path.write_bytes(file_bytes)
-    return str(output_path)
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        file_bytes = storage.from_(bucket).download(_normalize_storage_path(storage_path))
+        output_path.write_bytes(file_bytes)
+        return str(output_path)
+    except Exception:
+        # Runtime fallback: if Storage object is missing or inaccessible,
+        # UI should keep working without logo.
+        return None
 
 
 def delete_logo_assets(config: Dict[str, Any]) -> Dict[str, Any]:

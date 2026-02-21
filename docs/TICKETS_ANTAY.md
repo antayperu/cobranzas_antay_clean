@@ -7,9 +7,9 @@
 
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
-| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 001 |
+| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 017 |
 | **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 000 |
-| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 002 |
+| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 010 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
 | **RC-SEC** | Seguridad | Manejo de datos sensibles, credenciales. | 000 |
@@ -68,10 +68,30 @@
 | **RC-FEAT-015** | **Multi-Client Email Support** (Comma/Semicolon) | **P0** (Critico) | **Done** | Antigravity | 2025-12-30 |
 | **RC-UX-009** | **Email List Visual Truncation** | **P1** (Alto) | **Done** | Antigravity | 2025-12-30 |
 | **RC-FEAT-016** | **New 'CORREO' Column in Report & Export** | **P1** (Alto) | **Done** | Antigravity | 2025-12-30 |
+| **RC-FEAT-017** | **Home Operativo Estricto (2 Archivos)** | **P0** (Critico) | **In Progress** | Antigravity | 2026-02-19 |
+| **RC-UX-010** | **Home Corporativo Premium (Sidebar + Bienvenida)** | **P1** (Alto) | **In Progress** | Antigravity | 2026-02-19 |
+| **RC-BUG-023** | **Fix Encoding Corrupto email_notifications.py (Mojibake CP1252→UTF-8)** | **P0** (Critico) | **Done** | Antigravity | 2026-02-20 |
+| **RC-FEAT-018** | **CRM Centro de Gestiones: Timeline fix + WA tracking + Historial rediseño** | **P1** (Alto) | **Done** | Antigravity | 2026-02-20 |
 
 ---
 
 ## 4. Detalle de Tickets (Últimos 5 activos)
+
+### [RC-FEAT-017] Home Operativo Estricto (2 Archivos)
+- **Descripcion**: Ajustar la UI principal para procesar exclusivamente CtasxCobrar + Cobranza, tomando cartera desde Supabase.
+- **Alcance IN**: Sidebar sin uploader de cartera, validacion de 2 archivos, bloqueo operativo si falta cartera maestra.
+- **Criterios de Aceptacion**:
+    - [x] Sidebar muestra solo 2 uploaders.
+    - [x] Proceso usa cartera maestra Supabase por defecto.
+    - [x] Mensaje de bloqueo dirige al tab Clientes Premium.
+
+### [RC-UX-010] Home Corporativo Premium (Sidebar + Bienvenida)
+- **Descripcion**: Renovar el punto de entrada con lenguaje y visual corporativo alineado a metodologia Antay.
+- **Alcance IN**: Cabecera premium en sidebar, tarjeta de bienvenida con guia operativa, consistencia visual de controles clave.
+- **Criterios de Aceptacion**:
+    - [x] Sidebar con identidad visual corporativa.
+    - [x] Bienvenida principal actualizada al flujo de 2 archivos.
+    - [x] Responsive funcional en desktop/mobile.
 
 ### [RC-FEAT-012] QA Mode (Marcha Blanca) Safe Testing
 - **Descripción**: Implementar un modo de "Marcha Blanca" que permita realizar pruebas end-to-end de envío de correos masivos sin riesgo de contactar clientes reales.

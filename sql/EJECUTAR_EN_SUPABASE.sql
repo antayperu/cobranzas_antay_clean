@@ -32,11 +32,14 @@ CREATE TABLE IF NOT EXISTS clientes (
     cliente_id TEXT UNIQUE NOT NULL,
     nombre TEXT NOT NULL,
     email TEXT,
+    dni TEXT,
     telefono TEXT,
     ruc TEXT,
     direccion TEXT,
+    enviar_email TEXT DEFAULT 'SIN CONFIGURAR',
     estado TEXT DEFAULT 'ACTIVO' CHECK (estado IN ('ACTIVO', 'INACTIVO', 'MOROSO')),
     notas TEXT,
+    extra_fields JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
