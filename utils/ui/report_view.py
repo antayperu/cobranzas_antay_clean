@@ -164,11 +164,13 @@ def render_report(df_filtered):
     report_views = settings.get('report_views', {})
     
     # --- 1. VIEW CONTROLS ---
-    c_title, c_toggle, c_config = st.columns([2, 1, 1])
+    c_title, c_toggle, c_config = st.columns([2, 1.5, 1])
     with c_title:
-        st.write("")
+        cycle_id = st.session_state.get("cycle_id", "")
+        if cycle_id:
+            st.caption(f"Ciclo: **{cycle_id}**")
     with c_toggle:
-        view_mode = st.radio("Modo de Vista", ["Ejecutiva", "Completa"], 
+        view_mode = st.radio("Modo de Vista", ["Ejecutiva", "Completa"],
                              horizontal=True, label_visibility="collapsed")
     with c_config:
         show_config = st.toggle("⚙️ Configurar Vista", False)
