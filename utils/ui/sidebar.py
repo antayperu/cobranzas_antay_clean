@@ -34,7 +34,21 @@ def render_sidebar():
             ts_str = ts.strftime("%d/%m %H:%M") if ts else "--:--"
             row_count = len(st.session_state.get("df_final", []))
             cloud_label = " ☁️" if st.session_state.get("restored_from_cloud", False) else ""
+            cycle_id_display = st.session_state.get("cycle_id", "")
             st.success(f"Sesion activa: {ts_str} ({row_count} filas){cloud_label}")
+            if cycle_id_display:
+                st.caption(f"Ciclo: {cycle_id_display}")
+
+            # Allow switching to a different cloud cycle without full page reload
+            if st.session_state.get("restored_from_cloud", False):
+                if st.button("Cambiar ciclo", type="secondary", key="btn_change_cycle",
+                             help="Volver al selector de ciclos sin recargar la pagina"):
+                    st.session_state["data_ready"] = False
+                    st.session_state["df_final"] = None
+                    st.session_state["restored_from_cloud"] = False
+                    st.session_state["loading_new_files"] = False
+                    st.session_state["confirm_new_load"] = False
+                    st.rerun()
 
             if not st.session_state["confirm_new_load"]:
                 if st.button(

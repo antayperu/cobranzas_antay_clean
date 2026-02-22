@@ -118,8 +118,15 @@ def render_recovery_options() -> None:
     options_map = {}
     for s in sessions:
         ts = s["created_at"]
-        ts_str = ts.strftime("%d/%m %H:%M") if ts else "--"
-        label = f"{s['cycle_id']}  ({ts_str}, {s['row_count']} filas)"
+        ts_str = ts.strftime("%d/%m/%Y %H:%M") if ts else "--"
+        cid = s["cycle_id"]
+        # Format cycle ID for display: CIC- stays full; old format shows date_time only
+        if cid.startswith("CIC-"):
+            id_tag = cid
+        else:
+            parts = cid.split("_")
+            id_tag = "_".join(parts[:2]) if len(parts) >= 2 else cid[:16]
+        label = f"{ts_str}  ·  {s['row_count']} filas  [{id_tag}]"
         options_map[label] = s["cycle_id"]
 
     selected_label = st.selectbox(
