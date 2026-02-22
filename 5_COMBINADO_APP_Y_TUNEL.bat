@@ -1,38 +1,52 @@
 @echo off
 setlocal
-title REPORTE COBRANZAS ANTAY - LANZADOR PROFESIONAL
+cd /d "%~dp0"
+title REPORTE COBRANZAS ANTAY - SERVIDOR QA
 
-:: Configuración de colores (Fondo negro, texto aguamarina)
 color 0B
-
-echo ======================================================
-echo    REPORTE COBRANZAS ANTAY - MODO HIBRIDO (CLOUDFLARE)
-echo ======================================================
+echo ============================================================
+echo   REPORTE COBRANZAS ANTAY - APP + TUNEL (Puerto 8503)
+echo ============================================================
 echo.
-echo [1/3] Verificando entorno Python...
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERROR] Python no esta en el PATH.
+
+echo [0/4] Limpiando estado de sesion anterior...
+del /f /q url_sent.lock 2>nul
+del /f /q tunnel.log 2>nul
+
+echo [1/4] Iniciando App Streamlit (puerto 8503)...
+start /b cmd /c "call venv_prod\Scripts\activate && streamlit run app.py --server.port 8503 --server.headless true"
+
+echo [2/4] Iniciando Tunel Cloudflare...
+if exist cloudflared.exe (
+    echo Iniciando tunel... > tunnel.log
+    start /b cmd /c "cloudflared.exe tunnel --url http://localhost:8503 > tunnel.log 2>&1"
+
+    echo [3/4] Esperando URL del tunel...
+    timeout /t 8 >nul
+    call venv_prod\Scripts\activate && python modules\url_notifier.py
+) else (
+    echo [ERROR] No se encontro cloudflared.exe
     pause
     exit /b
 )
 
-echo [2/3] Lanzando Aplicacion Streamlit en segundo plano...
-:: Usamos taskkill para limpiar sesiones previas en el puerto 8501 si las hubiera
-taskkill /f /im python.exe /fi "windowtitle eq Streamlit*" >nul 2>&1
-start "StreamlitApp" /b cmd /c "python -m streamlit run app.py --server.port 8501 --server.headless true"
+echo.
+echo [4/4] Sistema iniciado. Monitoreo activo...
+echo ============================================================
+timeout /t 10 >nul
 
-echo [3/3] Iniciando Tunel PROFESIONAL (Cloudflare)...
+:monitor_loop
+cls
+echo ============================================================
+echo   REPORTE COBRANZAS ANTAY - EJECUTANDOSE EN SERVIDOR QA
+echo ============================================================
 echo.
-echo    ESTABLECIENDO CONEXION SEGURA...
-echo    (Esto tardara unos segundos)
+echo  [!] NO CIERRES ESTA VENTANA  [!]
+echo      Puedes minimizarla.
 echo.
-echo    Paciencia: npm esta preparando el tunel...
-echo.
-
-:: Corregido: el paquete es 'cloudflared' directamente
-npx -y cloudflared tunnel --url http://localhost:8501
-
-echo.
-echo Aplicacion cerrada o error en el tunel.
-pause
+echo  Estado: ACTIVO
+echo  Hora  : %TIME%
+echo  Puerto: 8503
+echo ============================================================
+timeout /t 60 >nul
+goto monitor_loop
