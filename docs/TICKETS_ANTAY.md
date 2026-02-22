@@ -7,15 +7,15 @@
 
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
-| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 017 |
+| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 018 |
 | **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 000 |
-| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 010 |
+| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 012 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
 | **RC-SEC** | Seguridad | Manejo de datos sensibles, credenciales. | 000 |
 | **RC-QA** | Calidad | Pruebas, validaciones, checklists. | 002 |
 | **RC-DOC** | Documentación | Guías, manuales, actualización de estados. | 000 |
-| **RC-OPS** | Operación | Configuración, despliegue, limpieza. | 001 |
+| **RC-OPS** | Operación | Configuración, despliegue, limpieza. | 003 |
 
 ## 2. Flujo de Estados
 
@@ -72,6 +72,9 @@
 | **RC-UX-010** | **Home Corporativo Premium (Sidebar + Bienvenida)** | **P1** (Alto) | **In Progress** | Antigravity | 2026-02-19 |
 | **RC-BUG-023** | **Fix Encoding Corrupto email_notifications.py (Mojibake CP1252→UTF-8)** | **P0** (Critico) | **Done** | Antigravity | 2026-02-20 |
 | **RC-FEAT-018** | **CRM Centro de Gestiones: Timeline fix + WA tracking + Historial rediseño** | **P1** (Alto) | **Done** | Antigravity | 2026-02-20 |
+| **RC-UX-011** | **CRM Gestiones — Buscar cliente con searchable selectbox** | **P1** (Alto) | **Done** | Antigravity | 2026-02-21 |
+| **RC-UX-012** | **Clientes Premium — Layout mejorado (separador KPIs + filtros + botones)** | **P1** (Alto) | **Done** | Antigravity | 2026-02-21 |
+| **RC-OPS-003** | **Deploy en servidor QA antay-cobranza (puerto 8503, autostart, cloudflare)** | **P0** (Critico) | **Done** | Antigravity | 2026-02-21 |
 
 ---
 
@@ -135,6 +138,33 @@
     - [ ] Radio button o Selectbox en UI.
     - [ ] La lógica de envío respeta la selección estrictamente.
     - [ ] UI se adapta (muestra/oculta opciones de PDF) según selección.
+
+### [RC-UX-011] CRM Gestiones — Buscar cliente con searchable selectbox
+- **Descripcion**: Reemplazar el flujo de 2 pasos (text_input + selectbox condicional) por un único `st.selectbox` preloaded con todos los clientes de Supabase + ciclo activo.
+- **Commit**: `596001b` — release v1.7.1
+- **Criterios de Aceptacion**:
+    - [x] Selectbox preloaded con clientes Supabase + ciclo activo combinados.
+    - [x] Busqueda nativa por codigo o nombre.
+    - [x] Sin selectbox condicional ni text_input previo.
+
+### [RC-UX-012] Clientes Premium — Layout mejorado
+- **Descripcion**: Mejorar distribución visual del TAB Clientes Premium: separador post-KPIs, filtros con labels visibles, botones Agregar/Importar/Eliminar en misma fila que filtros.
+- **Commit**: `596001b` — release v1.7.1
+- **Criterios de Aceptacion**:
+    - [x] Separador `---` entre KPIs y zona de filtros.
+    - [x] Labels visibles en filtros Estado y Enviar Email.
+    - [x] Botones de accion alineados horizontalmente con los filtros.
+
+### [RC-OPS-003] Deploy en servidor QA antay-cobranza
+- **Descripcion**: Instalar y configurar la app en `\\QA\antay-cobranza` (C:\antay-cobranza) para operacion permanente en servidor siempre encendido con acceso remoto via Cloudflare Tunnel.
+- **Commit**: `596001b` — release v1.7.1
+- **Criterios de Aceptacion**:
+    - [x] Repo clonado desde GitHub (antayperu/cobranzas_antay_clean).
+    - [x] venv_prod con supabase>=2.27.3 y websockets>=13,<16.
+    - [x] cloudflared.exe + url_notifier.py envia URL al correo al arrancar.
+    - [x] Puerto 8503 (8501/8502 ocupados por otras apps).
+    - [x] Tarea Windows `CobranzasAntayAutoStart` registrada (onlogon).
+    - [x] App accesible via URL Cloudflare desde cualquier red.
 
 ---
 *Fin del documento.*

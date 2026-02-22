@@ -1,7 +1,7 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-02-19  
-Version actual: v1.7.0  
+Ultima actualizacion: 2026-02-21
+Version actual: v1.7.1
 Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + paridad de export + notificaciones por cliente + integridad/no-match + mantenimiento de clientes + reporte premium + quality gates + seguridad operacional + backup/restore completados. Iniciativa de Storage (SUPABASE-002) completada.
 
 ---
@@ -179,7 +179,7 @@ Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + par
 - Estado: Pendiente
 
 ### FEATURE-002: Clientes Premium (Cartera Maestra + TAB Independiente)
-- Estado: En Progreso
+- Estado: Completado
 - Dependencias: SUPABASE-MIG-001, SUPABASE-MIG-005
 - Referencia FRD:
   - `docs/FRD_CLIENTES_PREMIUM_v1.0.md`
@@ -194,7 +194,7 @@ Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + par
   - [x] Flujo principal 2 archivos operativo con cartera maestra.
 
 ### FEATURE-004: Home Operativo Estricto (2 Archivos)
-- Estado: In Progress
+- Estado: Completado
 - Dependencias: FEATURE-002
 - Referencia FRD:
   - `docs/FRD_CLIENTES_PREMIUM_v1.0.md`
@@ -209,7 +209,7 @@ Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + par
   - [x] Si no hay cartera maestra, se bloquea ciclo con mensaje operativo.
 
 ### FEATURE-005: UX Corporativo Premium del Home
-- Estado: In Progress
+- Estado: Completado
 - Dependencias: FEATURE-004
 - Referencia FRD:
   - `docs/FRD_CLIENTES_PREMIUM_v1.0.md`
