@@ -379,6 +379,7 @@ def persist_notification_event(
     match_keys: Optional[Iterable[str]] = None,
     documento_id: Optional[str] = None,
     metadata_extra: Optional[Dict[str, Any]] = None,
+    cycle_id: Optional[str] = None,
 ) -> bool:
     client = get_supabase_client()
     if not client:
@@ -409,6 +410,7 @@ def persist_notification_event(
         "cliente_id": str(cliente_id).strip() if cliente_id else None,
         "documento_id": str(documento_id).strip() if documento_id else None,
         "metadata": metadata,
+        "cycle_id": str(cycle_id).strip() if cycle_id else None,
     }
 
     try:
@@ -417,6 +419,76 @@ def persist_notification_event(
     except Exception as e:
         print(f"persist_notification_event Error: {e}")
         return False
+
+
+def get_notifications_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
+    """Devuelve todas las notificaciones de un ciclo para reconciliar tracking."""
+    if not cycle_id:
+        return []
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        res = _safe_execute(
+            client.table("notificaciones")
+            .select("cliente_id, estado, fecha_envio, created_at, metadata")
+            .eq("cycle_id", str(cycle_id).strip())
+            .order("created_at", desc=False)
+        )
+        return res.data or []
+    except Exception as e:
+        print(f"get_notifications_by_cycle Error: {e}")
+        return []
+
+
+def reconcile_tracking_from_notifications(
+    df: "pd.DataFrame",
+    cycle_id: str,
+) -> "pd.DataFrame":
+    """
+    Reconstruye ESTADO_EMAIL / FECHA_ULTIMO_ENVIO / ESTADO_WHATSAPP / FECHA_ULTIMO_WA
+    en df_final cruzando con la tabla notificaciones filtrada por cycle_id.
+    Retorna el df actualizado.
+    """
+    notifs = get_notifications_by_cycle(cycle_id)
+    if not notifs:
+        return df
+
+    df = df.copy()
+
+    for notif in notifs:
+        estado = str(notif.get("estado", "")).strip().upper()
+        if estado != "ENVIADO":
+            continue
+
+        cliente_id = str(notif.get("cliente_id") or "").strip()
+        fecha = str(notif.get("fecha_envio") or notif.get("created_at", ""))[:19]
+        meta = notif.get("metadata") or {}
+        channel = str(meta.get("channel", "EMAIL")).strip().upper()
+        match_keys = meta.get("match_keys") or []
+
+        if channel == "EMAIL":
+            if match_keys:
+                mask = df["MATCH_KEY"].astype(str).isin([str(mk) for mk in match_keys])
+            else:
+                mask = df["COD CLIENTE"].astype(str).str.strip() == cliente_id
+            if mask.any():
+                if "ESTADO_EMAIL" in df.columns:
+                    df.loc[mask, "ESTADO_EMAIL"] = "ENVIADO"
+                if "FECHA_ULTIMO_ENVIO" in df.columns:
+                    df.loc[mask, "FECHA_ULTIMO_ENVIO"] = fecha
+                if "ESTADO_ENVIO_TEXTO" in df.columns:
+                    hora = fecha[11:16] if len(fecha) >= 16 else ""
+                    df.loc[mask, "ESTADO_ENVIO_TEXTO"] = f"ENVIADO ({hora})" if hora else "ENVIADO"
+        elif channel == "WHATSAPP":
+            mask = df["COD CLIENTE"].astype(str).str.strip() == cliente_id
+            if mask.any():
+                if "ESTADO_WHATSAPP" in df.columns:
+                    df.loc[mask, "ESTADO_WHATSAPP"] = "ENVIADO"
+                if "FECHA_ULTIMO_WA" in df.columns:
+                    df.loc[mask, "FECHA_ULTIMO_WA"] = fecha
+
+    return df
 
 
 def get_documento_id_by_numero(cliente_id: str, numero_documento: str) -> Optional[str]:

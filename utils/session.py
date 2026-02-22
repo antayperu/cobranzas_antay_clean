@@ -27,11 +27,16 @@ def attempt_auto_restore() -> bool:
         if df is None or df.empty:
             return False
 
+        cycle_id = (metadata or {}).get("cycle_id", "restored")
+
+        import utils.db_manager as dbm
+        df = dbm.reconcile_tracking_from_notifications(df, cycle_id)
+
         st.session_state["df_final"] = df
         st.session_state["data_ready"] = True
         st.session_state["fresh_load"] = False
         st.session_state["restored_from_cloud"] = True
-        st.session_state["cycle_id"] = (metadata or {}).get("cycle_id", "restored")
+        st.session_state["cycle_id"] = cycle_id
 
         if created_at:
             st.session_state["session_start_ts"] = created_at
@@ -42,6 +47,37 @@ def attempt_auto_restore() -> bool:
         return True
     except Exception as e:
         print(f"Auto-restore error: {e}")
+        return False
+
+
+def restore_session_by_id(cycle_id: str) -> bool:
+    """
+    Restore a specific cycle by ID and reconcile notification tracking.
+    Returns True if session was restored successfully.
+    """
+    try:
+        df, metadata, created_at = state_mgr.load_session_by_id(cycle_id)
+        if df is None or df.empty:
+            return False
+
+        import utils.db_manager as dbm
+        df = dbm.reconcile_tracking_from_notifications(df, cycle_id)
+
+        st.session_state["df_final"] = df
+        st.session_state["data_ready"] = True
+        st.session_state["fresh_load"] = False
+        st.session_state["restored_from_cloud"] = True
+        st.session_state["cycle_id"] = cycle_id
+
+        if created_at:
+            st.session_state["session_start_ts"] = created_at
+        else:
+            st.session_state["session_start_ts"] = datetime.now()
+
+        st.session_state["session_metadata"] = metadata or {}
+        return True
+    except Exception as e:
+        print(f"restore_session_by_id error: {e}")
         return False
 
 
@@ -57,45 +93,57 @@ def get_cloud_session_info():
 
 def render_recovery_options() -> None:
     """
-    Show recovery banner in sidebar if a cloud session exists.
-    User can choose to continue or start fresh.
+    Show cycle selector in sidebar if cloud sessions exist.
+    User can choose which cycle to restore or start a new one.
     """
     if st.session_state.get("data_ready", False):
         return
     if st.session_state.get("loading_new_files", False):
         return
 
-    has_session, created_at, metadata = get_cloud_session_info()
-    if not has_session:
+    sessions = state_mgr.list_sessions_cloud(limit=10)
+    if not sessions:
         return
 
-    row_count = (metadata or {}).get("row_count", 0)
-    ts_str = "--"
-    if created_at:
-        try:
-            ts_str = created_at.strftime("%d/%m/%Y %H:%M")
-        except Exception:
-            ts_str = str(created_at)[:16]
-
     st.markdown(
-        f"""
+        """
         <div class="antay-inline-note antay-animate-in">
-            <strong>Sesion anterior encontrada</strong><br>
-            <span style="font-size:0.82rem;">{ts_str} &mdash; {row_count} registros</span>
+            <strong>Ciclos disponibles en la nube</strong><br>
+            <span style="font-size:0.82rem;">Selecciona un ciclo para restaurar o inicia uno nuevo.</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    options_map = {}
+    for s in sessions:
+        ts = s["created_at"]
+        ts_str = ts.strftime("%d/%m %H:%M") if ts else "--"
+        label = f"{s['cycle_id']}  ({ts_str}, {s['row_count']} filas)"
+        options_map[label] = s["cycle_id"]
+
+    selected_label = st.selectbox(
+        "Ciclo:",
+        list(options_map.keys()),
+        key="cycle_selector_box",
+    )
+    selected_cycle_id = options_map[selected_label]
+
+    sel = next((s for s in sessions if s["cycle_id"] == selected_cycle_id), None)
+    if sel:
+        st.caption(
+            f"Archivo: {sel['file_ctas']}  |  Corte: {sel['fecha_corte']}"
+        )
+
     col_restore, col_new = st.columns(2)
     with col_restore:
-        if st.button("Continuar sesion", type="primary", key="btn_restore_cloud"):
-            restored = attempt_auto_restore()
+        if st.button("Recuperar", type="primary", key="btn_restore_cloud"):
+            restored = restore_session_by_id(selected_cycle_id)
             if restored:
-                st.toast("Sesion restaurada desde la nube", icon="☁️")
+                st.toast(f"Ciclo {selected_cycle_id} restaurado ☁️")
                 st.rerun()
             else:
-                st.warning("No se pudo restaurar la sesion.")
+                st.warning("No se pudo restaurar el ciclo.")
     with col_new:
         if st.button("Nuevo ciclo", type="secondary", key="btn_new_cycle"):
             st.session_state["loading_new_files"] = True

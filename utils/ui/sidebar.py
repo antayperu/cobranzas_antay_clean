@@ -1,8 +1,6 @@
 import streamlit as st
 from datetime import date
 
-import utils.state_manager as state_mgr
-
 
 def _render_sidebar_header() -> None:
     today_label = date.today().strftime("%d %b %Y")
@@ -61,9 +59,8 @@ def render_sidebar():
                         st.session_state["df_final"] = None
                         st.session_state["fresh_load"] = True
                         st.session_state["confirm_new_load"] = False
-                        state_mgr.clear_session()
                         st.session_state["loading_new_files"] = True
-                        st.toast("Sesion limpiada. Lista para nuevo ciclo.")
+                        st.toast("Listo para nuevo ciclo.")
                         st.rerun()
 
                 with col_no:

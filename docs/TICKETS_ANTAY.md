@@ -15,7 +15,7 @@
 | **RC-SEC** | Seguridad | Manejo de datos sensibles, credenciales. | 000 |
 | **RC-QA** | Calidad | Pruebas, validaciones, checklists. | 002 |
 | **RC-DOC** | Documentación | Guías, manuales, actualización de estados. | 000 |
-| **RC-OPS** | Operación | Configuración, despliegue, limpieza. | 003 |
+| **RC-OPS** | Operación | Configuración, despliegue, limpieza. | 004 |
 
 ## 2. Flujo de Estados
 
@@ -75,10 +75,21 @@
 | **RC-UX-011** | **CRM Gestiones — Buscar cliente con searchable selectbox** | **P1** (Alto) | **Done** | Antigravity | 2026-02-21 |
 | **RC-UX-012** | **Clientes Premium — Layout mejorado (separador KPIs + filtros + botones)** | **P1** (Alto) | **Done** | Antigravity | 2026-02-21 |
 | **RC-OPS-003** | **Deploy en servidor QA antay-cobranza (puerto 8503, autostart, cloudflare)** | **P0** (Critico) | **Done** | Antigravity | 2026-02-21 |
+| **RC-OPS-004** | **Ciclos Persistentes con Tracking Reconciliado (cycle_id + selector + reconcile)** | **P0** (Critico) | **In Progress** | Antigravity | 2026-02-22 |
 
 ---
 
 ## 4. Detalle de Tickets (Últimos 5 activos)
+
+### [RC-OPS-004] Ciclos Persistentes con Tracking Reconciliado
+- **Descripcion**: Al restaurar un ciclo anterior, ESTADO_EMAIL aparecia en blanco aunque los correos ya habian sido enviados. El tracking solo vivia en memoria y nunca se reconciliaba con la tabla notificaciones.
+- **Alcance IN**: SQL ALTER TABLE notificaciones ADD COLUMN cycle_id. Funcion reconcile en db_manager. Selector de ciclos en sidebar (tabla con ID, archivo, filas, enviados). state_manager lista y carga ciclos por ID. email y whatsapp pasan cycle_id al persistir.
+- **Criterios de Aceptacion**:
+    - [ ] cycle_id columna existe en notificaciones.
+    - [ ] Al restaurar ciclo X, ESTADO_EMAIL se reconstruye desde notificaciones WHERE cycle_id = X.
+    - [ ] Sidebar muestra lista de todos los ciclos disponibles con info clave.
+    - [ ] Ciclos no se borran al iniciar nuevo procesamiento.
+    - [ ] Excel export refleja tracking correcto tras restaurar.
 
 ### [RC-FEAT-017] Home Operativo Estricto (2 Archivos)
 - **Descripcion**: Ajustar la UI principal para procesar exclusivamente CtasxCobrar + Cobranza, tomando cartera desde Supabase.

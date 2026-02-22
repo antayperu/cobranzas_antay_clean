@@ -592,6 +592,7 @@ def render_tab(df_filtered, config):
                     now_wa = datetime.now()
                     resultado_lote = 'EXITOSO' if results['exitosos'] > 0 else 'FALLIDO'
                     persisted_wa = 0
+                    current_cycle_id = st.session_state.get('cycle_id', 'default_cycle')
                     for contact in contacts_to_send:
                         cod = str(contact.get('cod_cliente', '')).strip()
                         if not cod:
@@ -605,6 +606,16 @@ def render_tab(df_filtered, config):
                         )
                         if ok:
                             persisted_wa += 1
+                        # RC-OPS-004: Persist in notificaciones for cycle tracking reconciliation
+                        dbm.persist_notification_event(
+                            cliente_id=cod,
+                            destinatario=str(contact.get('telefono', '')),
+                            asunto='WhatsApp Estado de Cuenta',
+                            mensaje=contact.get('TOTAL_SALDO_REAL', ''),
+                            status_code='SENT' if resultado_lote == 'EXITOSO' else 'FAILED',
+                            cycle_id=current_cycle_id,
+                            metadata_extra={"channel": "WHATSAPP"},
+                        )
 
                     # Actualizar df_final en session_state con tracking WA
                     if 'df_final' in st.session_state and not st.session_state['df_final'].empty:

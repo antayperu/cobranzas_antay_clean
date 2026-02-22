@@ -559,6 +559,7 @@ def render_tab(df_final, df_filtered, config):
                                     notification_key=(msg_ctx.get('notification_key') if msg_ctx else None),
                                     match_keys=(msg_ctx.get('match_keys') if msg_ctx else None),
                                     documento_id=documento_id_ctx,
+                                    cycle_id=current_cycle_id,
                                     metadata_extra={
                                         "ui_batch_id": str(current_batch_id),
                                         "qa_mode": qa_enabled,

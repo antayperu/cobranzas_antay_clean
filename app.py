@@ -177,12 +177,9 @@ if wizard_action == "PROCESS_TRIGGERED":
                 try:
                     df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
                     
-                    # --- CYCLE_ID: Generar ID único para este ciclo ---
-                    import uuid
+                    # --- CYCLE_ID: Generar ID único para este ciclo (formato legible) ---
                     from datetime import datetime
-                    cycle_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    cycle_uuid = str(uuid.uuid4())[:8]
-                    cycle_id = f"{cycle_timestamp}_{cycle_uuid}"
+                    cycle_id = datetime.now().strftime('CIC-%Y%m%d-%H%M')
                     
                     st.session_state['df_final'] = df_final
                     st.session_state['data_ready'] = True

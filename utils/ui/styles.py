@@ -432,10 +432,14 @@ def kpi_card_dashboard(
             )
     else:
         body = (
-            f"<div style='font-size:20px;font-weight:760;color:{COLORS['text_main']};'>"
-            f"S/: {_fmt_number(value_s, False)}</div>"
-            f"<div style='font-size:16px;font-weight:600;color:{COLORS['text_muted']};'>"
-            f"$: {_fmt_number(value_d, False)}</div>"
+            f"<div style='line-height:1.15;'>"
+            f"<span style='font-size:22px;font-weight:760;color:{COLORS['text_main']};'>{_fmt_number(value_s, False)}</span>"
+            f"<span style='display:block;font-size:10px;font-weight:500;color:{COLORS['text_muted']};letter-spacing:0.4px;text-transform:uppercase;margin-top:2px;'>emitidos en moneda nacional</span>"
+            f"</div>"
+            f"<div style='line-height:1.15;margin-top:8px;'>"
+            f"<span style='font-size:18px;font-weight:700;color:{COLORS['text_muted']};'>{_fmt_number(value_d, False)}</span>"
+            f"<span style='display:block;font-size:10px;font-weight:500;color:{COLORS['text_muted']};letter-spacing:0.4px;text-transform:uppercase;margin-top:2px;'>emitidos en moneda extranjera</span>"
+            f"</div>"
         )
 
     return f"""
