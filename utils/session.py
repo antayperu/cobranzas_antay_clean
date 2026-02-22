@@ -103,6 +103,8 @@ def render_recovery_options() -> None:
 
     sessions = state_mgr.list_sessions_cloud(limit=10)
     if not sessions:
+        # No cloud history → go directly to upload mode
+        st.session_state["loading_new_files"] = True
         return
 
     st.markdown(
@@ -116,17 +118,20 @@ def render_recovery_options() -> None:
     )
 
     options_map = {}
+    seen_labels: dict = {}
     for s in sessions:
         ts = s["created_at"]
-        ts_str = ts.strftime("%d/%m/%Y %H:%M") if ts else "--"
+        ts_str = ts.strftime("%d/%m %H:%M") if ts else "--"
+        # Compact label: date+time + rows. Add seconds to disambiguate same-minute cycles.
         cid = s["cycle_id"]
-        # Format cycle ID for display: CIC- stays full; old format shows date_time only
         if cid.startswith("CIC-"):
-            id_tag = cid
+            suffix = cid[-4:]  # HHMM
         else:
             parts = cid.split("_")
-            id_tag = "_".join(parts[:2]) if len(parts) >= 2 else cid[:16]
-        label = f"{ts_str}  ·  {s['row_count']} filas  [{id_tag}]"
+            suffix = parts[1][4:6] if len(parts) >= 2 and len(parts[1]) >= 6 else cid[-4:]  # SS
+        base_label = f"{ts_str}  ·  {s['row_count']} filas"
+        label = base_label if base_label not in seen_labels else f"{base_label} [{suffix}]"
+        seen_labels[base_label] = True
         options_map[label] = s["cycle_id"]
 
     selected_label = st.selectbox(
@@ -139,7 +144,7 @@ def render_recovery_options() -> None:
     sel = next((s for s in sessions if s["cycle_id"] == selected_cycle_id), None)
     if sel:
         st.caption(
-            f"Archivo: {sel['file_ctas']}  |  Corte: {sel['fecha_corte']}"
+            f"ID: {sel['cycle_id']}  |  {sel['file_ctas']}  |  Corte: {sel['fecha_corte']}"
         )
 
     col_restore, col_new = st.columns(2)

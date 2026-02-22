@@ -230,7 +230,7 @@ def _render_timeline():
 
     # Mapa cliente_id → empresa: Nivel 1 = tabla clientes Supabase, Nivel 2 = ciclo activo
     _nombre_map_tl: Dict[str, str] = dbm.get_clientes_nombres_map()
-    _df_ciclo_tl = st.session_state.get("df_final", pd.DataFrame())
+    _df_ciclo_tl = st.session_state.get("df_final") or pd.DataFrame()
     if not _df_ciclo_tl.empty and "COD CLIENTE" in _df_ciclo_tl.columns and "EMPRESA" in _df_ciclo_tl.columns:
         for _, _r in _df_ciclo_tl[["COD CLIENTE", "EMPRESA"]].drop_duplicates().iterrows():
             _c = str(_r["COD CLIENTE"]).strip()
@@ -342,7 +342,7 @@ def _render_client_drilldown():
     h_date_to   = hf2.date_input("Hasta", value=date.today(), key="hist_date_to")
 
     # ── Mapas desde ciclo activo (saldo, correo, teléfono, estado deuda) ──
-    df_ciclo = st.session_state.get("df_final", pd.DataFrame())
+    df_ciclo = st.session_state.get("df_final") or pd.DataFrame()
     saldo_map: Dict[str, float] = {}
     email_map: Dict[str, str]   = {}
     tel_map:   Dict[str, str]   = {}
@@ -690,7 +690,7 @@ def _render_register_gestion():
 
     # ── Cargar todos los clientes: Supabase + ciclo activo ──────────────────
     nombre_map_reg: Dict[str, str] = dbm.get_clientes_nombres_map()
-    df_ciclo_reg = st.session_state.get("df_final", pd.DataFrame())
+    df_ciclo_reg = st.session_state.get("df_final") or pd.DataFrame()
     if not df_ciclo_reg.empty and "COD CLIENTE" in df_ciclo_reg.columns and "EMPRESA" in df_ciclo_reg.columns:
         for _, _r in df_ciclo_reg[["COD CLIENTE", "EMPRESA"]].drop_duplicates().iterrows():
             _c = str(_r["COD CLIENTE"]).strip()

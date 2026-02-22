@@ -84,7 +84,10 @@ def render_sidebar():
 
             st.markdown("---")
 
-        show_uploaders = not st.session_state.get("data_ready", False)
+        show_uploaders = (
+            not st.session_state.get("data_ready", False)
+            and st.session_state.get("loading_new_files", False)
+        )
         if show_uploaders:
             step_1_done = False
             with st.expander("1. Carga base (2 archivos)", expanded=True):
