@@ -243,7 +243,7 @@ if wizard_action == "PROCESS_TRIGGERED":
                             "fecha_corte": str(st.session_state.get('config_fecha_corte', '')),
                             "row_count": len(df_final),
                             "columns": list(df_final.columns),
-                            "cycle_timestamp": cycle_timestamp,
+                            "cycle_timestamp": cycle_id,
                         },
                     )
                     if ok_cloud:
