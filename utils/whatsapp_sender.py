@@ -105,12 +105,24 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
         options = webdriver.ChromeOptions()
         os.makedirs(WA_SESSION_DIR, exist_ok=True)
 
-        # Limpiar lock files de Chrome antes de iniciar (evita crash por sesion previa)
-        for _lock in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
-            _lock_path = os.path.join(WA_SESSION_DIR, _lock)
+        # Limpiar archivos que causan el dialogo "Chrome no se cerro correctamente"
+        # Las cookies de WhatsApp se guardan en 'Cookies' DB y no se ven afectadas
+        _profile_dir = os.path.join(WA_SESSION_DIR, "Default")
+        _files_to_clean = [
+            # Lock files
+            os.path.join(WA_SESSION_DIR, "SingletonLock"),
+            os.path.join(WA_SESSION_DIR, "SingletonCookie"),
+            os.path.join(WA_SESSION_DIR, "SingletonSocket"),
+            # Session files (causan dialogo de restauracion)
+            os.path.join(_profile_dir, "Last Session"),
+            os.path.join(_profile_dir, "Last Tabs"),
+            os.path.join(_profile_dir, "Current Session"),
+            os.path.join(_profile_dir, "Current Tabs"),
+        ]
+        for _f in _files_to_clean:
             try:
-                if os.path.exists(_lock_path):
-                    os.remove(_lock_path)
+                if os.path.exists(_f):
+                    os.remove(_f)
             except OSError:
                 pass
 
@@ -847,12 +859,24 @@ def send_whatsapp_messages_direct(
         user_data_dir = WA_SESSION_DIR
         os.makedirs(user_data_dir, exist_ok=True)
 
-        # Limpiar lock files de Chrome antes de iniciar (evita crash por sesion previa)
-        for _lock in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
-            _lock_path = os.path.join(user_data_dir, _lock)
+        # Limpiar archivos que causan el dialogo "Chrome no se cerro correctamente"
+        # Las cookies de WhatsApp se guardan en 'Cookies' DB y no se ven afectadas
+        _profile_dir = os.path.join(user_data_dir, "Default")
+        _files_to_clean = [
+            # Lock files
+            os.path.join(user_data_dir, "SingletonLock"),
+            os.path.join(user_data_dir, "SingletonCookie"),
+            os.path.join(user_data_dir, "SingletonSocket"),
+            # Session files (causan dialogo de restauracion)
+            os.path.join(_profile_dir, "Last Session"),
+            os.path.join(_profile_dir, "Last Tabs"),
+            os.path.join(_profile_dir, "Current Session"),
+            os.path.join(_profile_dir, "Current Tabs"),
+        ]
+        for _f in _files_to_clean:
             try:
-                if os.path.exists(_lock_path):
-                    os.remove(_lock_path)
+                if os.path.exists(_f):
+                    os.remove(_f)
             except OSError:
                 pass
 
