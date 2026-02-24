@@ -126,31 +126,15 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
 
         options.add_argument(f"--user-data-dir={WA_SESSION_DIR}")
         options.add_argument("--profile-directory=Default")
-        options.add_argument("--start-maximized")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-software-rasterizer")
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument("--disable-session-crashed-bubble")
-        options.add_argument("--disable-restore-session-state")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
         options.add_argument("--disable-blink-features=AutomationControlled")
 
-        # Detectar binario de Chrome en rutas estándar de Windows
-        _chrome_candidates = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            os.path.join(os.environ.get("LOCALAPPDATA", ""), r"Google\Chrome\Application\chrome.exe"),
-        ]
-        for _path in _chrome_candidates:
-            if _path and os.path.exists(_path):
-                options.binary_location = _path
-                break
-
-        service = Service()
-        driver = webdriver.Chrome(service=service, options=options)
+        driver = webdriver.Chrome(options=options)
 
         driver.get("https://web.whatsapp.com")
         time.sleep(4)
@@ -876,34 +860,17 @@ def send_whatsapp_messages_direct(
 
         options.add_argument(f"--user-data-dir={user_data_dir}")
         options.add_argument("--profile-directory=Default")
-        options.add_argument("--start-maximized")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-software-rasterizer")
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument("--disable-session-crashed-bubble")
-        options.add_argument("--disable-restore-session-state")
-        # Anti-detección básica
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
         options.add_argument("--disable-blink-features=AutomationControlled")
 
-        # Detectar binario de Chrome en rutas estándar de Windows
-        _chrome_candidates = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            os.path.join(os.environ.get("LOCALAPPDATA", ""), r"Google\Chrome\Application\chrome.exe"),
-        ]
-        for _path in _chrome_candidates:
-            if _path and os.path.exists(_path):
-                options.binary_location = _path
-                break
-
         add_log("Abriendo Chrome...")
 
-        service = Service()
-        driver = webdriver.Chrome(service=service, options=options)
+        driver = webdriver.Chrome(options=options)
         wait = WebDriverWait(driver, 30)  # espera general para elementos del chat
 
         # Abrir WhatsApp Web
