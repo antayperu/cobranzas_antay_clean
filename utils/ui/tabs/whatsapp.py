@@ -516,7 +516,14 @@ def render_tab(df_filtered, config):
                 contacts_to_send = unique_contacts
                 # ----------------------------------
 
-                from utils.whatsapp_sender import send_whatsapp_messages_direct
+                from utils.whatsapp_sender import send_whatsapp_messages_direct, _SELENIUM_OK
+                if not _SELENIUM_OK:
+                    st.error(
+                        "**Selenium no está instalado** en este servidor. "
+                        "Ejecuta `_install_deps.bat` en el servidor QA y reinicia la app."
+                    )
+                    st.code("pip install selenium webdriver-manager", language="bash")
+                    st.stop()
                 
                 status_placeholder = st.empty()
                 progress_bar = st.progress(0)

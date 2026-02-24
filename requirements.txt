@@ -7,3 +7,5 @@ sendgrid
 resend
 supabase>=2.27.3
 websockets>=13.0,<16
+selenium
+webdriver-manager
