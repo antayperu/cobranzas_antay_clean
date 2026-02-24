@@ -121,6 +121,8 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920,1080")
+        options.add_argument("--disable-session-crashed-bubble")
+        options.add_argument("--disable-restore-session-state")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
         options.add_argument("--disable-blink-features=AutomationControlled")
@@ -861,6 +863,8 @@ def send_whatsapp_messages_direct(
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920,1080")
+        options.add_argument("--disable-session-crashed-bubble")
+        options.add_argument("--disable-restore-session-state")
         # Anti-detección básica
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
