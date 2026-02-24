@@ -650,8 +650,8 @@ def send_whatsapp_messages_direct(
         from webdriver_manager.chrome import ChromeDriverManager
 
         options = webdriver.ChromeOptions()
-        
-        # Directorio de usuario para persistencia
+
+        # Directorio de usuario para persistencia de sesion WhatsApp
         user_data_dir = os.path.join(tempfile.gettempdir(), "whatsapp_session_antay_cobranzas")
         if not os.path.exists(user_data_dir):
             os.makedirs(user_data_dir)
@@ -659,37 +659,76 @@ def send_whatsapp_messages_direct(
         options.add_argument(f"--user-data-dir={user_data_dir}")
         options.add_argument("--profile-directory=Default")
         options.add_argument("--start-maximized")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
         # Anti-detección básica
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
         options.add_argument("--disable-blink-features=AutomationControlled")
 
         add_log("Abriendo Chrome...")
-        
+
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 30)
 
         # Abrir WhatsApp Web
         add_log("Navegando a WhatsApp Web...")
         driver.get("https://web.whatsapp.com")
-        
-        add_log("")
-        add_log("⚠️  ESCANEA EL CÓDIGO QR AHORA")
-        add_log("⏳ Esperando 45 segundos para inicio de sesión...") # Updated log message
-        
-        if progress_callback:
-           progress_callback(0, len(processed_contacts), "Escanea el QR en WhatsApp Web...", "\n".join(log_lines))
+        time.sleep(4)  # Dar tiempo a que la pagina inicie su carga
 
-        # Espera inicial para login (QR)
+        # --- PASO 1: Detectar si hay QR o sesion activa ---
+        QR_SELECTORS = [
+            '//canvas[@aria-label="Scan me!"]',
+            '//div[@data-testid="qrcode"]',
+            '//div[@data-ref]',  # contenedor QR legacy
+        ]
+        PANE_XPATH = '//div[@id="pane-side"]'
+        QR_TIMEOUT = 20   # segundos para detectar si la pagina cargo (QR o sesion)
+        LOGIN_TIMEOUT = 120  # segundos que el usuario tiene para escanear el QR
+
+        wait_short = WebDriverWait(driver, QR_TIMEOUT)
+        wait_login = WebDriverWait(driver, LOGIN_TIMEOUT)
+
+        page_state = "unknown"
         try:
-            wait.until(EC.presence_of_element_located((By.XPATH, '//div[@id="pane-side"]')))
-            add_log("✅ Sesión iniciada detectada.")
-        except:
-             add_log("⏳ Tiempo de espera de login finalizado. Asumiendo sesión iniciada o continuando...")
-             time.sleep(10) 
-        
-        time.sleep(5) 
+            # Esperar a que aparezca QR O panel principal
+            wait_short.until(EC.any_of(
+                EC.presence_of_element_located((By.XPATH, PANE_XPATH)),
+                EC.presence_of_element_located((By.XPATH, QR_SELECTORS[0])),
+                EC.presence_of_element_located((By.XPATH, QR_SELECTORS[1])),
+            ))
+            # Determinar cuál apareció
+            try:
+                driver.find_element(By.XPATH, PANE_XPATH)
+                page_state = "logged_in"
+            except Exception:
+                page_state = "qr_visible"
+        except Exception:
+            page_state = "loading"  # pagina lenta, seguir esperando
+
+        if page_state == "logged_in":
+            add_log("✅ Sesion WhatsApp activa detectada. No es necesario escanear QR.")
+        else:
+            if page_state == "qr_visible":
+                add_log("📱 QR visible en pantalla. Escanea con tu teléfono ahora.")
+            else:
+                add_log("⏳ Pagina cargando... el QR aparecera en instantes.")
+
+            add_log(f"⚠️  ESCANEA EL CODIGO QR EN EL NAVEGADOR")
+            add_log(f"⏳ Tienes {LOGIN_TIMEOUT} segundos para escanear...")
+
+            if progress_callback:
+                progress_callback(0, len(processed_contacts), "Escanea el QR en WhatsApp Web...", "\n".join(log_lines))
+
+            # Esperar login con timeout amplio
+            try:
+                wait_login.until(EC.presence_of_element_located((By.XPATH, PANE_XPATH)))
+                add_log("✅ Sesion iniciada correctamente.")
+            except Exception:
+                add_log("⚠️ Timeout de login. Verificando si la sesion esta activa...")
+                time.sleep(5)
+
+        time.sleep(3)
 
         add_log("="*60)
         add_log("COMENZANDO ENVÍO")
