@@ -98,7 +98,6 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
         return False, "", "", "Selenium no está instalado. Ejecuta _install_deps.bat."
 
     from selenium.webdriver.chrome.service import Service
-    from webdriver_manager.chrome import ChromeDriverManager
 
     driver = None
     try:
@@ -150,7 +149,7 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
                 options.binary_location = _path
                 break
 
-        service = Service(ChromeDriverManager().install())
+        service = Service()
         driver = webdriver.Chrome(service=service, options=options)
 
         driver.get("https://web.whatsapp.com")
@@ -510,8 +509,6 @@ def generate_executive_card_image(client_data, branding_config, logo_path=None):
     """
     import base64
     from selenium.webdriver.chrome.service import Service
-    from webdriver_manager.chrome import ChromeDriverManager
-    
     # Convertir logo a base64 si existe
     logo_b64 = None
     if logo_path and os.path.exists(logo_path):
@@ -541,12 +538,12 @@ def generate_executive_card_image(client_data, branding_config, logo_path=None):
     temp_image_path = None
     
     try:
-        service = Service(ChromeDriverManager().install())
+        service = Service()
         driver = webdriver.Chrome(service=service, options=options)
-        
+
         # Cargar HTML
         driver.get(f'file:///{temp_html.name}')
-        
+
         # Esperar carga completa
         time.sleep(1.5)
         
@@ -593,8 +590,6 @@ def generate_pdf_statement(client_data, docs_df, branding_config, logo_path=None
     from utils.email_sender import generate_premium_email_body_cid
     import base64
     from selenium.webdriver.chrome.service import Service
-    from webdriver_manager.chrome import ChromeDriverManager
-    
     # Convertir logo a base64 si existe
     logo_b64 = None
     if logo_path and os.path.exists(logo_path):
@@ -654,12 +649,12 @@ def generate_pdf_statement(client_data, docs_df, branding_config, logo_path=None
     temp_pdf_path = None
     
     try:
-        service = Service(ChromeDriverManager().install())
+        service = Service()
         driver = webdriver.Chrome(service=service, options=options)
-        
+
         # Cargar HTML
         driver.get(f'file:///{temp_html.name}')
-        
+
         # Esperar carga completa
         time.sleep(2)
         
@@ -851,7 +846,6 @@ def send_whatsapp_messages_direct(
 
         # Configurar opciones de Chrome
         from selenium.webdriver.chrome.service import Service
-        from webdriver_manager.chrome import ChromeDriverManager
 
         options = webdriver.ChromeOptions()
 
@@ -907,7 +901,7 @@ def send_whatsapp_messages_direct(
 
         add_log("Abriendo Chrome...")
 
-        service = Service(ChromeDriverManager().install())
+        service = Service()
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 30)  # espera general para elementos del chat
 
