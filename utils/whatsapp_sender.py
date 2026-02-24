@@ -23,7 +23,7 @@ except ImportError:
 
 # Usar directorio temp LOCAL del sistema (evita problemas con UNC/rutas de red)
 # Chrome no funciona con --user-data-dir apuntando a rutas de red (\\servidor\...)
-WA_SESSION_DIR = os.path.join(tempfile.gettempdir(), "antay_whatsapp_session")
+WA_SESSION_DIR = os.path.join(tempfile.gettempdir(), "dacta_wa_session")
 WA_SESSION_INFO = os.path.join(WA_SESSION_DIR, "_session_info.json")
 
 
