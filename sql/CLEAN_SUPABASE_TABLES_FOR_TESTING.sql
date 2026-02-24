@@ -1,7 +1,7 @@
 -- ============================================
 -- CLEAN_SUPABASE_TABLES_FOR_TESTING.sql
--- Uso: limpiar datos operativos para pruebas manuales/E2E
--- Fecha: 2026-02-17
+-- Uso: limpiar datos operativos para reiniciar el proceso desde cero
+-- Fecha: 2026-02-24
 -- ============================================
 --
 -- ADVERTENCIA:
@@ -16,6 +16,8 @@
 BEGIN;
 
 TRUNCATE TABLE
+    public.ciclos_procesamiento,
+    public.gestiones,
     public.send_attempts,
     public.ledger_last_send,
     public.cobranzas,
@@ -27,16 +29,20 @@ CASCADE;
 
 COMMIT;
 
--- Verificacion posterior
-SELECT 'clientes' AS tabla, COUNT(*) AS total FROM public.clientes
+-- Verificacion posterior (todos deben quedar en 0)
+SELECT 'clientes'              AS tabla, COUNT(*) AS total FROM public.clientes
 UNION ALL
-SELECT 'documentos' AS tabla, COUNT(*) AS total FROM public.documentos
+SELECT 'documentos'            AS tabla, COUNT(*) AS total FROM public.documentos
 UNION ALL
-SELECT 'cobranzas' AS tabla, COUNT(*) AS total FROM public.cobranzas
+SELECT 'cobranzas'             AS tabla, COUNT(*) AS total FROM public.cobranzas
 UNION ALL
-SELECT 'notificaciones' AS tabla, COUNT(*) AS total FROM public.notificaciones
+SELECT 'notificaciones'        AS tabla, COUNT(*) AS total FROM public.notificaciones
 UNION ALL
-SELECT 'ledger_last_send' AS tabla, COUNT(*) AS total FROM public.ledger_last_send
+SELECT 'ciclos_procesamiento'  AS tabla, COUNT(*) AS total FROM public.ciclos_procesamiento
 UNION ALL
-SELECT 'send_attempts' AS tabla, COUNT(*) AS total FROM public.send_attempts
+SELECT 'gestiones'             AS tabla, COUNT(*) AS total FROM public.gestiones
+UNION ALL
+SELECT 'ledger_last_send'      AS tabla, COUNT(*) AS total FROM public.ledger_last_send
+UNION ALL
+SELECT 'send_attempts'         AS tabla, COUNT(*) AS total FROM public.send_attempts
 ORDER BY tabla;

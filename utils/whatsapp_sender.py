@@ -21,7 +21,10 @@ except ImportError:
 # Helpers de sesion WhatsApp
 # ---------------------------------------------------------------------------
 
-WA_SESSION_DIR = os.path.join(tempfile.gettempdir(), "whatsapp_session_antay_cobranzas")
+WA_SESSION_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data", "whatsapp_session"
+)
 WA_SESSION_INFO = os.path.join(WA_SESSION_DIR, "_session_info.json")
 
 
@@ -56,6 +59,28 @@ def clear_wa_session() -> bool:
     try:
         if os.path.exists(WA_SESSION_DIR):
             shutil.rmtree(WA_SESSION_DIR, ignore_errors=True)
+        return True
+    except Exception:
+        return False
+
+
+def update_wa_session_alias(alias: str = "", phone: str = "") -> bool:
+    """
+    Actualiza el alias y telefono de la sesion activa sin modificar el timestamp
+    de verificacion original.
+
+    Returns:
+        True si se guardó correctamente, False si no hay sesion activa.
+    """
+    info = get_wa_session_info()
+    if info.get("status") != "active":
+        return False
+    info["profile_name"] = alias.strip()
+    info["phone"] = phone.strip()
+    try:
+        os.makedirs(WA_SESSION_DIR, exist_ok=True)
+        with open(WA_SESSION_INFO, "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False)
         return True
     except Exception:
         return False
@@ -794,9 +819,8 @@ def send_whatsapp_messages_direct(
         options = webdriver.ChromeOptions()
 
         # Directorio de usuario para persistencia de sesion WhatsApp
-        user_data_dir = os.path.join(tempfile.gettempdir(), "whatsapp_session_antay_cobranzas")
-        if not os.path.exists(user_data_dir):
-            os.makedirs(user_data_dir)
+        user_data_dir = WA_SESSION_DIR
+        os.makedirs(user_data_dir, exist_ok=True)
 
         options.add_argument(f"--user-data-dir={user_data_dir}")
         options.add_argument("--profile-directory=Default")
@@ -812,6 +836,7 @@ def send_whatsapp_messages_direct(
 
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
+        wait = WebDriverWait(driver, 30)  # espera general para elementos del chat
 
         # Abrir WhatsApp Web
         add_log("Navegando a WhatsApp Web...")

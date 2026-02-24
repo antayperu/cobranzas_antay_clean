@@ -7,7 +7,6 @@ from datetime import datetime, date, timedelta
 import streamlit.components.v1 as components
 import utils.email_sender as es
 import utils.helpers as helpers
-import utils.qa_mode as qa_lib
 import utils.ui.styles as styles
 import utils.db_manager as dbm
 import utils.storage_manager as storage_mgr
@@ -457,30 +456,6 @@ def render_tab(df_final, df_filtered, config):
                                 'documento_numero': single_documento_numero,
                             })
                             
-                            # --- RC-FEAT-012: QA Mode Injection ---
-                            # Override destination and content if QA Enabled
-                            qa_cfg = config.get('qa_config', {})
-                            qa_recipients, qa_status, is_qa = qa_lib.resolve_recipients(info['email'], qa_cfg)
-                            
-                            if is_qa:
-                                # 1. Update Recipient
-                                messages_to_send[-1]['email'] = qa_recipients 
-                                
-                                # 2. Update Subject
-                                messages_to_send[-1]['subject'] = qa_lib.modify_subject_for_qa(subject_line)
-                                
-                                # 3. Update Body (Banner Injection + Footer)
-                                banner_html = qa_lib.get_qa_banner_html(real_email=info['email'], qa_list=qa_recipients)
-                                
-                                # QA Footer
-                                qa_footer_html = f"<div style='margin-top:20px; font-size:10px; color:#aaa; border-top:1px solid #eee; padding-top:10px;'>Envío de prueba (QA) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>"
-                                
-                                messages_to_send[-1]['html_body'] = banner_html + body + qa_footer_html
-                                
-                                # Plain: Prepend text
-                                messages_to_send[-1]['plain_body'] = "[PRUEBA QA] " + plain_body + "\n\n[QA FOOTER: Envío de prueba]"
-                                
-                        
                         # --- GUARD RAIL: Guardar COD CLIENTE seleccionados para tracking preciso ---
                         selected_cod_clientes = [email_map[lbl]['cod'] for lbl in sel_emails]
                         st.session_state['last_send_selected_cod'] = selected_cod_clientes
@@ -489,16 +464,15 @@ def render_tab(df_final, df_filtered, config):
                         with st.spinner(f"Enviando con Business Lock (Fecha: {fecha_corte})..."):
                             # Obtener cycle_id del session_state
                             current_cycle_id = st.session_state.get('cycle_id', 'default_cycle')
-                            qa_mode_enabled = bool(config.get('qa_config', {}).get('enabled', False))
-                            
+
                             results = es.send_email_batch(
-                                smtp_cfg, 
-                                messages_to_send, 
+                                smtp_cfg,
+                                messages_to_send,
                                 progress_callback=lambda i, t, m: st.toast(f"{m} ({i}/{t})"),
                                 logo_path=batch_logo_path,
                                 force_resend=force_resend_ttl,
                                 internal_copies_config=config.get('internal_copies', {}),
-                                qa_settings=(qa_cfg if qa_mode_enabled else None),
+                                qa_settings=None,
                                 cycle_id=current_cycle_id
                             )
 
@@ -507,8 +481,6 @@ def render_tab(df_final, df_filtered, config):
                         persist_errors = 0
                         if 'details' in results and results['details']:
                             msg_lookup = {m.get('msg_id'): m for m in messages_to_send if m.get('msg_id')}
-                            qa_enabled = bool(config.get('qa_config', {}).get('enabled', False))
-
                             for detail in results['details']:
                                 status_label = str(detail.get('Estado', '')).upper()
                                 if 'ENVIADO' in status_label:
@@ -562,7 +534,6 @@ def render_tab(df_final, df_filtered, config):
                                     cycle_id=current_cycle_id,
                                     metadata_extra={
                                         "ui_batch_id": str(current_batch_id),
-                                        "qa_mode": qa_enabled,
                                         "msg_id": detail_msg_id,
                                     },
                                 )

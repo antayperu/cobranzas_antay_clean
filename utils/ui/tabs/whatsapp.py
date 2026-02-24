@@ -100,9 +100,20 @@ def render_tab(df_filtered, config):
             
             # Selección de Clientes (Basado en lo filtrado)
             # Agrupar datos por cliente para la lista de selección
-            client_group = df_filtered.groupby(['COD CLIENTE', 'EMPRESA', 'TELÉFONO'])['SALDO REAL'].sum().reset_index()
-            # Filtrar solo clientes con deuda positiva (opcional, pero lógico para cobrar)
-            client_group = client_group[client_group['SALDO REAL'] > 0]
+            # RC-FEAT-WA-FILTER: incluir clientes con detracción pendiente aunque saldo real sea 0
+            # (mismo criterio que tab Email: SALDO REAL > 0.01 OR DETR_PENDIENTE > 0.01)
+            df_wa_view = df_filtered.copy()
+            df_wa_view['DETR_PENDIENTE_AMOUNT'] = df_wa_view.apply(
+                lambda x: float(x['DETRACCIÓN']) if str(x['ESTADO DETRACCION']).upper().strip() == 'PENDIENTE' else 0.0,
+                axis=1
+            )
+            client_group = df_wa_view.groupby(
+                ['COD CLIENTE', 'EMPRESA', 'TELÉFONO']
+            )[['SALDO REAL', 'DETR_PENDIENTE_AMOUNT']].sum().reset_index()
+            client_group = client_group[
+                (client_group['SALDO REAL'] > 0.01) |
+                (client_group['DETR_PENDIENTE_AMOUNT'] > 0.01)
+            ]
 
             # --- RC-FEAT-WA-UX: KPIs + "Ocultar ya enviados hoy" (estándar con Email tab) ---
             today_str_wa = date.today().strftime('%Y-%m-%d')
@@ -133,7 +144,14 @@ def render_tab(df_filtered, config):
             client_options = []
             client_map = {}
             for idx, row in client_group.iterrows():
-                label = f"{row['EMPRESA']} (Deuda: S/ {row['SALDO REAL']:,.2f})"
+                saldo = row['SALDO REAL']
+                detr  = row.get('DETR_PENDIENTE_AMOUNT', 0.0)
+                if saldo > 0.01 and detr > 0.01:
+                    label = f"{row['EMPRESA']} (Deuda: S/ {saldo:,.2f} | Detr. pend.: S/ {detr:,.2f})"
+                elif detr > 0.01:
+                    label = f"{row['EMPRESA']} (Detr. pend.: S/ {detr:,.2f})"
+                else:
+                    label = f"{row['EMPRESA']} (Deuda: S/ {saldo:,.2f})"
                 client_options.append(label)
                 client_map[label] = row['COD CLIENTE']
             

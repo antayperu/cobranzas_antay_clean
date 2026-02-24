@@ -193,6 +193,7 @@ def render_tab(config):
         get_wa_session_info,
         connect_wa_session,
         clear_wa_session,
+        update_wa_session_alias,
         _SELENIUM_OK as _WA_SELENIUM_OK,
     )
 
@@ -220,6 +221,36 @@ def render_tab(config):
                 st.toast("Sesión de WhatsApp eliminada.")
                 st.rerun()
 
+    # --- Formulario de etiqueta (solo visible cuando hay sesion activa) ---
+    if _wa_active:
+        with st.expander("✏️ Editar etiqueta del dispositivo", expanded=False):
+            st.caption("Completa o corrige el nombre y teléfono que se mostrarán en el panel de estado.")
+            _edit_c1, _edit_c2 = st.columns(2)
+            _new_alias = _edit_c1.text_input(
+                "Nombre / Alias",
+                value=_wa_info.get("profile_name", ""),
+                key="wa_alias_input",
+                placeholder="Ej: WhatsApp Cobranzas Antay",
+            )
+            _new_phone_lbl = _edit_c2.text_input(
+                "Número de teléfono",
+                value=_wa_info.get("phone", ""),
+                key="wa_phone_label_input",
+                placeholder="Ej: +51 998 080 797",
+            )
+            _alias_changed = (
+                _new_alias != _wa_info.get("profile_name", "") or
+                _new_phone_lbl != _wa_info.get("phone", "")
+            )
+            if st.button("💾 Guardar etiqueta", key="btn_wa_save_alias",
+                         disabled=not _alias_changed,
+                         type="primary" if _alias_changed else "secondary"):
+                if update_wa_session_alias(alias=_new_alias, phone=_new_phone_lbl):
+                    st.success("✅ Etiqueta actualizada.")
+                    st.rerun()
+                else:
+                    st.error("❌ No se pudo guardar. Verifica que la sesión sigue activa.")
+
     if not _WA_SELENIUM_OK:
         st.error(
             "**Selenium no está instalado** en este servidor. "
@@ -241,32 +272,6 @@ def render_tab(config):
                 st.rerun()
             else:
                 st.error(f"❌ No se pudo conectar: {err}")
-
-    # --- CLIENTES PREMIUM TAB POINTER ---
-    st.markdown("---")
-    st.subheader("👤 Cartera de Clientes")
-    st.info(
-        "La gestion completa de clientes (edicion total + migracion de cartera) "
-        "ahora se realiza en la TAB independiente: `6. Clientes Premium`."
-    )
-            
-    # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
-    # --- RC-FEAT-012: MARCHA BLANCA (QA) MODE ---
-    # (Header removed to avoid duplication with line 1728)
-    
-    # ... (Existing QA visual logic can remain if present, or we can just append Danger Zone after)
-    # Assuming QA logic follows. We will insert Danger Zone AFTER QA section if possible, 
-    # or just here if this is the end of the file view.
-    
-    # NOTE: View cut off at 1650. I should append. 
-    # But wait, I see "st.subheader" for QA above.
-    # Let's verify if more content exists. 
-    # Actually, let's just insert the Danger Zone BEFORE QA or AFTER copies.
-    # Safer to insert at the very end of the Tab 6 block.
-    # But since I don't see the end, I'll insert it *before* "Modo Marcha Blanca" for now, or just after Internal Copies.
-    
-    # Better: Append a new expader "Zona de Peligro" at the bottom of the config form area or independent.
-    # Let's insert it right after the Internal Copies block finishes (line 1647).
 
     # --- RC-FEAT-LEGGER: MANTENIMIENTO ---
     st.markdown("---")
@@ -367,109 +372,6 @@ def render_tab(config):
                 
                 # Clear the flag
                 st.session_state['reset_complete'] = False
-
-    st.markdown("---")
-    st.subheader("🧪 Modo Marcha Blanca (QA)")
-    st.warning("⚠️ Zona de Seguridad: Configura el entorno de pruebas para envíos seguros. Controla To, CC, BCC.")
-    
-    qa_cfg_defaults = config.get('qa_config', {
-        'enabled': False,
-        'mode': 'ALL', # ALL | PRIMARY
-        'recipients': ['cortega@antayperu.com', 'acamacho@integrens.com'],
-        'allowlist_domains': []
-    })
-    
-    # UI Components
-    qa_enabled = st.toggle("🚨 Activar Modo Marcha Blanca (QA)", value=qa_cfg_defaults.get('enabled', False))
-    
-    c_qa1, c_qa2 = st.columns(2)
-    with c_qa1:
-        qa_recipients_txt = st.text_area(
-            "Destinatarios QA (Separados por coma o línea)",
-            value=",\n".join(qa_cfg_defaults.get('recipients', [])),
-            height=100,
-            disabled=not qa_enabled,
-            help="Todos los correos del sistema se redirigirán a esta lista."
-        )
-    
-    with c_qa2:
-        st.write("Estrategia de Envío QA:")
-        qa_mode_sel = st.radio(
-            "Comportamiento",
-            options=["ALL", "PRIMARY"],
-            format_func=lambda x: "Enviar a TODOS los QA (Recomendado)" if x == "ALL" else "Enviar solo al PRIMERO (Rápido)",
-            index=0 if qa_cfg_defaults.get('mode', 'ALL') == 'ALL' else 1,
-            disabled=not qa_enabled
-        )
-        
-    st.markdown("##### Copias Internas en QA")
-    c_qacc, c_qabcc = st.columns(2)
-    with c_qacc:
-        qa_cc_txt = st.text_area(
-            "CC QA (Visible)", 
-            value=",\n".join(qa_cfg_defaults.get('cc_recipients', [])),
-            height=80,
-            disabled=not qa_enabled,
-            help="Estos correos aparecerán en el header CC y recibirán copia."
-        )
-    with c_qabcc:
-        qa_bcc_txt = st.text_area(
-            "BCC QA (Oculto)", 
-            value=",\n".join(qa_cfg_defaults.get('bcc_recipients', [])),
-            height=80,
-            disabled=not qa_enabled,
-            help="Estos correos recibirán copia oculta."
-        )
-        
-    # --- Dirty Check Logic QA ---
-    # Parse Lists for Preview & Diff
-    curr_qa_recipients = [x.strip() for x in qa_recipients_txt.replace('\n', ',').replace(';',',').split(',') if x.strip()]
-    curr_qa_cc = [x.strip() for x in qa_cc_txt.replace('\n', ',').replace(';',',').split(',') if x.strip()]
-    curr_qa_bcc = [x.strip() for x in qa_bcc_txt.replace('\n', ',').replace(';',',').split(',') if x.strip()]
-    
-    # Check against Saved Defaults
-    qa_changes = (
-        qa_enabled != qa_cfg_defaults.get('enabled') or
-        qa_mode_sel != qa_cfg_defaults.get('mode') or
-        curr_qa_recipients != qa_cfg_defaults.get('recipients', []) or
-        curr_qa_cc != qa_cfg_defaults.get('cc_recipients', []) or
-        curr_qa_bcc != qa_cfg_defaults.get('bcc_recipients', [])
-    )
-
-    # --- QA Live Preview ---
-    if qa_enabled:
-        st.markdown(f"""
-        <div style="background-color: #fff3cd; padding: 10px; border-radius: 5px; border: 1px solid #ffeeba; margin-bottom: 10px;">
-            <strong>📝 Vista Previa QA (Simulación):</strong><br>
-            Por cada correo enviado, se armará el siguiente esquema:<br>
-            <ul>
-                <li><strong>To (Destino):</strong> {len(curr_qa_recipients)} correos (Lista QA)</li>
-                <li><strong>Cc (Visible):</strong> {len(curr_qa_cc)} correos (Lista QA)</li>
-                <li><strong>Bcc (Oculto):</strong> {len(curr_qa_bcc)} correos (Lista QA)</li>
-            </ul>
-            <small><em>* Los correos de Producción serán IGNORADOS completamente.</em></small>
-        </div>
-        """, unsafe_allow_html=True)
-
-    if st.button("💾 Guardar Configuración QA", type="primary" if qa_changes else "secondary", disabled=not qa_changes):
-        new_qa_config = {
-            'enabled': qa_enabled,
-            'mode': qa_mode_sel,
-            'recipients': curr_qa_recipients,
-            'cc_recipients': curr_qa_cc,
-            'bcc_recipients': curr_qa_bcc,
-            'allowlist_domains': [] # Future proof
-        }
-        
-        config['qa_config'] = new_qa_config
-        if sm.save_settings(config):
-            st.success(f"✅ Modo QA Actualizado. Destinos: {len(curr_qa_recipients)} To | {len(curr_qa_cc)} CC | {len(curr_qa_bcc)} BCC")
-            if qa_enabled:
-                st.toast("🚨 MODO QA ACTIVO: No saldrán correos a clientes.", icon="🧪")
-            import time
-            time.sleep(1)
-            st.rerun()
-    # -------------------------------------------------------
 
     st.markdown("---")
     st.subheader("Logo de la Empresa (Visuals Enterprise)")

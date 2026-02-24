@@ -37,6 +37,7 @@ env/
 Thumbs.db
 
 # Project specific
+data/whatsapp_session/   # perfil Chrome + sesion WhatsApp (contiene cookies)
 config.json
 .env
 .mcp.json
