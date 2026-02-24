@@ -1,6 +1,8 @@
 import base64
 import time
 import os
+import json
+import shutil
 import tempfile
 import urllib.parse
 from datetime import datetime
@@ -14,6 +16,146 @@ try:
     _SELENIUM_OK = True
 except ImportError:
     _SELENIUM_OK = False
+
+# ---------------------------------------------------------------------------
+# Helpers de sesion WhatsApp
+# ---------------------------------------------------------------------------
+
+WA_SESSION_DIR = os.path.join(tempfile.gettempdir(), "whatsapp_session_antay_cobranzas")
+WA_SESSION_INFO = os.path.join(WA_SESSION_DIR, "_session_info.json")
+
+
+def get_wa_session_info() -> dict:
+    """
+    Retorna info de la sesion WhatsApp almacenada localmente.
+    Campos: status ('active'|'none'), verified_at, profile_name, phone
+    """
+    if not os.path.exists(WA_SESSION_INFO):
+        return {"status": "none"}
+    try:
+        with open(WA_SESSION_INFO, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {"status": "none"}
+
+
+def _save_wa_session_info(profile_name: str = "", phone: str = "") -> None:
+    os.makedirs(WA_SESSION_DIR, exist_ok=True)
+    data = {
+        "status": "active",
+        "verified_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "profile_name": profile_name,
+        "phone": phone,
+    }
+    with open(WA_SESSION_INFO, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+
+def clear_wa_session() -> bool:
+    """Elimina la sesion de Chrome/WhatsApp Web almacenada localmente."""
+    try:
+        if os.path.exists(WA_SESSION_DIR):
+            shutil.rmtree(WA_SESSION_DIR, ignore_errors=True)
+        return True
+    except Exception:
+        return False
+
+
+def connect_wa_session(timeout_seconds: int = 120) -> tuple:
+    """
+    Abre Chrome, navega a WhatsApp Web y espera que el usuario escanee el QR.
+    Guarda la sesion en WA_SESSION_DIR para uso posterior.
+
+    Returns:
+        (ok: bool, phone: str, profile_name: str, error_msg: str)
+    """
+    if not _SELENIUM_OK:
+        return False, "", "", "Selenium no está instalado. Ejecuta _install_deps.bat."
+
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+
+    driver = None
+    try:
+        options = webdriver.ChromeOptions()
+        os.makedirs(WA_SESSION_DIR, exist_ok=True)
+        options.add_argument(f"--user-data-dir={WA_SESSION_DIR}")
+        options.add_argument("--profile-directory=Default")
+        options.add_argument("--start-maximized")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
+        options.add_argument("--disable-blink-features=AutomationControlled")
+
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+
+        driver.get("https://web.whatsapp.com")
+        time.sleep(4)
+
+        QR_SELECTORS = [
+            '//canvas[@aria-label="Scan me!"]',
+            '//div[@data-testid="qrcode"]',
+            '//div[@data-ref]',
+        ]
+        PANE_XPATH = '//div[@id="pane-side"]'
+
+        wait_short = WebDriverWait(driver, 20)
+        wait_login = WebDriverWait(driver, timeout_seconds)
+
+        page_state = "unknown"
+        try:
+            wait_short.until(EC.any_of(
+                EC.presence_of_element_located((By.XPATH, PANE_XPATH)),
+                EC.presence_of_element_located((By.XPATH, QR_SELECTORS[0])),
+                EC.presence_of_element_located((By.XPATH, QR_SELECTORS[1])),
+            ))
+            try:
+                driver.find_element(By.XPATH, PANE_XPATH)
+                page_state = "logged_in"
+            except Exception:
+                page_state = "qr_visible"
+        except Exception:
+            page_state = "loading"
+
+        if page_state != "logged_in":
+            try:
+                wait_login.until(EC.presence_of_element_located((By.XPATH, PANE_XPATH)))
+                page_state = "logged_in"
+            except TimeoutException:
+                return False, "", "", f"Timeout: No se completó el login en {timeout_seconds}s."
+
+        # Dar tiempo a que WhatsApp cargue el perfil en el DOM
+        time.sleep(2)
+
+        phone = ""
+        profile_name = ""
+        try:
+            phone = driver.execute_script(
+                "return window.Store?.User?.getMaybeMeUser?.()?.id?.user || '';"
+            ) or ""
+            profile_name = driver.execute_script(
+                "return document.querySelector('span[data-testid=\"default-user\"]')?.textContent "
+                "|| document.title || '';"
+            ) or ""
+            phone = str(phone).strip()
+            profile_name = str(profile_name).strip()
+        except Exception:
+            pass
+
+        _save_wa_session_info(profile_name=profile_name, phone=phone)
+        return True, phone, profile_name, ""
+
+    except Exception as e:
+        return False, "", "", str(e)
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
 
 # --- RC-ARCH-001: CENTRALIZED SELECTORS ---
 SELECTORS = {
@@ -727,6 +869,26 @@ def send_whatsapp_messages_direct(
             except Exception:
                 add_log("⚠️ Timeout de login. Verificando si la sesion esta activa...")
                 time.sleep(5)
+
+        # --- Capturar nombre de perfil y guardar info de sesion ---
+        try:
+            _profile_name = driver.execute_script(
+                "return document.querySelector('span[data-testid=\"default-user\"]')?.textContent "
+                "|| document.title || '';"
+            ) or ""
+            _phone = driver.execute_script(
+                "return window.Store?.User?.getMaybeMeUser?.()?.id?.user || '';"
+            ) or ""
+            _save_wa_session_info(
+                profile_name=str(_profile_name).strip(),
+                phone=str(_phone).strip(),
+            )
+            if _phone:
+                add_log(f"📱 Dispositivo: {_profile_name} ({_phone})")
+            else:
+                add_log(f"📱 Sesion guardada localmente.")
+        except Exception:
+            _save_wa_session_info()
 
         time.sleep(3)
 

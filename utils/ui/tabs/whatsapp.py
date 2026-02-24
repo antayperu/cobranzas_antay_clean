@@ -18,6 +18,26 @@ def render_tab(df_filtered, config):
     """
     st.subheader("Gestión de WhatsApp")
 
+    # --- Panel de sesion WhatsApp (solo lectura; gestión en Configuración) ---
+    from utils.whatsapp_sender import get_wa_session_info, _SELENIUM_OK as _WA_SELENIUM_OK
+    _wa_info = get_wa_session_info()
+    _wa_session_active = _wa_info.get("status") == "active"
+
+    if _wa_session_active:
+        _phone = _wa_info.get("phone", "")
+        _name  = _wa_info.get("profile_name", "")
+        _ts    = _wa_info.get("verified_at", "")
+        _device_label = f"**{_name}**" if _name else "Dispositivo desconocido"
+        _phone_label  = f"  ·  `{_phone}`" if _phone else ""
+        st.success(
+            f"Dispositivo activo: {_device_label}{_phone_label}  ·  verificado {_ts}"
+        )
+    else:
+        st.warning(
+            "Sin dispositivo conectado. Ve a **Configuración → WhatsApp** para vincular tu teléfono antes de enviar."
+        )
+    st.divider()
+
     # --- Panel post-envío persistente (igual que Email tab) ---
     if 'last_wa_send_results' in st.session_state and st.session_state['last_wa_send_results']:
         wa_res = st.session_state['last_wa_send_results']
@@ -503,7 +523,10 @@ def render_tab(df_filtered, config):
                     st.rerun()
 
             # BOTON ENVIAR WHATSAPP
-            if st.button("Enviar Mensajes por WhatsApp", type="primary", disabled=is_wa_processed):
+            if not _wa_session_active:
+                st.warning("⚠️ Conecta un dispositivo en **Configuración → WhatsApp** para habilitar el envío.")
+            if st.button("Enviar Mensajes por WhatsApp", type="primary",
+                         disabled=is_wa_processed or not _wa_session_active):
                 # --- DEDUPLICACIÓN DE SEGURIDAD ---
                 # Aseguramos que no se envíen mensajes dobles si hubo duplicados en la lista UI
                 seen_keys = set()

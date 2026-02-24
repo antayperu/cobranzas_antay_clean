@@ -180,6 +180,68 @@ def render_tab(config):
         else:
             st.error("Error al guardar configuración.")
 
+    # --- SECCION: WHATSAPP — DISPOSITIVO DE ENVIO ---
+    st.markdown("---")
+    st.subheader("📱 WhatsApp — Dispositivo de Envío")
+    st.info(
+        "Conecta el dispositivo desde el que se enviarán los mensajes de WhatsApp. "
+        "Solo se necesita hacer esto una vez; la sesión queda guardada en el servidor.",
+        icon="📱",
+    )
+
+    from utils.whatsapp_sender import (
+        get_wa_session_info,
+        connect_wa_session,
+        clear_wa_session,
+        _SELENIUM_OK as _WA_SELENIUM_OK,
+    )
+
+    _wa_info = get_wa_session_info()
+    _wa_active = _wa_info.get("status") == "active"
+
+    col_wa_status, col_wa_actions = st.columns([3, 1])
+
+    with col_wa_status:
+        if _wa_active:
+            _wa_phone   = _wa_info.get("phone", "")
+            _wa_name    = _wa_info.get("profile_name", "")
+            _wa_ts      = _wa_info.get("verified_at", "")
+            _device_lbl = f"**{_wa_name}**" if _wa_name else "Dispositivo conectado"
+            _phone_lbl  = f"  ·  `{_wa_phone}`" if _wa_phone else ""
+            st.success(f"Sesión activa: {_device_lbl}{_phone_lbl}  ·  verificada {_wa_ts}")
+        else:
+            st.warning("Sin sesión activa. Haz clic en **Conectar dispositivo** para vincular tu WhatsApp.")
+
+    with col_wa_actions:
+        if _wa_active:
+            if st.button("🔌 Desconectar", type="secondary", key="btn_wa_disconnect",
+                         help="Elimina la sesión guardada. En el próximo envío se pedirá escanear el QR."):
+                clear_wa_session()
+                st.toast("Sesión de WhatsApp eliminada.")
+                st.rerun()
+
+    if not _WA_SELENIUM_OK:
+        st.error(
+            "**Selenium no está instalado** en este servidor. "
+            "Ejecuta `_install_deps.bat` en el servidor QA y reinicia la app antes de conectar."
+        )
+    elif not _wa_active:
+        st.caption(
+            "Al hacer clic, Chrome se abrirá **en el servidor**. "
+            "Escanea el código QR con tu teléfono. "
+            f"Tienes hasta 120 segundos."
+        )
+        if st.button("📲 Conectar dispositivo", type="primary", key="btn_wa_connect"):
+            with st.spinner("Abriendo Chrome en el servidor — escanea el QR en el navegador que apareció..."):
+                ok, phone, profile, err = connect_wa_session(timeout_seconds=120)
+            if ok:
+                _label = f"**{profile}**" if profile else "dispositivo"
+                _ph    = f" (`{phone}`)" if phone else ""
+                st.success(f"✅ Sesión conectada: {_label}{_ph}")
+                st.rerun()
+            else:
+                st.error(f"❌ No se pudo conectar: {err}")
+
     # --- CLIENTES PREMIUM TAB POINTER ---
     st.markdown("---")
     st.subheader("👤 Cartera de Clientes")
