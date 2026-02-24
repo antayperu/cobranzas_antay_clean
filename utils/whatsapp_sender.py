@@ -104,6 +104,16 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
     try:
         options = webdriver.ChromeOptions()
         os.makedirs(WA_SESSION_DIR, exist_ok=True)
+
+        # Limpiar lock files de Chrome antes de iniciar (evita crash por sesion previa)
+        for _lock in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+            _lock_path = os.path.join(WA_SESSION_DIR, _lock)
+            try:
+                if os.path.exists(_lock_path):
+                    os.remove(_lock_path)
+            except OSError:
+                pass
+
         options.add_argument(f"--user-data-dir={WA_SESSION_DIR}")
         options.add_argument("--profile-directory=Default")
         options.add_argument("--start-maximized")
@@ -834,6 +844,15 @@ def send_whatsapp_messages_direct(
         # Directorio de usuario para persistencia de sesion WhatsApp
         user_data_dir = WA_SESSION_DIR
         os.makedirs(user_data_dir, exist_ok=True)
+
+        # Limpiar lock files de Chrome antes de iniciar (evita crash por sesion previa)
+        for _lock in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+            _lock_path = os.path.join(user_data_dir, _lock)
+            try:
+                if os.path.exists(_lock_path):
+                    os.remove(_lock_path)
+            except OSError:
+                pass
 
         options.add_argument(f"--user-data-dir={user_data_dir}")
         options.add_argument("--profile-directory=Default")
