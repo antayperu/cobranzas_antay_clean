@@ -21,10 +21,9 @@ except ImportError:
 # Helpers de sesion WhatsApp
 # ---------------------------------------------------------------------------
 
-WA_SESSION_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data", "whatsapp_session"
-)
+# Usar directorio temp LOCAL del sistema (evita problemas con UNC/rutas de red)
+# Chrome no funciona con --user-data-dir apuntando a rutas de red (\\servidor\...)
+WA_SESSION_DIR = os.path.join(tempfile.gettempdir(), "antay_whatsapp_session")
 WA_SESSION_INFO = os.path.join(WA_SESSION_DIR, "_session_info.json")
 
 
@@ -131,6 +130,7 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
+        options.add_argument("--disable-software-rasterizer")
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-session-crashed-bubble")
         options.add_argument("--disable-restore-session-state")
@@ -880,6 +880,7 @@ def send_whatsapp_messages_direct(
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
+        options.add_argument("--disable-software-rasterizer")
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-session-crashed-bubble")
         options.add_argument("--disable-restore-session-state")
