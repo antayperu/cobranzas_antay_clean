@@ -441,21 +441,43 @@ def get_notifications_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
         return []
 
 
+def get_wa_gestiones_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
+    """Devuelve gestiones WHATSAPP de un ciclo para reconciliar tracking WA."""
+    if not cycle_id:
+        return []
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        res = _safe_execute(
+            client.table("gestiones")
+            .select("cliente_id, resultado, fecha, created_at, metadata")
+            .eq("tipo_gestion", "WHATSAPP")
+            .order("created_at", desc=False)
+        )
+        rows = res.data or []
+        cycle_id_str = str(cycle_id).strip()
+        return [
+            r for r in rows
+            if str((r.get("metadata") or {}).get("cycle_id", "")).strip() == cycle_id_str
+        ]
+    except Exception as e:
+        print(f"get_wa_gestiones_by_cycle Error: {e}")
+        return []
+
+
 def reconcile_tracking_from_notifications(
     df: "pd.DataFrame",
     cycle_id: str,
 ) -> "pd.DataFrame":
     """
-    Reconstruye ESTADO_EMAIL / FECHA_ULTIMO_ENVIO / ESTADO_WHATSAPP / FECHA_ULTIMO_WA
-    en df_final cruzando con la tabla notificaciones filtrada por cycle_id.
-    Retorna el df actualizado.
+    Reconstruye ESTADO_EMAIL / FECHA_ULTIMO_ENVIO desde notificaciones (email)
+    y ESTADO_WHATSAPP / FECHA_ULTIMO_WA desde gestiones (whatsapp).
     """
-    notifs = get_notifications_by_cycle(cycle_id)
-    if not notifs:
-        return df
-
     df = df.copy()
 
+    # --- EMAIL: desde tabla notificaciones (por cycle_id) ---
+    notifs = get_notifications_by_cycle(cycle_id)
     for notif in notifs:
         estado = str(notif.get("estado", "")).strip().upper()
         if estado != "ENVIADO":
@@ -480,13 +502,22 @@ def reconcile_tracking_from_notifications(
                 if "ESTADO_ENVIO_TEXTO" in df.columns:
                     hora = fecha[11:16] if len(fecha) >= 16 else ""
                     df.loc[mask, "ESTADO_ENVIO_TEXTO"] = f"ENVIADO ({hora})" if hora else "ENVIADO"
-        elif channel == "WHATSAPP":
-            mask = df["COD CLIENTE"].astype(str).str.strip() == cliente_id
-            if mask.any():
-                if "ESTADO_WHATSAPP" in df.columns:
-                    df.loc[mask, "ESTADO_WHATSAPP"] = "ENVIADO"
-                if "FECHA_ULTIMO_WA" in df.columns:
-                    df.loc[mask, "FECHA_ULTIMO_WA"] = fecha
+
+    # --- WHATSAPP: desde tabla gestiones (metadata.cycle_id) ---
+    wa_gestiones = get_wa_gestiones_by_cycle(cycle_id)
+    for gestion in wa_gestiones:
+        resultado = str(gestion.get("resultado", "")).strip().upper()
+        if resultado != "EXITOSO":
+            continue
+
+        cliente_id = str(gestion.get("cliente_id") or "").strip()
+        fecha = str(gestion.get("fecha") or gestion.get("created_at", ""))[:19]
+        mask = df["COD CLIENTE"].astype(str).str.strip() == cliente_id
+        if mask.any():
+            if "ESTADO_WHATSAPP" in df.columns:
+                df.loc[mask, "ESTADO_WHATSAPP"] = "ENVIADO"
+            if "FECHA_ULTIMO_WA" in df.columns:
+                df.loc[mask, "FECHA_ULTIMO_WA"] = fecha
 
     return df
 

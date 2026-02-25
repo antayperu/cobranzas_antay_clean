@@ -1,54 +1,65 @@
-## STATUS VIGENTE - SUPABASE-002 + Cierre GitFlow (2026-02-17)
+## STATUS VIGENTE — Refactorización BD + Fix WhatsApp (2026-02-25)
 
-- Fecha/Hora: 2026-02-17
+- Fecha/Hora: 2026-02-25
 - Rama activa: `main`
-- Ticket cerrado: `SUPABASE-002` (Storage de archivos e imagenes)
-- Estado global tecnico: `SUPABASE-MIG-000` a `SUPABASE-MIG-009` + `SUPABASE-002` completados
+- Estado global técnico: Refactorización de `ciclos_procesamiento` EN CURSO
 
-### Entregables del bloque
+---
 
-1. Storage manager:
-   - `utils/storage_manager.py`
-2. Setup buckets:
-   - `scripts/setup_supabase_storage.py`
-3. Integraciones UI:
-   - `app.py`
-   - `utils/ui/tabs/config_tab.py`
-   - `utils/ui/tabs/general_report.py`
-   - `utils/ui/tab_report.py`
-   - `utils/ui/tabs/email_notifications.py`
-   - `utils/ui/tabs/whatsapp.py`
-4. Calidad:
-   - `tests/test_storage_manager.py`
-   - `scripts/run_migration_quality_gates.py` (incluye `GATE-STORAGE`)
-5. Evidencia:
-   - `docs/EVIDENCIA_STORAGE_SUPABASE_002.md`
+### Trabajo completado en esta sesión
 
-### Validaciones ejecutadas
+#### 1. Fix bug RC-OPS-004 — Registro duplicado WhatsApp
+**Problema:** Al enviar WhatsApp se creaban 2 registros: uno correcto en `gestiones` y uno incorrecto en `notificaciones` (con canal hardcodeado como EMAIL).
+**Archivos modificados:**
+- `utils/ui/tabs/whatsapp.py` — Eliminado `persist_notification_event()`, agregado `cycle_id` en metadata de `insert_gestion()`
+- `utils/db_manager.py` — Nueva función `get_wa_gestiones_by_cycle()`, actualizada `reconcile_tracking_from_notifications()` para leer WA desde `gestiones`
+- `utils/ui/tabs/crm_gestiones.py` — Corregido canal hardcodeado "Email" en drill-down CRM
 
-1. `python scripts/setup_supabase_storage.py` -> buckets `logos`, `exports`, `whatsapp-images` creados.
-2. `pytest tests/test_storage_manager.py -q -p no:cacheprovider` -> `5 passed`.
-3. `python scripts/run_migration_quality_gates.py` -> `RESULTADO: PASS`.
+#### 2. Limpieza de base de datos
+Las siguientes tablas fueron vaciadas para iniciar refactorización limpia:
+- `ciclos_procesamiento` → VACÍA
+- `gestiones` → VACÍA
+- `notificaciones` → VACÍA
+- `clientes` → **INTACTA** (no se tocó)
 
-### Cierre formal de merges (metodologia)
+---
 
-Flujo aplicado:
-1. `feature/SUPABASE-002-storage-assets` -> `dev` (merge no-ff).
-2. `dev` -> `main` (merge no-ff).
-3. Tag de release en main: `v1.5.7-supabase-storage`.
+### Trabajo PENDIENTE — Refactorización ciclos_procesamiento
 
-Commits clave:
-1. `645fa52` - `feat: SUPABASE-002 storage integration for logos and exports`
-2. `9c21da9` - `merge: SUPABASE-002 storage into dev`
-3. `c392068` - `test: restore migration gate suite and cycle services on dev`
-4. `80ecfbd` - `release: merge dev into main for SUPABASE-002`
+**Problema identificado:** La tabla `ciclos_procesamiento` guarda todo el DataFrame como JSON blob en un campo `df_final_json`. Esto es un anti-patrón que impide queries sobre documentos históricos.
 
-### Proximo bloque recomendado
+**Solución acordada:** Modelo cabecera/detalle
+- `ciclos_procesamiento` — solo metadatos (sin `df_final_json`)
+- `documentos_ciclo` — **NUEVA tabla**, una fila por documento (aún no existe en Supabase)
 
-1. `CONFIG-001` - Configuracion en Supabase.
-2. Push/PR remotos de `dev` y `main` para cierre en GitHub (si aun no se publicaron).
+**Documentación completa:** Ver `docs/ARQUITECTURA_BD_DECISIONES_v1.0.md`
 
-### Sync Notion
+**Próximos pasos en orden:**
+1. Crear tabla `documentos_ciclo` en Supabase (SQL en doc de arquitectura)
+2. Reescribir `utils/state_manager.py` — funciones `save_session_cloud()`, `load_session_cloud()`, `load_session_by_id()`, `clear_session_cloud()`
+3. Reescribir `migrate_historical.py` — desactivar upsert clientes, usar `documentos_ciclo`, solo escribir email en `notificaciones`
+4. Ejecutar migración `--dry-run` → luego real
+5. Verificar selector de ciclos y auto-restore en app
 
-1. `python scripts/sync_backlog_priorizado_to_notion.py`
-2. Resultado: `SYNC_OK created=0 updated=14 archived_old_snapshots=0`
+---
+
+### Regla maestra de routing (NO VIOLAR)
+
+| Canal | Tabla | Prohibido |
+|-------|-------|-----------|
+| EMAIL | `notificaciones` | ~~gestiones~~ |
+| WHATSAPP | `gestiones` | ~~notificaciones~~ |
+| LLAMADA/VISITA/NOTA | `gestiones` | ~~notificaciones~~ |
+
+---
+
+### Archivos desplegados en QA (\\QA\antay-cobranza)
+
+- `utils/ui/tabs/whatsapp.py` ✅
+- `utils/db_manager.py` ✅
+- `utils/ui/tabs/crm_gestiones.py` ✅
+
+---
+
+### Referencia anterior
+Estado previo: SUPABASE-002 completado (2026-02-17) — ver historial en git.

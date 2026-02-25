@@ -69,6 +69,88 @@ def has_valid_session():
 
 
 # ---------------------------------------------------------------------------
+# Mapeo de columnas: df_final <-> documentos_ciclo
+# ---------------------------------------------------------------------------
+# Clave: nombre exacto en df_final  →  Valor: nombre de columna en Supabase
+_DF_TO_DB: Dict[str, str] = {
+    "COD CLIENTE":        "cod_cliente",
+    "EMPRESA":            "empresa",
+    "Enviar Email":       "enviar_email",
+    "NOTA":               "nota",
+    "CORREO":             "correo",
+    "TELÉFONO":           "telefono",
+    "TIPO PEDIDO":        "tipo_pedido",
+    "COMPROBANTE":        "comprobante",
+    "FECH EMIS":          "fech_emis",
+    "FECH VENC":          "fech_venc",
+    "DÍAS MORA":          "dias_mora",
+    "ESTADO DEUDA":       "estado_deuda",
+    "MONEDA":             "moneda",
+    "TIPO CAMBIO":        "tipo_cambio",
+    "MONT EMIT":          "mont_emit",
+    "MONT EMIT_DISPLAY":  "mont_emit_display",
+    "SALDO REAL":         "saldo_real",
+    "SALDO REAL_DISPLAY": "saldo_real_display",
+    "SALDO":              "saldo",
+    "SALDO_DISPLAY":      "saldo_display",
+    "DETRACCIÓN":         "detraccion",
+    "DETRACCIÓN_DISPLAY": "detraccion_display",
+    "ESTADO DETRACCION":  "estado_detraccion",
+    "AMORTIZACIONES":     "amortizaciones",
+    "MATCH_KEY":          "match_key",
+    "EMAIL_FINAL":        "email_final",
+    "ESTADO_EMAIL":       "estado_email",
+    "FECHA_ULTIMO_ENVIO": "fecha_ultimo_envio",
+    "ESTADO_WHATSAPP":    "estado_whatsapp",
+    "FECHA_ULTIMO_WA":    "fecha_ultimo_wa",
+}
+
+_DB_TO_DF: Dict[str, str] = {v: k for k, v in _DF_TO_DB.items()}
+
+# Columnas numéricas en documentos_ciclo (se guardan como float, no como str)
+_NUMERIC_DB_COLS = {"tipo_cambio", "mont_emit", "saldo_real", "saldo", "detraccion"}
+
+
+def _df_row_to_doc(dfrow: Any, cycle_id: str, df_columns: list) -> dict:
+    """Convierte una fila de df_final a un dict listo para insertar en documentos_ciclo."""
+    doc: Dict[str, Any] = {"cycle_id": cycle_id}
+    for df_col, db_col in _DF_TO_DB.items():
+        val = dfrow[df_col] if df_col in df_columns else None
+        if db_col in _NUMERIC_DB_COLS:
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                doc[db_col] = None
+            else:
+                try:
+                    doc[db_col] = float(val)
+                except (ValueError, TypeError):
+                    doc[db_col] = None
+        else:
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                doc[db_col] = ""
+            else:
+                doc[db_col] = str(val)
+    return doc
+
+
+def _docs_to_df(rows: list) -> pd.DataFrame:
+    """Convierte filas de documentos_ciclo de vuelta a df_final con nombres de columna originales."""
+    if not rows:
+        return pd.DataFrame()
+    df_rows = []
+    for doc in rows:
+        row: Dict[str, Any] = {}
+        for db_col, df_col in _DB_TO_DF.items():
+            row[df_col] = doc.get(db_col)
+        df_rows.append(row)
+    df = pd.DataFrame(df_rows)
+    # Garantizar que existan todas las columnas esperadas
+    for df_col in _DF_TO_DB.keys():
+        if df_col not in df.columns:
+            df[df_col] = ""
+    return df
+
+
+# ---------------------------------------------------------------------------
 # Cloud (Supabase) session persistence  --------------------------------------
 # ---------------------------------------------------------------------------
 
@@ -83,55 +165,70 @@ def save_session_cloud(
     cycle_id: str,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Tuple[bool, str]:
-    """Save processing cycle snapshot to Supabase for session restoration."""
+    """
+    Guarda un ciclo en Supabase usando modelo cabecera/detalle:
+    - UPSERT en ciclos_procesamiento (solo metadatos)
+    - DELETE + INSERT en documentos_ciclo (una fila por documento del Excel)
+    """
     client = _get_supabase()
     if not client:
         return False, "Supabase no disponible para guardar sesion."
 
     try:
-        # Serialize DataFrame — convert problematic types first
-        df_clean = df.copy()
-        for col in df_clean.columns:
-            if df_clean[col].dtype == "datetime64[ns]" or "datetime" in str(df_clean[col].dtype):
-                df_clean[col] = df_clean[col].astype(str)
-            elif df_clean[col].dtype == "object":
-                df_clean[col] = df_clean[col].fillna("").astype(str)
+        from utils.db_manager import _safe_execute
 
-        records = df_clean.to_dict(orient="records")
-
-        payload = {
-            "cycle_id": cycle_id,
-            "df_final_json": records,
-            "metadata": metadata or {},
-            "row_count": len(records),
+        # 1. Upsert cabecera (sin df_final_json)
+        header = {
+            "cycle_id":   cycle_id,
+            "row_count":  len(df),
+            "metadata":   metadata or {},
             "created_at": datetime.datetime.now().isoformat(),
             "expires_at": (
                 datetime.datetime.now() + datetime.timedelta(days=30)
             ).isoformat(),
         }
-
-        from utils.db_manager import _safe_execute
         _safe_execute(
             client.table("ciclos_procesamiento")
-            .upsert(payload, on_conflict="cycle_id")
+            .upsert(header, on_conflict="cycle_id")
         )
-        return True, f"Sesion guardada en cloud ({len(records)} filas)."
+
+        # 2. Borrar documentos previos del ciclo (permite re-guardar limpio)
+        _safe_execute(
+            client.table("documentos_ciclo")
+            .delete()
+            .eq("cycle_id", cycle_id)
+        )
+
+        # 3. Insertar documentos en lotes
+        df_cols = list(df.columns)
+        rows = [_df_row_to_doc(df.iloc[i], cycle_id, df_cols) for i in range(len(df))]
+
+        CHUNK = 100
+        for i in range(0, len(rows), CHUNK):
+            _safe_execute(
+                client.table("documentos_ciclo")
+                .insert(rows[i:i + CHUNK])
+            )
+
+        return True, f"Sesion guardada en cloud ({len(rows)} filas)."
     except Exception as e:
         print(f"save_session_cloud Error: {e}")
         return False, f"Error guardando sesion cloud: {e}"
 
 
 def load_session_cloud() -> Tuple[Optional[pd.DataFrame], Optional[Dict], Optional[datetime.datetime]]:
-    """Load the most recent processing cycle from Supabase."""
+    """Carga el ciclo más reciente desde Supabase usando documentos_ciclo."""
     client = _get_supabase()
     if not client:
         return None, None, None
 
     try:
         from utils.db_manager import _safe_execute
+
+        # Obtener el cycle_id más reciente
         res = _safe_execute(
             client.table("ciclos_procesamiento")
-            .select("cycle_id, df_final_json, metadata, row_count, created_at")
+            .select("cycle_id, metadata, row_count, created_at")
             .order("created_at", desc=True)
             .limit(1)
         )
@@ -139,14 +236,10 @@ def load_session_cloud() -> Tuple[Optional[pd.DataFrame], Optional[Dict], Option
         if not rows:
             return None, None, None
 
-        row = rows[0]
-        records = row.get("df_final_json", [])
-        if not records:
-            return None, None, None
-
-        df = pd.DataFrame(records)
-        metadata = row.get("metadata", {})
-        created_str = row.get("created_at", "")
+        header = rows[0]
+        cycle_id = header.get("cycle_id", "")
+        metadata = header.get("metadata", {})
+        created_str = header.get("created_at", "")
 
         try:
             created_at = datetime.datetime.fromisoformat(
@@ -155,6 +248,18 @@ def load_session_cloud() -> Tuple[Optional[pd.DataFrame], Optional[Dict], Option
         except Exception:
             created_at = datetime.datetime.now()
 
+        # Cargar documentos del ciclo
+        doc_res = _safe_execute(
+            client.table("documentos_ciclo")
+            .select("*")
+            .eq("cycle_id", cycle_id)
+            .order("created_at", desc=False)
+        )
+        doc_rows = doc_res.data or []
+        if not doc_rows:
+            return None, None, None
+
+        df = _docs_to_df(doc_rows)
         return df, metadata, created_at
     except Exception as e:
         print(f"load_session_cloud Error: {e}")
@@ -225,12 +330,12 @@ def list_sessions_cloud(limit: int = 20) -> list:
             except Exception:
                 created_at = None
             sessions.append({
-                "cycle_id": row.get("cycle_id", ""),
-                "created_at": created_at,
-                "row_count": row.get("row_count", 0),
-                "file_ctas": meta.get("file_ctas") or "—",
+                "cycle_id":      row.get("cycle_id", ""),
+                "created_at":    created_at,
+                "row_count":     row.get("row_count", 0),
+                "file_ctas":     meta.get("file_ctas") or "—",
                 "file_cobranza": meta.get("file_cobranza") or "—",
-                "fecha_corte": meta.get("fecha_corte") or "—",
+                "fecha_corte":   meta.get("fecha_corte") or "—",
             })
         return sessions
     except Exception as e:
@@ -239,30 +344,27 @@ def list_sessions_cloud(limit: int = 20) -> list:
 
 
 def load_session_by_id(cycle_id: str) -> Tuple[Optional["pd.DataFrame"], Optional[Dict], Optional[datetime.datetime]]:
-    """Carga un ciclo especifico por su cycle_id."""
+    """Carga un ciclo especifico por su cycle_id usando documentos_ciclo."""
     client = _get_supabase()
     if not client:
         return None, None, None
     try:
         from utils.db_manager import _safe_execute
-        res = _safe_execute(
+
+        # Obtener metadatos de la cabecera
+        hdr_res = _safe_execute(
             client.table("ciclos_procesamiento")
-            .select("cycle_id, df_final_json, metadata, row_count, created_at")
+            .select("cycle_id, metadata, row_count, created_at")
             .eq("cycle_id", str(cycle_id).strip())
             .limit(1)
         )
-        rows = res.data or []
-        if not rows:
+        hdr_rows = hdr_res.data or []
+        if not hdr_rows:
             return None, None, None
 
-        row = rows[0]
-        records = row.get("df_final_json", [])
-        if not records:
-            return None, None, None
-
-        df = pd.DataFrame(records)
-        metadata = row.get("metadata", {})
-        created_str = row.get("created_at", "")
+        header = hdr_rows[0]
+        metadata = header.get("metadata", {})
+        created_str = header.get("created_at", "")
         try:
             created_at = datetime.datetime.fromisoformat(
                 created_str.replace("Z", "+00:00")
@@ -270,6 +372,18 @@ def load_session_by_id(cycle_id: str) -> Tuple[Optional["pd.DataFrame"], Optiona
         except Exception:
             created_at = datetime.datetime.now()
 
+        # Obtener documentos del ciclo
+        doc_res = _safe_execute(
+            client.table("documentos_ciclo")
+            .select("*")
+            .eq("cycle_id", str(cycle_id).strip())
+            .order("created_at", desc=False)
+        )
+        doc_rows = doc_res.data or []
+        if not doc_rows:
+            return None, None, None
+
+        df = _docs_to_df(doc_rows)
         return df, metadata, created_at
     except Exception as e:
         print(f"load_session_by_id Error: {e}")
@@ -279,6 +393,7 @@ def load_session_by_id(cycle_id: str) -> Tuple[Optional["pd.DataFrame"], Optiona
 def clear_session_cloud() -> bool:
     """
     Elimina TODOS los ciclos de Supabase.
+    documentos_ciclo se limpia automaticamente via CASCADE FK.
     ATENCION: Solo usar en reset total de datos. No llamar en flujo normal de nuevo ciclo.
     """
     client = _get_supabase()

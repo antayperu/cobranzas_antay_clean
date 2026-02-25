@@ -121,7 +121,7 @@ def render_recovery_options() -> None:
     seen_labels: dict = {}
     for s in sessions:
         ts = s["created_at"]
-        ts_str = ts.strftime("%d/%m %H:%M") if ts else "--"
+        ts_str = ts.strftime("%d/%m/%Y %H:%M") if ts else "--"
         # Compact label: date+time + rows. Add seconds to disambiguate same-minute cycles.
         cid = s["cycle_id"]
         if cid.startswith("CIC-"):

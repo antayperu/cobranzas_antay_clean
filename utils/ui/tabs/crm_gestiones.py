@@ -548,10 +548,12 @@ def _render_client_drilldown():
     for _cid in _sel_cids:
         _cname = nombre_map.get(_cid, _cid)
         for n in dbm.get_notifications_history([_cid], limit=500):
+            canal_meta = str((n.get("metadata") or {}).get("channel", "EMAIL")).strip().upper()
+            canal_icon = TIPO_ICONS.get(canal_meta, "📧")
             history.append({
                 "Cliente":   _cname,
                 "Fecha":     str(n.get("fecha_envio") or n.get("created_at", ""))[:16].replace("T", " "),
-                "Canal":     f"{TIPO_ICONS.get('EMAIL', '📧')} Email",
+                "Canal":     f"{canal_icon} {canal_meta.title()}",
                 "Resultado": n.get("estado", ""),
                 "Detalle":   (n.get("asunto", "") or "")[:120],
             })
