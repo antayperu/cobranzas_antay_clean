@@ -122,10 +122,22 @@ def render_tab(config):
         with col_actions:
             with st.popover("ℹ️"):
                 st.markdown("""
-                **Estado SMTP:**
-                - 🟡 **Pendiente**: No probado aún
-                - 🟢 **Operativo**: Conexión exitosa
-                - 🔴 **Error**: Revisar credenciales
+                **¿Qué significan estos estados?**
+                
+                🟡 **PENDIENTE** 
+                - Aún no has probado la conexión
+                - Las credenciales están vacías o no validadas
+                - *Acción:* Completa los datos y haz clic en "Probar Conexión"
+                
+                🟢 **OPERATIVO** 
+                - La conexión SMTP funciona correctamente
+                - Los correos se enviarán exitosamente
+                - *Estado ideal:* Sistema listo para envíos masivos
+                
+                🔴 **ERROR** 
+                - La conexión falló (credenciales inválidas, servidor incorrecto)
+                - El servidor rechazó la autenticación
+                - *Acción:* Revisa usuario/contraseña y vuelve a probar
                 """)
         
         st.caption("Configura las credenciales para envío de correos masivos")
@@ -305,34 +317,34 @@ def render_tab(config):
 
         # Only show button when ready to save
         if st.button("💾 Guardar Copias Internas", type="primary", use_container_width=True):
-        # Normalizar SOLO aquí (al guardar, no mientras escribe)
-        norm_cc = helpers.normalize_emails(cc_input)
-        norm_bcc = helpers.normalize_emails(bcc_input)
-        
-        # Mostrar preview ANTES de guardar
-        st.caption(f"📝 Vista Previa: Se enviarán **{len(norm_cc)}** copias visibles y **{len(norm_bcc)}** ocultas por cada correo.")
-        if norm_cc or norm_bcc:
-            p_c1, p_c2 = st.columns(2)
-            with p_c1:
-                if norm_cc: st.info(f"**CC**: {', '.join(norm_cc)}")
-            with p_c2:
-                if norm_bcc: st.warning(f"**CCO**: {', '.join(norm_bcc)}")
-        
-        new_copies_cfg = {
-            "cc_list": norm_cc,
-            "bcc_list": norm_bcc
-        }
-        config['internal_copies'] = new_copies_cfg
-        
-        if sm.save_settings(config):
-            st.session_state['prev_internal_copies'] = new_copies_cfg # Update State
-            st.success(f"✅ Guardado: {len(norm_cc)} CCs y {len(norm_bcc)} CCOs configurados.")
-            st.toast("Listas de distribución actualizadas", icon="👥")
-            import time
-            time.sleep(1)
-            st.rerun()
-        else:
-            st.error("Error al guardar configuración.")
+            # Normalizar SOLO aquí (al guardar, no mientras escribe)
+            norm_cc = helpers.normalize_emails(cc_input)
+            norm_bcc = helpers.normalize_emails(bcc_input)
+            
+            # Mostrar preview ANTES de guardar
+            st.caption(f"📝 Vista Previa: Se enviarán **{len(norm_cc)}** copias visibles y **{len(norm_bcc)}** ocultas por cada correo.")
+            if norm_cc or norm_bcc:
+                p_c1, p_c2 = st.columns(2)
+                with p_c1:
+                    if norm_cc: st.info(f"**CC**: {', '.join(norm_cc)}")
+                with p_c2:
+                    if norm_bcc: st.warning(f"**CCO**: {', '.join(norm_bcc)}")
+            
+            new_copies_cfg = {
+                "cc_list": norm_cc,
+                "bcc_list": norm_bcc
+            }
+            config['internal_copies'] = new_copies_cfg
+            
+            if sm.save_settings(config):
+                st.session_state['prev_internal_copies'] = new_copies_cfg # Update State
+                st.success(f"✅ Guardado: {len(norm_cc)} CCs y {len(norm_bcc)} CCOs configurados.")
+                st.toast("Listas de distribución actualizadas", icon="👥")
+                import time
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("Error al guardar configuración.")
 
     st.divider()
     
