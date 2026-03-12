@@ -18,6 +18,13 @@ except ImportError:
 # Mantener este alias evita errores de importación durante la transición.
 _SELENIUM_OK = _PLAYWRIGHT_OK
 
+# FIX: Permitir múltiples event loops en Streamlit (async en context síncrono)
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+except ImportError:
+    pass
+
 # ---------------------------------------------------------------------------
 # Helpers de sesion WhatsApp
 # ---------------------------------------------------------------------------
