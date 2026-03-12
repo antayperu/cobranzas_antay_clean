@@ -5,26 +5,48 @@ import json
 import shutil
 import tempfile
 import urllib.parse
+import asyncio
 from datetime import datetime
+
 try:
-    from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.common.exceptions import TimeoutException, NoSuchElementException
-    _SELENIUM_OK = True
+    from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+    _PLAYWRIGHT_OK = True
 except ImportError:
-    _SELENIUM_OK = False
+    _PLAYWRIGHT_OK = False
+
+# Compatibilidad retroactiva con módulos UI que aún importan _SELENIUM_OK.
+# Mantener este alias evita errores de importación durante la transición.
+_SELENIUM_OK = _PLAYWRIGHT_OK
 
 # ---------------------------------------------------------------------------
 # Helpers de sesion WhatsApp
 # ---------------------------------------------------------------------------
 
-# Usar directorio temp LOCAL del sistema (evita problemas con UNC/rutas de red)
-# Chrome no funciona con --user-data-dir apuntando a rutas de red (\\servidor\...)
+# Usar directorio temp LOCAL del sistema
 WA_SESSION_DIR = os.path.join(tempfile.gettempdir(), "dacta_wa_session")
 WA_SESSION_INFO = os.path.join(WA_SESSION_DIR, "_session_info.json")
+
+
+def _ensure_playwright_browser() -> bool:
+    """
+    Garantiza que Chromium esté descargado. Se ejecuta una sola vez.
+    Retorna True si está disponible, False si no.
+    """
+    if not _PLAYWRIGHT_OK:
+        return False
+    
+    try:
+        # Verificar si Chromium ya está descargado
+        import subprocess
+        result = subprocess.run(
+            ["playwright", "install", "chromium"],
+            capture_output=True,
+            timeout=300,  # 5 minutos max
+            text=True
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def get_wa_session_info() -> dict:
@@ -87,171 +109,124 @@ def update_wa_session_alias(alias: str = "", phone: str = "") -> bool:
 
 def connect_wa_session(timeout_seconds: int = 120) -> tuple:
     """
-    Abre Chrome, navega a WhatsApp Web y espera que el usuario escanee el QR.
-    Guarda la sesion en WA_SESSION_DIR para uso posterior.
+    Abre Chromium (Playwright), navega a WhatsApp Web y espera que el usuario
+    escanee el QR. Guarda la sesion en WA_SESSION_DIR para uso posterior.
+    Chromium se descarga automáticamente con `playwright install chromium`.
 
     Returns:
         (ok: bool, phone: str, profile_name: str, error_msg: str)
     """
-    if not _SELENIUM_OK:
-        return False, "", "", "Selenium no está instalado. Ejecuta _install_deps.bat."
-
-    from selenium.webdriver.chrome.service import Service
-    from shutil import which
-    
-    # Verificar si Chrome está disponible en el sistema
-    chrome_path = which("chrome") or which("chromium") or which("google-chrome") or which("chromium-browser")
-    if not chrome_path and os.name == 'nt':  # Windows
-        # En Windows, buscar en rutas comunes
-        common_paths = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
-        ]
-        for path in common_paths:
-            if os.path.exists(path):
-                chrome_path = path
-                break
-    
-    if not chrome_path:
+    if not _PLAYWRIGHT_OK:
         return False, "", "", (
-            "❌ Chrome no está instalado en el servidor.\n\n"
-            "SOLUCIÓN:\n"
-            "1. En el servidor QA, descarga Chrome: https://www.google.com/chrome/\n"
-            "2. Instálalo en la ruta por defecto: C:\\Program Files\\Google\\Chrome\\\n"
-            "3. Reinicia la aplicación después de instalar Chrome\n\n"
-            "Alternativamente, configura la ruta en config.json con 'chrome_path'"
+            "❌ Playwright no está instalado.\n\n"
+            "Ejecuta en el servidor:\n"
+            "  pip install playwright\n"
+            "  python -m playwright install chromium"
         )
 
-    driver = None
-    try:
-        options = webdriver.ChromeOptions()
-        os.makedirs(WA_SESSION_DIR, exist_ok=True)
+    # Descarga Chromium automáticamente si no está instalado (primera vez ~170MB)
+    _ensure_playwright_browser()
 
-    driver = None
-    try:
-        options = webdriver.ChromeOptions()
-        os.makedirs(WA_SESSION_DIR, exist_ok=True)
+    return asyncio.run(_connect_wa_session_async(timeout_seconds))
 
-        # Limpiar archivos que causan el dialogo "Chrome no se cerro correctamente"
-        # Las cookies de WhatsApp se guardan en 'Cookies' DB y no se ven afectadas
-        _profile_dir = os.path.join(WA_SESSION_DIR, "Default")
-        _files_to_clean = [
-            # Lock files
-            os.path.join(WA_SESSION_DIR, "SingletonLock"),
-            os.path.join(WA_SESSION_DIR, "SingletonCookie"),
-            os.path.join(WA_SESSION_DIR, "SingletonSocket"),
-            # Session files (causan dialogo de restauracion)
-            os.path.join(_profile_dir, "Last Session"),
-            os.path.join(_profile_dir, "Last Tabs"),
-            os.path.join(_profile_dir, "Current Session"),
-            os.path.join(_profile_dir, "Current Tabs"),
-        ]
-        for _f in _files_to_clean:
-            try:
-                if os.path.exists(_f):
-                    os.remove(_f)
-            except OSError:
-                pass
 
-        options.add_argument(f"--user-data-dir={WA_SESSION_DIR}")
-        options.add_argument("--profile-directory=Default")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--disable-software-rasterizer")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option("useAutomationExtension", False)
-        options.add_argument("--disable-blink-features=AutomationControlled")
+async def _connect_wa_session_async(timeout_seconds: int) -> tuple:
+    """Implementación async interna de connect_wa_session."""
+    os.makedirs(WA_SESSION_DIR, exist_ok=True)
 
-        # Usar la ruta de Chrome detectada
-        service = Service(chrome_path) if chrome_path != "chrome" else None
-        if service:
-            driver = webdriver.Chrome(service=service, options=options)
-        else:
-            driver = webdriver.Chrome(options=options)
-
-        driver.get("https://web.whatsapp.com")
-        time.sleep(4)
-
-        QR_SELECTORS = [
-            '//canvas[@aria-label="Scan me!"]',
-            '//div[@data-testid="qrcode"]',
-            '//div[@data-ref]',
-        ]
-        PANE_XPATH = '//div[@id="pane-side"]'
-
-        wait_short = WebDriverWait(driver, 20)
-        wait_login = WebDriverWait(driver, timeout_seconds)
-
-        page_state = "unknown"
+    # Limpiar archivos que causan el dialogo "Chrome no se cerro correctamente"
+    _profile_dir = os.path.join(WA_SESSION_DIR, "Default")
+    _files_to_clean = [
+        os.path.join(WA_SESSION_DIR, "SingletonLock"),
+        os.path.join(WA_SESSION_DIR, "SingletonCookie"),
+        os.path.join(WA_SESSION_DIR, "SingletonSocket"),
+        os.path.join(_profile_dir, "Last Session"),
+        os.path.join(_profile_dir, "Last Tabs"),
+        os.path.join(_profile_dir, "Current Session"),
+        os.path.join(_profile_dir, "Current Tabs"),
+    ]
+    for _f in _files_to_clean:
         try:
-            wait_short.until(EC.any_of(
-                EC.presence_of_element_located((By.XPATH, PANE_XPATH)),
-                EC.presence_of_element_located((By.XPATH, QR_SELECTORS[0])),
-                EC.presence_of_element_located((By.XPATH, QR_SELECTORS[1])),
-            ))
-            try:
-                driver.find_element(By.XPATH, PANE_XPATH)
-                page_state = "logged_in"
-            except Exception:
-                page_state = "qr_visible"
-        except Exception:
-            page_state = "loading"
-
-        if page_state != "logged_in":
-            try:
-                wait_login.until(EC.presence_of_element_located((By.XPATH, PANE_XPATH)))
-                page_state = "logged_in"
-            except TimeoutException:
-                return False, "", "", f"Timeout: No se completó el login en {timeout_seconds}s."
-
-        # Dar tiempo a que WhatsApp cargue el perfil en el DOM
-        time.sleep(2)
-
-        phone = ""
-        profile_name = ""
-        try:
-            phone = driver.execute_script(
-                "return window.Store?.User?.getMaybeMeUser?.()?.id?.user || '';"
-            ) or ""
-            profile_name = driver.execute_script(
-                "return document.querySelector('span[data-testid=\"default-user\"]')?.textContent "
-                "|| document.title || '';"
-            ) or ""
-            phone = str(phone).strip()
-            profile_name = str(profile_name).strip()
-        except Exception:
+            if os.path.exists(_f):
+                os.remove(_f)
+        except OSError:
             pass
 
-        _save_wa_session_info(profile_name=profile_name, phone=phone)
-        return True, phone, profile_name, ""
-
-    except Exception as e:
-        error_str = str(e).lower()
-        
-        # Detectar errores específicos de Chrome/ChromeDriver
-        if "chrome instance exited" in error_str or "chromedriver" in error_str or "path to chromedriver" in error_str:
-            return False, "", "", (
-                "❌ Error al iniciar Chrome en el servidor.\n\n"
-                "CAUSA PROBABLE:\n"
-                "- Chrome no está instalado en el servidor QA\n"
-                "- ChromeDriver incompatible con la versión de Chrome\n\n"
-                "SOLUCIÓN:\n"
-                "1. En el servidor QA, instala Google Chrome: https://www.google.com/chrome/\n"
-                "2. Descarga ChromeDriver compatible: https://chromedriver.chromium.org/\n"
-                "3. Reinicia la aplicación después de instalar\n\n"
-                f"Detalles técnicos: {str(e)}"
+    try:
+        async with async_playwright() as p:
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=WA_SESSION_DIR,
+                headless=False,
+                args=[
+                    "--profile-directory=Default",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--disable-blink-features=AutomationControlled",
+                ],
+                ignore_default_args=["--enable-automation"],
             )
-        
-        # Otros errores
-        return False, "", "", f"Error al conectar WhatsApp: {str(e)}"
-    finally:
-        if driver:
+            page = context.pages[0] if context.pages else await context.new_page()
+
+            await page.goto("https://web.whatsapp.com")
+            await page.wait_for_timeout(4000)
+
+            PANE_XPATH = '//div[@id="pane-side"]'
+            QR_XPATHS = [
+                '//canvas[@aria-label="Scan me!"]',
+                '//div[@data-testid="qrcode"]',
+            ]
+
+            # Detectar si ya hay sesión o si se necesita QR
+            page_state = "loading"
             try:
-                driver.quit()
+                await page.wait_for_selector(PANE_XPATH, timeout=20000)
+                page_state = "logged_in"
+            except PlaywrightTimeoutError:
+                for qr_xpath in QR_XPATHS:
+                    try:
+                        if await page.query_selector(qr_xpath):
+                            page_state = "qr_visible"
+                            break
+                    except Exception:
+                        pass
+
+            if page_state != "logged_in":
+                # Esperar que el usuario escanee el QR
+                try:
+                    await page.wait_for_selector(
+                        PANE_XPATH, timeout=timeout_seconds * 1000
+                    )
+                    page_state = "logged_in"
+                except PlaywrightTimeoutError:
+                    await context.close()
+                    return False, "", "", f"Timeout: No se completó el login en {timeout_seconds}s."
+
+            # Dar tiempo a que WhatsApp cargue el perfil en el DOM
+            await page.wait_for_timeout(2000)
+
+            phone = ""
+            profile_name = ""
+            try:
+                phone = await page.evaluate(
+                    "window.Store?.User?.getMaybeMeUser?.()?.id?.user || ''"
+                ) or ""
+                profile_name = await page.evaluate(
+                    "document.querySelector('span[data-testid=\"default-user\"]')?.textContent "
+                    "|| document.title || ''"
+                ) or ""
+                phone = str(phone).strip()
+                profile_name = str(profile_name).strip()
             except Exception:
                 pass
+
+            _save_wa_session_info(profile_name=profile_name, phone=phone)
+            await context.close()
+            return True, phone, profile_name, ""
+
+    except Exception as e:
+        return False, "", "", f"Error al conectar WhatsApp: {str(e)}"
 
 
 # --- RC-ARCH-001: CENTRALIZED SELECTORS ---
@@ -533,7 +508,7 @@ def generate_executive_card_html(client_data, branding_config, logo_b64=None):
 
 def generate_executive_card_image(client_data, branding_config, logo_path=None):
     """
-    Genera imagen JPG de tarjeta ejecutiva usando Selenium headless.
+    Genera imagen JPG de tarjeta ejecutiva usando Playwright Chromium headless.
     
     Args:
         client_data: Dict con datos del cliente
@@ -544,7 +519,6 @@ def generate_executive_card_image(client_data, branding_config, logo_path=None):
         str: Ruta del archivo JPG temporal generado
     """
     import base64
-    from selenium.webdriver.chrome.service import Service
     # Convertir logo a base64 si existe
     logo_b64 = None
     if logo_path and os.path.exists(logo_path):
@@ -562,56 +536,32 @@ def generate_executive_card_image(client_data, branding_config, logo_path=None):
     temp_html.write(html_content)
     temp_html.close()
     
-    # Configurar Chrome headless
-    options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=800,1000')
-    
-    driver = None
+    # Generar imagen usando Playwright headless (Chromium auto-descargado)
+    from playwright.sync_api import sync_playwright as _sync_playwright
     temp_image_path = None
-    
     try:
-        service = Service()
-        driver = webdriver.Chrome(service=service, options=options)
-
-        # Cargar HTML
-        driver.get(f'file:///{temp_html.name}')
-
-        # Esperar carga completa
-        time.sleep(1.5)
-        
-        # Obtener dimensiones reales del contenido
-        total_height = driver.execute_script("return document.body.scrollHeight")
-        total_width = driver.execute_script("return document.body.scrollWidth")
-        
-        # Ajustar ventana al contenido
-        driver.set_window_size(total_width, total_height)
-        time.sleep(0.5)
-        
-        # Capturar screenshot
-        temp_image_path = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False).name
-        driver.save_screenshot(temp_image_path)
-        
+        with _sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": 800, "height": 1000})
+            page.set_content(html_content)
+            page.wait_for_load_state("networkidle")
+            temp_image_path = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False).name
+            page.screenshot(path=temp_image_path, full_page=True)
+            browser.close()
     finally:
-        if driver:
-            driver.quit()
-        
         # Limpiar HTML temporal
         try:
             os.remove(temp_html.name)
-        except:
+        except Exception:
             pass
-    
+
     return temp_image_path
 
 def generate_pdf_statement(client_data, docs_df, branding_config, logo_path=None):
     """
     Genera PDF con estado de cuenta detallado.
     Reutiliza el diseño HTML del email para consistencia visual.
-    VERSIÓN WINDOWS: Usa Selenium + Chrome headless para generar PDF (compatible con Windows)
+    Usa Playwright Chromium headless para generar PDF (sin necesidad de Chrome instalado).
     
     Args:
         client_data: Dict con datos del cliente (EMPRESA, etc.)
@@ -625,7 +575,6 @@ def generate_pdf_statement(client_data, docs_df, branding_config, logo_path=None
     # Importar función de generación de HTML del email
     from utils.email_sender import generate_premium_email_body_cid
     import base64
-    from selenium.webdriver.chrome.service import Service
     # Convertir logo a base64 si existe
     logo_b64 = None
     if logo_path and os.path.exists(logo_path):
@@ -671,89 +620,57 @@ def generate_pdf_statement(client_data, docs_df, branding_config, logo_path=None
     temp_html.write(html_content)
     temp_html.close()
     
-    # Configurar Chrome headless para PDF
-    options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    
-    # Configuración para imprimir a PDF
-    options.add_argument('--kiosk-printing')
-    
-    driver = None
+    # Generar PDF usando Playwright headless (Chromium auto-descargado)
+    from playwright.sync_api import sync_playwright as _sync_playwright
     temp_pdf_path = None
-    
     try:
-        service = Service()
-        driver = webdriver.Chrome(service=service, options=options)
-
-        # Cargar HTML
-        driver.get(f'file:///{temp_html.name}')
-
-        # Esperar carga completa
-        time.sleep(2)
-        
-        # Generar PDF usando Chrome's print to PDF
-        temp_pdf_path = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False).name
-        
-        print_options = {
-            'landscape': False,
-            'displayHeaderFooter': False,
-            'printBackground': True,
-            'preferCSSPageSize': True,
-        }
-        
-        result = driver.execute_cdp_cmd('Page.printToPDF', print_options)
-        
-        # Decodificar y guardar PDF
-        import base64 as b64
-        with open(temp_pdf_path, 'wb') as f:
-            f.write(b64.b64decode(result['data']))
-        
+        with _sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.set_content(html_content)
+            page.wait_for_load_state("networkidle")
+            temp_pdf_path = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False).name
+            page.pdf(
+                path=temp_pdf_path,
+                format="A4",
+                print_background=True,
+                prefer_css_page_size=True,
+            )
+            browser.close()
     finally:
-        if driver:
-            driver.quit()
-        
         # Limpiar HTML temporal
         try:
             os.remove(temp_html.name)
-        except:
+        except Exception:
             pass
-    
+
     return temp_pdf_path
 
 
-def _check_pdf_sent(driver, pdf_path):
-    """Verifica si el PDF fue enviado buscándolo en el chat"""
+def _check_pdf_sent(page, pdf_path):
+    """Verifica si el PDF fue enviado buscándolo en el chat (Playwright)"""
     try:
-        # Check genérico de documento + check específico por nombre
         base_name = os.path.basename(pdf_path)
-        
-        # 1. Verificar si existe algún icono de documento reciente
-        if driver.find_elements(By.XPATH, SELECTORS['doc_sent_check']):
-            # 2. Refinar búsqueda por nombre si es posible (más costoso)
+        if page.query_selector(SELECTORS['doc_sent_check']):
             try:
-                if driver.find_elements(By.XPATH, f'//span[contains(text(), "{base_name}")]'):
+                if page.query_selector(f'//span[contains(text(), "{base_name}")]'):
                     return True
-            except:
+            except Exception:
                 pass
-            return True # Asumimos éxito si hay icono de documento y no saltó error
-            
+            return True
         return False
-    except:
+    except Exception:
         return False
 
 
-def _check_modal_gone(driver):
-    """Verifica si el modal de envío de archivo se ha cerrado"""
+def _check_modal_gone(page):
+    """Verifica si el modal de envío de archivo se ha cerrado (Playwright)"""
     try:
-        # Usamos el selector centralizado
-        if driver.find_elements(By.XPATH, SELECTORS['modal_view']):
-            return False # Aún está presente
-        return True # No se encontró -> Se cerró
-    except:
-        return True # Si da error al buscar, asumimos que no está
+        if page.query_selector(SELECTORS['modal_view']):
+            return False
+        return True
+    except Exception:
+        return True
 
 
 
@@ -767,7 +684,7 @@ def send_whatsapp_messages_direct(
     logo_path=None  # NUEVO: Ruta al logo
 ):
     """
-    Envía mensajes de WhatsApp directamente usando Selenium desde Streamlit.
+    Envía mensajes de WhatsApp directamente usando Playwright desde Streamlit.
 
     Args:
         contacts: Lista de diccionarios con datos de clientes
@@ -867,37 +784,35 @@ def send_whatsapp_messages_direct(
             add_log(f"    Error clipboard: {e}")
             return False
 
-    driver = None
+    from playwright.sync_api import sync_playwright as _sync_playwright, TimeoutError as _PWTimeoutError
+
+    # Descarga Chromium automáticamente si no está instalado (primera vez ~170MB)
+    _ensure_playwright_browser()
+
+    wa_context = None
+    page = None
 
     try:
         # Inicializar
         add_log("="*60)
-        add_log("INICIANDO ENVÍO DE MENSAJES WHATSAPP (Híbrido: Paste / Adjuntar)") # Updated log message
+        add_log("INICIANDO ENVÍO DE MENSAJES WHATSAPP (Playwright)")
         add_log("="*60)
         add_log(f"Total de mensajes a enviar: {len(processed_contacts)}")
         add_log(f"Velocidad: {speed} (Delay: {delay}s)")
-        
+
         if progress_callback:
             progress_callback(0, len(processed_contacts), "Iniciando navegador...", "\n".join(log_lines))
-
-        # Configurar opciones de Chrome
-        from selenium.webdriver.chrome.service import Service
-
-        options = webdriver.ChromeOptions()
 
         # Directorio de usuario para persistencia de sesion WhatsApp
         user_data_dir = WA_SESSION_DIR
         os.makedirs(user_data_dir, exist_ok=True)
 
         # Limpiar archivos que causan el dialogo "Chrome no se cerro correctamente"
-        # Las cookies de WhatsApp se guardan en 'Cookies' DB y no se ven afectadas
         _profile_dir = os.path.join(user_data_dir, "Default")
         _files_to_clean = [
-            # Lock files
             os.path.join(user_data_dir, "SingletonLock"),
             os.path.join(user_data_dir, "SingletonCookie"),
             os.path.join(user_data_dir, "SingletonSocket"),
-            # Session files (causan dialogo de restauracion)
             os.path.join(_profile_dir, "Last Session"),
             os.path.join(_profile_dir, "Last Tabs"),
             os.path.join(_profile_dir, "Current Session"),
@@ -910,55 +825,49 @@ def send_whatsapp_messages_direct(
             except OSError:
                 pass
 
-        options.add_argument(f"--user-data-dir={user_data_dir}")
-        options.add_argument("--profile-directory=Default")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--disable-software-rasterizer")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
-        options.add_argument("--disable-blink-features=AutomationControlled")
-
-        add_log("Abriendo Chrome...")
-
-        driver = webdriver.Chrome(options=options)
-        wait = WebDriverWait(driver, 30)  # espera general para elementos del chat
+        add_log("Abriendo Chromium (Playwright)...")
+        _playwright = _sync_playwright().start()
+        wa_context = _playwright.chromium.launch_persistent_context(
+            user_data_dir=user_data_dir,
+            headless=False,
+            args=[
+                "--profile-directory=Default",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--disable-blink-features=AutomationControlled",
+            ],
+            ignore_default_args=["--enable-automation"],
+        )
+        page = wa_context.pages[0] if wa_context.pages else wa_context.new_page()
 
         # Abrir WhatsApp Web
         add_log("Navegando a WhatsApp Web...")
-        driver.get("https://web.whatsapp.com")
-        time.sleep(4)  # Dar tiempo a que la pagina inicie su carga
+        page.goto("https://web.whatsapp.com")
+        page.wait_for_timeout(4000)
 
         # --- PASO 1: Detectar si hay QR o sesion activa ---
-        QR_SELECTORS = [
+        PANE_XPATH = '//div[@id="pane-side"]'
+        QR_XPATHS = [
             '//canvas[@aria-label="Scan me!"]',
             '//div[@data-testid="qrcode"]',
-            '//div[@data-ref]',  # contenedor QR legacy
+            '//div[@data-ref]',
         ]
-        PANE_XPATH = '//div[@id="pane-side"]'
-        QR_TIMEOUT = 20   # segundos para detectar si la pagina cargo (QR o sesion)
-        LOGIN_TIMEOUT = 120  # segundos que el usuario tiene para escanear el QR
+        LOGIN_TIMEOUT = 120
 
-        wait_short = WebDriverWait(driver, QR_TIMEOUT)
-        wait_login = WebDriverWait(driver, LOGIN_TIMEOUT)
-
-        page_state = "unknown"
+        page_state = "loading"
         try:
-            # Esperar a que aparezca QR O panel principal
-            wait_short.until(EC.any_of(
-                EC.presence_of_element_located((By.XPATH, PANE_XPATH)),
-                EC.presence_of_element_located((By.XPATH, QR_SELECTORS[0])),
-                EC.presence_of_element_located((By.XPATH, QR_SELECTORS[1])),
-            ))
-            # Determinar cuál apareció
-            try:
-                driver.find_element(By.XPATH, PANE_XPATH)
-                page_state = "logged_in"
-            except Exception:
-                page_state = "qr_visible"
-        except Exception:
-            page_state = "loading"  # pagina lenta, seguir esperando
+            page.wait_for_selector(PANE_XPATH, timeout=20000)
+            page_state = "logged_in"
+        except _PWTimeoutError:
+            for _qr in QR_XPATHS:
+                try:
+                    if page.query_selector(_qr):
+                        page_state = "qr_visible"
+                        break
+                except Exception:
+                    pass
 
         if page_state == "logged_in":
             add_log("✅ Sesion WhatsApp activa detectada. No es necesario escanear QR.")
@@ -974,22 +883,21 @@ def send_whatsapp_messages_direct(
             if progress_callback:
                 progress_callback(0, len(processed_contacts), "Escanea el QR en WhatsApp Web...", "\n".join(log_lines))
 
-            # Esperar login con timeout amplio
             try:
-                wait_login.until(EC.presence_of_element_located((By.XPATH, PANE_XPATH)))
+                page.wait_for_selector(PANE_XPATH, timeout=LOGIN_TIMEOUT * 1000)
                 add_log("✅ Sesion iniciada correctamente.")
-            except Exception:
+            except _PWTimeoutError:
                 add_log("⚠️ Timeout de login. Verificando si la sesion esta activa...")
-                time.sleep(5)
+                page.wait_for_timeout(5000)
 
         # --- Capturar nombre de perfil y guardar info de sesion ---
         try:
-            _profile_name = driver.execute_script(
-                "return document.querySelector('span[data-testid=\"default-user\"]')?.textContent "
-                "|| document.title || '';"
+            _profile_name = page.evaluate(
+                "document.querySelector('span[data-testid=\"default-user\"]')?.textContent "
+                "|| document.title || ''"
             ) or ""
-            _phone = driver.execute_script(
-                "return window.Store?.User?.getMaybeMeUser?.()?.id?.user || '';"
+            _phone = page.evaluate(
+                "window.Store?.User?.getMaybeMeUser?.()?.id?.user || ''"
             ) or ""
             _save_wa_session_info(
                 profile_name=str(_profile_name).strip(),
@@ -1002,7 +910,7 @@ def send_whatsapp_messages_direct(
         except Exception:
             _save_wa_session_info()
 
-        time.sleep(3)
+        page.wait_for_timeout(3000)
 
         add_log("="*60)
         add_log("COMENZANDO ENVÍO")
@@ -1035,48 +943,47 @@ def send_whatsapp_messages_direct(
                     progress_callback(i-1, len(processed_contacts), f"Enviando a {nombre}...", "\n".join(log_lines))
 
                 url = f"https://web.whatsapp.com/send?phone={phone}"
-                driver.get(url)
-                
-                # Esperamos carga del chat
+                page.goto(url)
+
                 # Esperamos carga del chat
                 try:
                     # Tiempos dinámicos: El primero siempre tarda más (Cold Start)
-                    timeout_val = 60 if i == 1 else 30 
-                    
+                    timeout_val = 60 if i == 1 else 30
+
                     # Selectores de éxito (Chat cargado)
                     chat_loaded_xpath = SELECTORS['chat_loaded']
-                    
+
                     # Verificar periódicamente para detectar popup de invalido rapido
                     start_time = time.time()
                     loaded = False
                     while time.time() - start_time < timeout_val:
                         try:
-                            if driver.find_elements(By.XPATH, chat_loaded_xpath):
+                            if page.query_selector_all(chat_loaded_xpath):
                                 loaded = True
                                 break
-                            
+
                             # Check invalid number popup (Fast Fail)
                             invalid_xpath = SELECTORS['invalid_number']
-                            if driver.find_elements(By.XPATH, invalid_xpath):
+                            if page.query_selector_all(invalid_xpath):
                                 raise ValueError("NumeroInvalido")
-                                
+
                         except ValueError as ve:
                             raise ve
-                        except:
+                        except Exception:
                             pass
                         time.sleep(1)
-                    
+
                     if not loaded:
                         raise Exception("Timeout cargando chat (DOM no listo)")
 
-                    time.sleep(2) # Stability buffer
+                    time.sleep(2)  # Stability buffer
                 except ValueError:
-                     add_log("    ❌ Número inválido detectado por WhatsApp")
-                     errores.append(f"{nombre}: Número inválido")
-                     fallidos += 1
-                     continue
+                    add_log("    ❌ Número inválido detectado por WhatsApp")
+                    errores.append(f"{nombre}: Número inválido")
+                    fallidos += 1
+                    continue
                 except Exception as e_load:
-                     raise Exception(f"Timeout cargando chat: {str(e_load)}")
+                    raise Exception(f"Timeout cargando chat: {str(e_load)}")
 
 
                 # ESTRATEGIA: JS-FORCE-CLICK + PASTE TRADICIONAL (Grado Militar)
@@ -1084,293 +991,254 @@ def send_whatsapp_messages_direct(
                 if img_path and os.path.exists(img_path):
                     try:
                         image_sent_success = False
-                        
+
                         # 1. Copiar imagen al portapapeles
                         add_log(f"    📋 Preparando imagen en memoria...")
                         if not copy_image_to_clipboard(img_path):
                             raise Exception("Error al copiar imagen (OS Clipboard Error)")
-                        
-                        # Espera extendida para sincronización de sistema operativo móvil/escritorio
-                        time.sleep(3) 
-                        
+
+                        # Espera extendida para sincronización de sistema operativo
+                        time.sleep(3)
+
                         # 2. Localizar input principal
                         inp_xpath = SELECTORS['input_box']
-                        input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
-                        
+                        input_box = page.wait_for_selector(inp_xpath, timeout=30000)
+
                         # 3. CLICK FANTASMA (JS) + PEGAR
-                        # El JS Click traspasa el botón "Clip" o cualquier interceptor visual.
                         add_log("    📋 Pegando imagen (JS Force & Paste)...")
-                        driver.execute_script("arguments[0].focus(); arguments[0].click();", input_box)
+                        input_box.evaluate("el => { el.focus(); el.click(); }")
                         time.sleep(1)
-                        
-                        # Usamos send_keys directo sobre el elemento para disparar el evento de pegado
-                        input_box.send_keys(Keys.CONTROL, 'v')
-                        
+                        page.keyboard.press("Control+V")
+
                         # 4. Verificar si apareció el modal con paciencia
                         try:
                             preview_indicator = SELECTORS['preview_loading']
-                            # Esperar hasta 15s porque la imagen puede ser pesada en red
-                            wait_long = WebDriverWait(driver, 15) 
-                            wait_long.until(EC.visibility_of_element_located((By.XPATH, preview_indicator)))
+                            page.wait_for_selector(preview_indicator, timeout=15000)
                             image_sent_success = True
-                        except:
-                            # REINTENTO DE EMERGENCIA: Si no hay modal, intentar pegar una vez más
+                        except _PWTimeoutError:
+                            # REINTENTO DE EMERGENCIA
                             add_log("      ⚠️ Modal lento, reintentando pegado manual...")
-                            input_box.send_keys(Keys.CONTROL, 'v')
+                            page.keyboard.press("Control+V")
                             time.sleep(5)
-                            if not driver.find_elements(By.XPATH, preview_indicator):
+                            if not page.query_selector(preview_indicator):
                                 raise Exception("WhatsApp no detectó la imagen tras el pegado (Modal ausente)")
 
                         # 5. Una vez en el modal, buscar botón enviar
-                        time.sleep(1.5) # Estabilizar modal
-                        
+                        time.sleep(1.5)
+
                         send_btn_selectors = SELECTORS['send_button']
-                            
+
                         # 6. Buscar el botón de envío (Con paciencia)
                         send_button = None
-                        for _ in range(15): 
+                        for _ in range(15):
                             for selector in send_btn_selectors:
                                 try:
-                                    btns = driver.find_elements(By.XPATH, selector)
-                                    for btn in btns:
-                                        if btn.is_displayed():
-                                            send_button = btn
-                                            break
-                                    if send_button: break
-                                except: pass
-                            if send_button: break
+                                    btns = [b for b in page.query_selector_all(selector) if b.is_visible()]
+                                    if btns:
+                                        send_button = btns[0]
+                                        break
+                                except Exception:
+                                    pass
+                            if send_button:
+                                break
                             time.sleep(0.5)
-                        
+
                         if not send_button:
-                                raise Exception("No se visualizó el botón Enviar en el modal")
+                            raise Exception("No se visualizó el botón Enviar en el modal")
 
                         # 7. Escribir el Caption (Mensaje)
                         try:
                             caption_selectors = SELECTORS['modal_caption']
-                            
                             caption_box = None
                             for selector in caption_selectors:
                                 try:
-                                    candidates = driver.find_elements(By.XPATH, selector)
-                                    for cand in candidates:
-                                        if cand.is_displayed():
-                                            caption_box = cand
-                                            break
-                                    if caption_box: break
-                                except: pass
-                            
+                                    candidates = [c for c in page.query_selector_all(selector) if c.is_visible()]
+                                    if candidates:
+                                        caption_box = candidates[0]
+                                        break
+                                except Exception:
+                                    pass
+
                             if caption_box:
                                 add_log("    📝 Agregando mensaje...")
                                 import pyperclip
                                 pyperclip.copy(final_msg)
-                                
-                                # Forzar foco en caption y pegar
-                                driver.execute_script("arguments[0].focus(); arguments[0].click();", caption_box)
+                                caption_box.evaluate("el => { el.focus(); el.click(); }")
                                 time.sleep(0.5)
-                                caption_box.send_keys(Keys.CONTROL, 'v')
+                                page.keyboard.press("Control+V")
                                 time.sleep(0.5)
                         except Exception as e_cap:
                             add_log(f"    ⚠️ Error en caption (opcional): {str(e_cap)}")
 
                         # 8. Envío Final (JS Click para no fallar por superposición)
-                        driver.execute_script("arguments[0].click();", send_button)
-                            
+                        send_button.evaluate("el => el.click()")
+
                         add_log(f"    ✅ Imagen enviada a {nombre}")
-                        
+
                         # NUEVO v5.0: Adjuntar PDF si está en modo imagen_pdf
                         pdf_path = contact.get('pdf_path')
                         if pdf_path and os.path.exists(pdf_path):
                             try:
                                 add_log(f"    📎 Adjuntando PDF...")
-                                
-                                # Esperar a que WhatsApp vuelva al estado normal después de enviar imagen
                                 time.sleep(5)
-                                
-                                # 1. Buscar el botón de adjuntar (clip) - Múltiples selectores
-                                # RETRY LOOP FOR ATTACHMENT
+
                                 attachment_success = False
                                 for attempt_idx in range(3):
                                     try:
                                         add_log(f"    📎 Intento adjuntar PDF ({attempt_idx+1}/3)...")
-                                        
-                                        # 1. Buscar el botón de adjuntar (clip)
+
                                         attach_btn = None
                                         attach_selectors = SELECTORS['attach_menu_btn']
-                                        
                                         for selector in attach_selectors:
                                             try:
-                                                attach_btn = driver.find_element(By.XPATH, selector)
-                                                if attach_btn: break
-                                            except: continue
-                                        
+                                                attach_btn = page.query_selector(selector)
+                                                if attach_btn:
+                                                    break
+                                            except Exception:
+                                                continue
+
                                         if not attach_btn:
                                             time.sleep(1)
                                             continue
-                                        
-                                        # Click en el botón de adjuntar
-                                        driver.execute_script("arguments[0].click();", attach_btn)
+
+                                        attach_btn.evaluate("el => el.click()")
                                         time.sleep(1)
-                                        
-                                        # 2. Buscar el input de archivo (Wait for presence)
+
                                         file_input = None
-                                        
                                         try:
-                                            # Usamos wait explícito para el input file
-                                            input_wait = WebDriverWait(driver, 5)
-                                            file_input = input_wait.until(EC.presence_of_element_located((By.XPATH, SELECTORS['file_input'])))
-                                        except:
+                                            file_input = page.wait_for_selector(SELECTORS['file_input'], timeout=5000)
+                                        except _PWTimeoutError:
                                             pass
-                                        
+
                                         if not file_input:
                                             add_log("    ⚠️ Input file no encontrado, reintentando...")
                                             continue
-                                        
-                                        # 3. Enviar ruta del PDF
+
                                         abs_pdf_path = os.path.abspath(pdf_path)
-                                        file_input.send_keys(abs_pdf_path)
-                                        
-                                        # 4. Esperar modal de preview (CRITICO)
+                                        file_input.set_input_files(abs_pdf_path)
+
                                         preview_selectors = [SELECTORS['modal_view']] + SELECTORS['modal_caption']
-                                        
                                         preview_found = False
-                                        for _ in range(10): # Esperar hasta 5s
+                                        for _ in range(10):
                                             time.sleep(0.5)
                                             for selector in preview_selectors:
-                                                if driver.find_elements(By.XPATH, selector):
+                                                if page.query_selector(selector):
                                                     preview_found = True
                                                     break
-                                            if preview_found: break
-                                        
+                                            if preview_found:
+                                                break
+
                                         if preview_found:
                                             attachment_success = True
                                             add_log("    ✅ Preview detectado")
                                             break
                                         else:
                                             add_log("    ⚠️ Preview no apareció, reintentando clip...")
-                                            # Intentar cerrar menú si quedó abierto o resetear
                                             try:
-                                                webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-                                            except: pass
+                                                page.keyboard.press("Escape")
+                                            except Exception:
+                                                pass
                                             time.sleep(1)
-                                            
+
                                     except Exception as e:
                                         add_log(f"    ⚠️ Error intento {attempt_idx+1}: {str(e)[:50]}")
                                         time.sleep(1)
-                                
+
                                 if not attachment_success:
                                     add_log("    ❌ No se pudo abrir el modal de PDF tras 3 intentos")
-                                
+
                                 time.sleep(2)
-                                
                                 time.sleep(2)
-                                
+
                                 # 5. ENVIAR PDF - ESTRATEGIA: VERIFICAR CIERRE DE MODAL
                                 add_log(f"    📤 Iniciando envío PDF (Estrategia Modal-Close)...")
-                                
                                 pdf_sent_confirmed = False
-                                
-                                # Definir selector del modal para verificar si se cierra
-                                modal_selector = '//div[@aria-label="Enviar archivo"]' # o similar
-                                
-                                # INTENTO 1: Escribir caption real + Click en botón (Nativo)
+                                send_btn = None
+
+                                # INTENTO 1: Escribir caption + Enter
                                 try:
-                                    # Buscar input de comentario
                                     caption_selectors = SELECTORS['modal_caption']
-                                    
                                     caption_box = None
                                     for selector in caption_selectors:
                                         try:
-                                            elements = driver.find_elements(By.XPATH, selector)
-                                            for elem in elements:
-                                                if elem.is_displayed():
-                                                    caption_box = elem
-                                                    break
-                                            if caption_box: break
-                                        except: pass
-                                    
+                                            elems = [e for e in page.query_selector_all(selector) if e.is_visible()]
+                                            if elems:
+                                                caption_box = elems[0]
+                                                break
+                                        except Exception:
+                                            pass
+
                                     if caption_box:
-                                        # Escribir algo real para despertar la UI
                                         add_log(f"    📝 Escribiendo caption para activar UI...")
-                                        driver.execute_script("arguments[0].click();", caption_box)
+                                        caption_box.evaluate("el => el.click()")
                                         time.sleep(0.5)
-                                        caption_box.send_keys("Adjunto estado de cuenta")
+                                        caption_box.type("Adjunto estado de cuenta")
                                         time.sleep(1)
-                                        
-                                        # ESTRATEGIA FUERZA BRUTA: ENTER DIRECTO
-                                        # Ignoramos buscar botón porque da falsos positivos
+
                                         add_log(f"    ⌨️  ENVIANDO CON ENTER (Fuerza Bruta)...")
-                                        caption_box.send_keys(Keys.ENTER)
+                                        page.keyboard.press("Enter")
                                         time.sleep(3)
-                                        
-                                        # Verificación
-                                        if _check_modal_gone(driver):
+
+                                        if _check_modal_gone(page):
                                             pdf_sent_confirmed = True
                                             add_log(f"    ✅ Modal cerrado detectado (Enter)")
                                         else:
-                                            # Intentar un segundo Enter si no se cerró
                                             add_log(f"    ⚠️ Modal sigue abierto, segundo Enter...")
-                                            caption_box.send_keys(Keys.ENTER)
+                                            page.keyboard.press("Enter")
                                             time.sleep(2)
-                                            if _check_modal_gone(driver):
+                                            if _check_modal_gone(page):
                                                 pdf_sent_confirmed = True
                                                 add_log(f"    ✅ Modal cerrado detectado (2do Enter)")
-                                    
-                                    # Si no hubo caption box (raro), intentamos botón
                                     else:
                                         add_log(f"    ⚠️ No se encontró caption, buscando botón...")
-                                        # Buscar botón enviar
                                         send_btn_selectors = SELECTORS['send_button']
-                                        
-                                        send_btn = None
                                         for selector in send_btn_selectors:
                                             try:
-                                                btns = driver.find_elements(By.XPATH, selector)
-                                                for btn in btns:
-                                                    if btn.is_displayed():
-                                                        send_btn = btn
-                                                        break
-                                                if send_btn: break
-                                            except: pass
-                                        
+                                                btns = [b for b in page.query_selector_all(selector) if b.is_visible()]
+                                                if btns:
+                                                    send_btn = btns[0]
+                                                    break
+                                            except Exception:
+                                                pass
+
                                         if send_btn:
                                             add_log(f"    🖱️  Click Nativo en botón enviar...")
                                             send_btn.click()
                                             time.sleep(3)
-                                            if _check_modal_gone(driver):
+                                            if _check_modal_gone(page):
                                                 pdf_sent_confirmed = True
                                                 add_log(f"    ✅ Modal cerrado (Click)")
 
                                 except Exception as e:
                                     add_log(f"    ⚠️ Intento 1 falló: {str(e)[:50]}")
 
-                                # INTENTO 2: JS Click si el modal sigue abierto (Solo si falló Enter)
+                                # INTENTO 2: JS Click si el modal sigue abierto
                                 if not pdf_sent_confirmed:
                                     add_log(f"    🎯 Intento 2: JS Click Force...")
                                     try:
                                         if send_btn:
-                                            driver.execute_script("arguments[0].click();", send_btn)
+                                            send_btn.evaluate("el => el.click()")
                                             time.sleep(3)
-                                            if _check_modal_gone(driver):
+                                            if _check_modal_gone(page):
                                                 pdf_sent_confirmed = True
                                                 add_log(f"    ✅ Modal cerrado detectado (JS Click)")
-                                            elif _check_pdf_sent(driver, pdf_path): # Fallback a buscar en chat
+                                            elif _check_pdf_sent(page, pdf_path):
                                                 pdf_sent_confirmed = True
                                                 add_log(f"    ✅ Mensaje encontrado en chat (JS Click)")
                                     except Exception as e:
                                         add_log(f"    ⚠️ Intento 2 falló: {str(e)[:50]}")
 
-                                # Resultado final
                                 if pdf_sent_confirmed:
                                     add_log(f"    ✅ PDF adjuntado exitosamente")
                                 else:
                                     add_log(f"    ❌ PDF NO se pudo enviar (Modal sigue abierto)")
-                                
+
                                 time.sleep(2)
-                                
+
                             except Exception as e_pdf:
                                 error_msg = str(e_pdf).split('\n')[0][:150]
                                 add_log(f"    ⚠️ Error adjuntando PDF: {error_msg}")
-                        
+
                         exitosos += 1
 
                     except Exception as e_img:
@@ -1384,23 +1252,22 @@ def send_whatsapp_messages_direct(
                 else:
                     try:
                         inp_xpath = SELECTORS['input_box']
-                        input_box = wait.until(EC.presence_of_element_located((By.XPATH, inp_xpath)))
-                        
+                        input_box = page.wait_for_selector(inp_xpath, timeout=30000)
+
                         # Paste Text (Robust Focus)
                         import pyperclip
                         pyperclip.copy(final_msg)
-                        
-                        # FIX: ElementClickInterceptedException (Text Mode)
-                        driver.execute_script("arguments[0].focus();", input_box)
+
+                        input_box.evaluate("el => el.focus()")
                         try:
                             input_box.click()
-                        except:
-                            driver.execute_script("arguments[0].click();", input_box)
-                            
-                        input_box.send_keys(Keys.CONTROL, "v")
+                        except Exception:
+                            input_box.evaluate("el => el.click()")
+
+                        page.keyboard.press("Control+V")
                         time.sleep(1)
-                        input_box.send_keys(Keys.ENTER)
-                        
+                        page.keyboard.press("Enter")
+
                         add_log("    ✅ Enviado (Texto)")
                         exitosos += 1
                         time.sleep(2)
@@ -1424,16 +1291,20 @@ def send_whatsapp_messages_direct(
             progress_callback(len(processed_contacts), len(processed_contacts), "Finalizado", "\n".join(log_lines))
 
     except Exception as e:
-        add_log(f"ERROR FATAL DRIVER: {str(e)}")
+        add_log(f"ERROR FATAL NAVEGADOR: {str(e)}")
         if progress_callback:
-             progress_callback(0, 0, "Error Fatal", "\n".join(log_lines))
+            progress_callback(0, 0, "Error Fatal", "\n".join(log_lines))
     finally:
-        if driver:
+        if wa_context:
             add_log("Cerrando navegador...")
             try:
-                driver.quit()
-            except:
+                wa_context.close()
+            except Exception:
                 pass
+        try:
+            _playwright.stop()
+        except Exception:
+            pass
         
         # NUEVO: Limpieza de archivos temporales (JPG + PDF)
         if temp_files_to_cleanup:
