@@ -6,24 +6,32 @@ import shutil
 import tempfile
 import urllib.parse
 import asyncio
+import logging
+import traceback
 from datetime import datetime
+
+# Configurar logging para debuggear
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='[%(asctime)s] %(levelname)s - %(name)s - %(message)s',
+    handlers=[
+        logging.FileHandler('whatsapp_connection.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 try:
     from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
     _PLAYWRIGHT_OK = True
-except ImportError:
+    logger.info("[OK] Playwright import successful")
+except ImportError as e:
     _PLAYWRIGHT_OK = False
+    logger.error(f"[ERROR] Playwright import failed: {e}")
 
 # Compatibilidad retroactiva con módulos UI que aún importan _SELENIUM_OK.
 # Mantener este alias evita errores de importación durante la transición.
 _SELENIUM_OK = _PLAYWRIGHT_OK
-
-# FIX: Permitir múltiples event loops en Streamlit (async en context síncrono)
-try:
-    import nest_asyncio
-    nest_asyncio.apply()
-except ImportError:
-    pass
 
 # ---------------------------------------------------------------------------
 # Helpers de sesion WhatsApp
@@ -123,44 +131,67 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
     Returns:
         (ok: bool, phone: str, profile_name: str, error_msg: str)
     """
+    logger.info(f"[CONNECT_WA_SESSION] Iniciando conexión WhatsApp (timeout={timeout_seconds}s)")
+    
     if not _PLAYWRIGHT_OK:
-        return False, "", "", (
+        err = (
             "❌ Playwright no está instalado.\n\n"
             "Ejecuta en el servidor:\n"
             "  pip install playwright\n"
             "  python -m playwright install chromium"
         )
+        logger.error(f"[CONNECT_WA_SESSION] {err}")
+        return False, "", "", err
 
     # Descarga Chromium automáticamente si no está instalado (primera vez ~170MB)
+    logger.info("[CONNECT_WA_SESSION] Garantizando que Chromium esté disponible...")
     _ensure_playwright_browser()
 
-    return asyncio.run(_connect_wa_session_async(timeout_seconds))
+    try:
+        logger.info("[CONNECT_WA_SESSION] Llamando _connect_wa_session_async...")
+        result = asyncio.run(_connect_wa_session_async(timeout_seconds))
+        logger.info(f"[CONNECT_WA_SESSION] Resultado: ok={result[0]}, phone={result[1]}, profile={result[2]}")
+        return result
+    except Exception as e:
+        err_msg = f"Error en connect_wa_session: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+        logger.error(f"[CONNECT_WA_SESSION] {err_msg}")
+        return False, "", "", err_msg
 
 
 async def _connect_wa_session_async(timeout_seconds: int) -> tuple:
     """Implementación async interna de connect_wa_session."""
-    os.makedirs(WA_SESSION_DIR, exist_ok=True)
-
-    # Limpiar archivos que causan el dialogo "Chrome no se cerro correctamente"
-    _profile_dir = os.path.join(WA_SESSION_DIR, "Default")
-    _files_to_clean = [
-        os.path.join(WA_SESSION_DIR, "SingletonLock"),
-        os.path.join(WA_SESSION_DIR, "SingletonCookie"),
-        os.path.join(WA_SESSION_DIR, "SingletonSocket"),
-        os.path.join(_profile_dir, "Last Session"),
-        os.path.join(_profile_dir, "Last Tabs"),
-        os.path.join(_profile_dir, "Current Session"),
-        os.path.join(_profile_dir, "Current Tabs"),
-    ]
-    for _f in _files_to_clean:
-        try:
-            if os.path.exists(_f):
-                os.remove(_f)
-        except OSError:
-            pass
-
+    logger.info("[CONNECT_WA_SESSION_ASYNC] Iniciando")
+    
     try:
+        os.makedirs(WA_SESSION_DIR, exist_ok=True)
+        logger.info(f"[CONNECT_WA_SESSION_ASYNC] Session dir: {WA_SESSION_DIR}")
+
+        # Limpiar archivos que causan el dialogo "Chrome no se cerro correctamente"
+        _profile_dir = os.path.join(WA_SESSION_DIR, "Default")
+        _files_to_clean = [
+            os.path.join(WA_SESSION_DIR, "SingletonLock"),
+            os.path.join(WA_SESSION_DIR, "SingletonCookie"),
+            os.path.join(WA_SESSION_DIR, "SingletonSocket"),
+            os.path.join(_profile_dir, "Last Session"),
+            os.path.join(_profile_dir, "Last Tabs"),
+            os.path.join(_profile_dir, "Current Session"),
+            os.path.join(_profile_dir, "Current Tabs"),
+        ]
+        
+        logger.info("[CONNECT_WA_SESSION_ASYNC] Limpiando archivos de sesión anterior...")
+        for _f in _files_to_clean:
+            try:
+                if os.path.exists(_f):
+                    os.remove(_f)
+                    logger.debug(f"[CONNECT_WA_SESSION_ASYNC] Eliminado: {_f}")
+            except OSError as e:
+                logger.debug(f"[CONNECT_WA_SESSION_ASYNC] No se pudo eliminar {_f}: {e}")
+
+        logger.info("[CONNECT_WA_SESSION_ASYNC] Abriendo Playwright...")
         async with async_playwright() as p:
+            logger.info("[CONNECT_WA_SESSION_ASYNC] Playwright context abierto")
+            
+            logger.info("[CONNECT_WA_SESSION_ASYNC] Lanzando navegador Chromium...")
             context = await p.chromium.launch_persistent_context(
                 user_data_dir=WA_SESSION_DIR,
                 headless=False,
@@ -171,13 +202,19 @@ async def _connect_wa_session_async(timeout_seconds: int) -> tuple:
                     "--disable-gpu",
                     "--disable-software-rasterizer",
                     "--disable-blink-features=AutomationControlled",
+                    "--start-maximized",  # Chrome se abre maximizado (no minimizado)
                 ],
                 ignore_default_args=["--enable-automation"],
             )
+            logger.info("[CONNECT_WA_SESSION_ASYNC] Navegador lanzado")
+            
             page = context.pages[0] if context.pages else await context.new_page()
+            logger.info(f"[CONNECT_WA_SESSION_ASYNC] Página obtenida (total: {len(context.pages)})")
 
+            logger.info("[CONNECT_WA_SESSION_ASYNC] Navegando a WhatsApp Web...")
             await page.goto("https://web.whatsapp.com")
             await page.wait_for_timeout(4000)
+            logger.info("[CONNECT_WA_SESSION_ASYNC] Navegación completada")
 
             PANE_XPATH = '//div[@id="pane-side"]'
             QR_XPATHS = [
@@ -187,35 +224,43 @@ async def _connect_wa_session_async(timeout_seconds: int) -> tuple:
 
             # Detectar si ya hay sesión o si se necesita QR
             page_state = "loading"
+            logger.info("[CONNECT_WA_SESSION_ASYNC] Detectando estado de página...")
             try:
                 await page.wait_for_selector(PANE_XPATH, timeout=20000)
                 page_state = "logged_in"
+                logger.info("[CONNECT_WA_SESSION_ASYNC] Estado: LOGGED_IN (sesión anterior encontrada)")
             except PlaywrightTimeoutError:
+                logger.info("[CONNECT_WA_SESSION_ASYNC] No se encontró pane-side, buscando QR...")
                 for qr_xpath in QR_XPATHS:
                     try:
                         if await page.query_selector(qr_xpath):
                             page_state = "qr_visible"
+                            logger.info(f"[CONNECT_WA_SESSION_ASYNC] QR encontrado: {qr_xpath}")
                             break
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"[CONNECT_WA_SESSION_ASYNC] QR check fallido ({qr_xpath}): {e}")
 
             if page_state != "logged_in":
-                # Esperar que el usuario escanee el QR
+                logger.info(f"[CONNECT_WA_SESSION_ASYNC] Esperando login (estado={page_state}, timeout={timeout_seconds}s)...")
                 try:
                     await page.wait_for_selector(
                         PANE_XPATH, timeout=timeout_seconds * 1000
                     )
                     page_state = "logged_in"
+                    logger.info("[CONNECT_WA_SESSION_ASYNC] [OK] Login completado")
                 except PlaywrightTimeoutError:
+                    logger.error(f"[CONNECT_WA_SESSION_ASYNC] Timeout: No se completó el login en {timeout_seconds}s")
                     await context.close()
                     return False, "", "", f"Timeout: No se completó el login en {timeout_seconds}s."
 
             # Dar tiempo a que WhatsApp cargue el perfil en el DOM
+            logger.info("[CONNECT_WA_SESSION_ASYNC] Esperando a que cargue el perfil...")
             await page.wait_for_timeout(2000)
 
             phone = ""
             profile_name = ""
             try:
+                logger.info("[CONNECT_WA_SESSION_ASYNC] Extrayendo datos de perfil...")
                 phone = await page.evaluate(
                     "window.Store?.User?.getMaybeMeUser?.()?.id?.user || ''"
                 ) or ""
@@ -225,15 +270,24 @@ async def _connect_wa_session_async(timeout_seconds: int) -> tuple:
                 ) or ""
                 phone = str(phone).strip()
                 profile_name = str(profile_name).strip()
-            except Exception:
+                logger.info(f"[CONNECT_WA_SESSION_ASYNC] Perfil extraído: phone={phone}, profile={profile_name}")
+            except Exception as e:
+                logger.warning(f"[CONNECT_WA_SESSION_ASYNC] Error al extraer perfil: {e}")
                 pass
 
+            logger.info("[CONNECT_WA_SESSION_ASYNC] Guardando info de sesión...")
             _save_wa_session_info(profile_name=profile_name, phone=phone)
+            
+            logger.info("[CONNECT_WA_SESSION_ASYNC] Cerrando contexto...")
             await context.close()
+            
+            logger.info("[CONNECT_WA_SESSION_ASYNC] [OK] Conexion exitosa")
             return True, phone, profile_name, ""
 
     except Exception as e:
-        return False, "", "", f"Error al conectar WhatsApp: {str(e)}"
+        err_msg = f"Error en _connect_wa_session_async: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+        logger.error(f"[CONNECT_WA_SESSION_ASYNC] {err_msg}")
+        return False, "", "", err_msg
 
 
 # --- RC-ARCH-001: CENTRALIZED SELECTORS ---

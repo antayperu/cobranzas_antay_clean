@@ -470,7 +470,15 @@ def render_tab(config):
                 
                 if st.button("📲 Conectar Dispositivo", type="primary", use_container_width=True, key="btn_wa_connect"):
                     with st.spinner("Abriendo Chrome — escanea el QR en el navegador..."):
-                        ok, phone, profile, err = connect_wa_session(timeout_seconds=120)
+                        try:
+                            ok, phone, profile, err = connect_wa_session(timeout_seconds=120)
+                        except Exception as e:
+                            import traceback
+                            err = f"EXCEPTION: {str(e)}\n\n{traceback.format_exc()}"
+                            ok = False
+                            phone = ""
+                            profile = ""
+                    
                     if ok:
                         _label = f"**{profile}**" if profile else "dispositivo"
                         _ph    = f" (`{phone}`)" if phone else ""
