@@ -115,10 +115,16 @@ def render_tab(config):
     with st.container(border=True):
         st.markdown("### 📧 Correo Electrónico (SMTP)")
         
+        # Estado dinámico basado en session_state
+        smtp_status = st.session_state.get('smtp_test_ok', False)
+        
         # Indicador de Estado
         col_status, col_actions = st.columns([3, 1])
         with col_status:
-            st.caption("🟡 **Estado:** Pendiente de configuración")
+            if smtp_status:
+                st.caption("🟢 **Estado:** Operativo")
+            else:
+                st.caption("🟡 **Estado:** Pendiente de configuración")
         with col_actions:
             with st.popover("ℹ️"):
                 st.markdown("""
@@ -198,11 +204,17 @@ def render_tab(config):
                     diag_stats = es_diag.test_smtp_connectivity(test_smtp_cfg)
                     if diag_stats['ok']:
                         st.success(diag_stats['msg'])
+                        # Guardar estado exitoso
+                        st.session_state['smtp_test_ok'] = True
                     else:
                         st.error(diag_stats['msg'])
+                        st.session_state['smtp_test_ok'] = False
                     with st.expander("Ver detalles técnicos"):
                         for l in diag_stats['log']:
                             st.text(l)
+                import time
+                time.sleep(1)
+                st.rerun()
     
     st.write("")  # Spacing
     
