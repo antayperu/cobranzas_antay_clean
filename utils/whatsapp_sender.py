@@ -97,6 +97,36 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
         return False, "", "", "Selenium no está instalado. Ejecuta _install_deps.bat."
 
     from selenium.webdriver.chrome.service import Service
+    from shutil import which
+    
+    # Verificar si Chrome está disponible en el sistema
+    chrome_path = which("chrome") or which("chromium") or which("google-chrome") or which("chromium-browser")
+    if not chrome_path and os.name == 'nt':  # Windows
+        # En Windows, buscar en rutas comunes
+        common_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        ]
+        for path in common_paths:
+            if os.path.exists(path):
+                chrome_path = path
+                break
+    
+    if not chrome_path:
+        return False, "", "", (
+            "❌ Chrome no está instalado en el servidor.\n\n"
+            "SOLUCIÓN:\n"
+            "1. En el servidor QA, descarga Chrome: https://www.google.com/chrome/\n"
+            "2. Instálalo en la ruta por defecto: C:\\Program Files\\Google\\Chrome\\\n"
+            "3. Reinicia la aplicación después de instalar Chrome\n\n"
+            "Alternativamente, configura la ruta en config.json con 'chrome_path'"
+        )
+
+    driver = None
+    try:
+        options = webdriver.ChromeOptions()
+        os.makedirs(WA_SESSION_DIR, exist_ok=True)
 
     driver = None
     try:
@@ -134,7 +164,12 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
         options.add_experimental_option("useAutomationExtension", False)
         options.add_argument("--disable-blink-features=AutomationControlled")
 
-        driver = webdriver.Chrome(options=options)
+        # Usar la ruta de Chrome detectada
+        service = Service(chrome_path) if chrome_path != "chrome" else None
+        if service:
+            driver = webdriver.Chrome(service=service, options=options)
+        else:
+            driver = webdriver.Chrome(options=options)
 
         driver.get("https://web.whatsapp.com")
         time.sleep(4)
@@ -193,7 +228,24 @@ def connect_wa_session(timeout_seconds: int = 120) -> tuple:
         return True, phone, profile_name, ""
 
     except Exception as e:
-        return False, "", "", str(e)
+        error_str = str(e).lower()
+        
+        # Detectar errores específicos de Chrome/ChromeDriver
+        if "chrome instance exited" in error_str or "chromedriver" in error_str or "path to chromedriver" in error_str:
+            return False, "", "", (
+                "❌ Error al iniciar Chrome en el servidor.\n\n"
+                "CAUSA PROBABLE:\n"
+                "- Chrome no está instalado en el servidor QA\n"
+                "- ChromeDriver incompatible con la versión de Chrome\n\n"
+                "SOLUCIÓN:\n"
+                "1. En el servidor QA, instala Google Chrome: https://www.google.com/chrome/\n"
+                "2. Descarga ChromeDriver compatible: https://chromedriver.chromium.org/\n"
+                "3. Reinicia la aplicación después de instalar\n\n"
+                f"Detalles técnicos: {str(e)}"
+            )
+        
+        # Otros errores
+        return False, "", "", f"Error al conectar WhatsApp: {str(e)}"
     finally:
         if driver:
             try:
