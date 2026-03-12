@@ -469,23 +469,32 @@ def render_tab(config):
                 )
                 
                 if st.button("📲 Conectar Dispositivo", type="primary", use_container_width=True, key="btn_wa_connect"):
-                    with st.spinner("Abriendo Chrome — escanea el QR en el navegador..."):
-                        try:
-                            ok, phone, profile, err = connect_wa_session(timeout_seconds=120)
-                        except Exception as e:
-                            import traceback
-                            err = f"EXCEPTION: {str(e)}\n\n{traceback.format_exc()}"
-                            ok = False
-                            phone = ""
-                            profile = ""
+                    spinner_container = st.empty()
+                    result_container = st.empty()
                     
-                    if ok:
-                        _label = f"**{profile}**" if profile else "dispositivo"
-                        _ph    = f" (`{phone}`)" if phone else ""
-                        st.success(f"✅ Sesión conectada: {_label}{_ph}")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Error: {err}")
+                    with spinner_container.container():
+                        with st.spinner("Abriendo Chrome — escanea el QR en el navegador..."):
+                            try:
+                                ok, phone, profile, err = connect_wa_session(timeout_seconds=120)
+                            except Exception as e:
+                                import traceback
+                                err = f"EXCEPTION: {str(e)}\n\n{traceback.format_exc()}"
+                                ok = False
+                                phone = ""
+                                profile = ""
+                    
+                    # Limpiar spinner
+                    spinner_container.empty()
+                    
+                    # Mostrar resultado
+                    with result_container.container():
+                        if ok:
+                            _label = f"**{profile}**" if profile else "dispositivo"
+                            _ph    = f" (`{phone}`)" if phone else ""
+                            st.success(f"✅ Sesión conectada: {_label}{_ph}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Error: {err}")
 
     st.divider()
     

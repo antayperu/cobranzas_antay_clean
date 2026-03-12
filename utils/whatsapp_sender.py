@@ -303,27 +303,48 @@ async def _connect_wa_session_async(timeout_seconds: int) -> tuple:
                     logger.warning("[CONNECT_WA_SESSION_ASYNC] No se pudieron detectar datos del usuario - continuando de todos modos")
                     # No fallar, continuar con la extracción de datos
 
-            # Dar tiempo a que WhatsApp cargue el perfil en el DOM
+            # Esperar REALMENTE a que WhatsApp cargue completamente todos los datos
             logger.info("[CONNECT_WA_SESSION_ASYNC] Esperando a que cargue el perfil...")
-            await page.wait_for_timeout(2000)
-
+            
             phone = ""
             profile_name = ""
-            try:
-                logger.info("[CONNECT_WA_SESSION_ASYNC] Extrayendo datos de perfil...")
-                phone = await page.evaluate(
-                    "window.Store?.User?.getMaybeMeUser?.()?.id?.user || ''"
-                ) or ""
-                profile_name = await page.evaluate(
-                    "document.querySelector('span[data-testid=\"default-user\"]')?.textContent "
-                    "|| document.title || ''"
-                ) or ""
-                phone = str(phone).strip()
-                profile_name = str(profile_name).strip()
-                logger.info(f"[CONNECT_WA_SESSION_ASYNC] Perfil extraído: phone={phone}, profile={profile_name}")
-            except Exception as e:
-                logger.warning(f"[CONNECT_WA_SESSION_ASYNC] Error al extraer perfil: {e}")
-                pass
+            max_profile_retries = 5
+            
+            for profile_retry in range(max_profile_retries):
+                try:
+                    logger.info(f"[CONNECT_WA_SESSION_ASYNC] Intento {profile_retry+1}/{max_profile_retries} - Extrayendo datos de perfil...")
+                    
+                    # Método 1: Desde Store (más confiable)
+                    phone = await page.evaluate(
+                        "(() => { const u = window.Store?.User?.getMaybeMeUser?.(); return u?.id?.user || u?.id?._serialized || ''; })()"
+                    ) or ""
+                    
+                    # Método 2: Nombre del perfil
+                    profile_name = await page.evaluate(
+                        "(() => { "
+                        "const defaultName = document.querySelector('span[data-testid=\"default-user\"]')?.textContent; "
+                        "const profileElem = document.querySelector('[data-testid=\"chat-info-header\"] span')?.textContent; "
+                        "return defaultName || profileElem || document.title || ''; "
+                        "})()"
+                    ) or ""
+                    
+                    phone = str(phone).strip()
+                    profile_name = str(profile_name).strip()
+                    
+                    if phone or profile_name:
+                        logger.info(f"[CONNECT_WA_SESSION_ASYNC] ✅ Perfil extraído: phone={phone}, profile={profile_name}")
+                        break
+                    else:
+                        if profile_retry < max_profile_retries - 1:
+                            logger.info(f"[CONNECT_WA_SESSION_ASYNC] Datos vacíos, reintentando en 2 segundos...")
+                            await page.wait_for_timeout(2000)
+                        else:
+                            logger.warning(f"[CONNECT_WA_SESSION_ASYNC] No se pudieron extraer datos de perfil después de {max_profile_retries} intentos")
+                            
+                except Exception as e:
+                    logger.warning(f"[CONNECT_WA_SESSION_ASYNC] Error en intento {profile_retry+1}: {e}")
+                    if profile_retry < max_profile_retries - 1:
+                        await page.wait_for_timeout(2000)
 
             logger.info("[CONNECT_WA_SESSION_ASYNC] Guardando info de sesión...")
             _save_wa_session_info(profile_name=profile_name, phone=phone)
