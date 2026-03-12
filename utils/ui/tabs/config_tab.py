@@ -13,81 +13,224 @@ import utils.storage_manager as storage_mgr
 
 def render_tab(config):
     """
-    Renders the Configuration Global tab.
+    Renders the Configuration Global tab with premium AU/UX design.
     
     Args:
         config (dict): Global configuration.
     """
-    st.header("Configuración del Sistema")
+    # --- HEADER PREMIUM ---
+    st.header("⚙️ Configuración del Sistema")
+    st.markdown("Personaliza la empresa, branding, comunicaciones y dispositivos de envío.")
+    st.divider()
     
-    # Identity and Visuals Column
-    col1, col2 = st.columns(2)
+    # Get colors for consistent theming
+    primary_color = config.get('primary_color', '#2E86AB')
+    secondary_color = config.get('secondary_color', '#00D4FF')
     
-    with col1:
-        st.subheader("Identidad Corporativa")
-        new_company = st.text_input("Nombre de la Empresa", value=config['company_name'])
-        new_ruc = st.text_input("RUC", value=config['company_ruc'])
-        new_phone = st.text_input("Teléfono de Contacto", value=config['phone_contact'])
+    # --- SECTION 1: IDENTIDAD CORPORATIVA ---
+    with st.container(border=True):
+        st.markdown("### 🏢 Identidad Corporativa")
+        st.caption("Datos básicos de tu empresa que aparecen en correos y documentos")
         
-        st.subheader("Branding (Colores)")
-        new_primary = st.color_picker("Color Primario (Encabezados/Botones)", value=config['primary_color'])
-        new_secondary = st.color_picker("Color Secundario (Acentos)", value=config['secondary_color'])
-        # Nuevo: Color de Texto
-        curr_text_col = config.get('text_color', '#262730')
-        new_text_color = st.color_picker("Color de Texto (Títulos)", value=curr_text_col, help="Color para títulos y encabezados. El cuerpo se mantiene legible.")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            new_company = st.text_input(
+                "Nombre de la Empresa",
+                value=config['company_name'],
+                placeholder="Ej: DACTA S.A.C.",
+                help="Se mostrará en cada correo y documento"
+            )
+        with col2:
+            new_ruc = st.text_input(
+                "RUC",
+                value=config['company_ruc'],
+                placeholder="Ej: 20375779448",
+                help="Número de identificación tributaria"
+            )
+        with col3:
+            new_phone = st.text_input(
+                "Teléfono de Contacto",
+                value=config['phone_contact'],
+                placeholder="Ej: +51 998 080 797",
+                help="Para contactos a través de documentos"
+            )
+    
+    st.write("")  # Spacing
+    
+    # --- SECTION 2: BRANDING (COLORES) ---
+    with st.container(border=True):
+        st.markdown("### 🎨 Branding & Colores")
+        st.caption("Personaliza la paleta de colores corporativa")
+        
+        col_brand1, col_brand2, col_brand3 = st.columns(3)
+        with col_brand1:
+            new_primary = st.color_picker(
+                "Color Primario",
+                value=config['primary_color'],
+                help="Usado en encabezados, botones principales"
+            )
+            st.caption("Encabezados & Botones")
+        
+        with col_brand2:
+            new_secondary = st.color_picker(
+                "Color Secundario",
+                value=config['secondary_color'],
+                help="Usado en acentos y elementos secundarios"
+            )
+            st.caption("Acentos & Elementos")
+        
+        with col_brand3:
+            curr_text_col = config.get('text_color', '#262730')
+            new_text_color = st.color_picker(
+                "Color de Texto",
+                value=curr_text_col,
+                help="Para títulos y encabezados principales"
+            )
+            st.caption("Títulos & Encabezados")
+    
+    st.write("")  # Spacing
+    
+    # --- SECTION 3: FUNCIONALIDADES ---
+    with st.container(border=True):
+        st.markdown("### 📊 Funcionalidades Disponibles")
+        st.caption("Controla qué tabs se muestran en la aplicación")
+        
+        col_feat1, col_feat2 = st.columns(2)
+        with col_feat1:
+            f_analysis = st.checkbox(
+                "📈 Mostrar Tab Análisis",
+                value=config.get('features', {}).get('show_analysis', False),
+                help="Análisis avanzados de cobranza"
+            )
+        with col_feat2:
+            f_sales = st.checkbox(
+                "💰 Mostrar Tab Ventas",
+                value=config.get('features', {}).get('show_sales', False),
+                help="Gestión de información de ventas"
+            )
 
-    with col2:
-        st.subheader("Funcionalidades (Tabs)")
-        f_analysis = st.checkbox("Mostrar Tab Análisis", value=config.get('features', {}).get('show_analysis', False))
-        f_sales = st.checkbox("Mostrar Tab Ventas", value=config.get('features', {}).get('show_sales', False))
+    st.write("")  # Spacing
+    
+    # --- SECTION 4: CORREO ELECTRÓNICO (EMAIL) ---
+    with st.container(border=True):
+        st.markdown("### 📧 Correo Electrónico (SMTP)")
         
-        st.markdown("---")
-        st.info(f"📧 **Configuración de Correo (SMTP)**", icon="📧")
-        st.caption("Credenciales para el envío de correos masivos.")
+        # Indicador de Estado
+        col_status, col_actions = st.columns([3, 1])
+        with col_status:
+            st.caption("🟡 **Estado:** Pendiente de configuración")
+        with col_actions:
+            with st.popover("ℹ️"):
+                st.markdown("""
+                **Estado SMTP:**
+                - 🟡 **Pendiente**: No probado aún
+                - 🟢 **Operativo**: Conexión exitosa
+                - 🔴 **Error**: Revisar credenciales
+                """)
+        
+        st.caption("Configura las credenciales para envío de correos masivos")
         
         col_serv, col_port = st.columns([3, 1])
         with col_serv:
-            new_smtp_server = st.text_input("Servidor SMTP", value=config['smtp_config']['server'])
+            new_smtp_server = st.text_input(
+                "Servidor SMTP",
+                value=config['smtp_config']['server'],
+                placeholder="Ej: smtp.gmail.com",
+                help="Servidor SMTP de tu proveedor de correo"
+            )
         with col_port:
-            new_smtp_port = st.text_input("Puerto SMTP", value=config['smtp_config']['port'])
+            new_smtp_port = st.text_input(
+                "Puerto",
+                value=config['smtp_config']['port'],
+                placeholder="587",
+                help="Puerto SMTP (generalmente 587)"
+            )
         
-        new_smtp_user = st.text_input("Usuario (Correo)", value=config['smtp_config']['user'])
-        new_smtp_pass = st.text_input("Contraseña App", value=config['smtp_config']['password'], type="password")
+        col_user, col_pass = st.columns(2)
+        with col_user:
+            new_smtp_user = st.text_input(
+                "Usuario (Correo)",
+                value=config['smtp_config']['user'],
+                placeholder="tu_email@gmail.com",
+                help="Tu correo de envío"
+            )
+        with col_pass:
+            new_smtp_pass = st.text_input(
+                "Contraseña App",
+                value=config['smtp_config']['password'],
+                type="password",
+                placeholder="••••••••",
+                help="Contraseña o App Password"
+            )
+        
+        force_smtp = st.checkbox(
+            "🔌 Usar Protocolo Local (Directo desde Laptop)",
+            value=config['smtp_config'].get('force_smtp', True),
+            help="Conecta directamente sin pasar por servidor externo"
+        )
+        
+        # Diagnóstico Button
+        col_diag1, col_diag2, col_diag3 = st.columns([2, 1, 1])
+        with col_diag1:
+            if st.button("🔍 Probar Conexión (Diagnóstico)", use_container_width=True, type="secondary"):
+                test_smtp_cfg = {
+                    "server": new_smtp_server,
+                    "port": new_smtp_port,
+                    "user": new_smtp_user,
+                    "password": new_smtp_pass,
+                    "resend_api_key": "",
+                    "sendgrid_api_key": "",
+                    "force_smtp": force_smtp
+                }
+                with st.spinner("Realizando diagnóstico..."):
+                    diag_stats = es_diag.test_smtp_connectivity(test_smtp_cfg)
+                    if diag_stats['ok']:
+                        st.success(diag_stats['msg'])
+                    else:
+                        st.error(diag_stats['msg'])
+                    with st.expander("Ver detalles técnicos"):
+                        for l in diag_stats['log']:
+                            st.text(l)
+    
+    st.write("")  # Spacing
+    
+    # --- SECTION 5: PLANTILLA DE CORREO ---
+    with st.expander("📝 Plantillas de Correo", expanded=False):
+        st.markdown("##### Personaliza el contenido de los correos")
+        st.caption("Estas plantillas se usan automáticamente en correos masivos")
+        
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            new_intro = st.text_area(
+                "Texto Introductorio",
+                value=config['email_template']['intro_text'],
+                height=120,
+                help="Texto antes de la tabla de deuda. Usa {CLIENTE} para el nombre."
+            )
+        with col_t2:
+            new_footer = st.text_area(
+                "Texto Pie de Página",
+                value=config['email_template']['footer_text'],
+                height=120,
+                help="Texto después de los totales."
+            )
+        
+        new_alert = st.text_area(
+            "Texto Alerta Detracción",
+            value=config['email_template']['alert_text'],
+            height=80,
+            help="Mensaje sobre cuentas de detracción SUNAT."
+        )
+        new_voucher = st.text_area(
+            "Texto Nota (Vouchers)",
+            value=config['email_template'].get('voucher_text', ''),
+            height=80,
+            help="Instrucciones finales (ej: envío de vouchers). Déjalo vacío para no mostrar."
+        )
 
-        st.markdown("---")
-        force_smtp = st.checkbox("🔌 Usar Protocolo Local (Directo desde Laptop)", value=config['smtp_config'].get('force_smtp', True), help="Activa esta opción para usar tu conexión local y evitar bloqueos de Gmail.")
-
-        # --- Botón de Diagnóstico (Interactive, No Form) ---
-        if st.button("🔌 Probar Conexión (Diagnóstico)", help="Verifica DNS, Red, SMTP y API Key"):
-            test_smtp_cfg = {
-                "server": new_smtp_server,
-                "port": new_smtp_port,
-                "user": new_smtp_user,
-                "password": new_smtp_pass,
-                "resend_api_key": "",
-                "sendgrid_api_key": "",
-                "force_smtp": force_smtp
-            }
-            with st.spinner("Realizando diagnóstico de red..."):
-                diag_stats = es_diag.test_smtp_connectivity(test_smtp_cfg)
-                if diag_stats['ok']:
-                    st.success(diag_stats['msg'])
-                else:
-                    st.error(diag_stats['msg'])
-                with st.expander("Ver Bitácora de Diagnóstico"):
-                    for l in diag_stats['log']:
-                        st.text(l)
-
-        pass
-
-    st.markdown("---")
-    st.subheader("Plantilla de Correo")
-    col_t1, col_t2 = st.columns(2)
-    new_intro = col_t1.text_area("Texto Introductorio", value=config['email_template']['intro_text'], height=150, help="Texto antes de la tabla de deuda. Usa {CLIENTE} para insertar el nombre del cliente.")
-    new_footer = col_t2.text_area("Texto Pie de Página", value=config['email_template']['footer_text'], height=150, help="Texto después de los totales.")
-    new_alert = st.text_area("Texto Alerta Detracción", value=config['email_template']['alert_text'], help="Mensaje resaltado sobre cuentas de detracción.")
-    new_voucher = st.text_area("Texto Nota (Vouchers)", value=config['email_template'].get('voucher_text', ''), help="Texto al final del correo (ej: instrucciones de envío de vouchers). Deja vacío para no mostrar.")
-
+    st.write("")  # Spacing
+    
+    # --- BOTÓN GUARDAR CONFIGURACIÓN PRINCIPAL ---
     if st.button("💾 Guardar Configuración", type="primary", use_container_width=True):
         new_settings = {
             "company_name": new_company,
@@ -121,30 +264,47 @@ def render_tab(config):
             st.rerun()
         else:
             st.error("❌ Error al guardar la configuración.")
-
-    # --- SECCION INDEPENDIENTE: COPIAS INTERNAS (RC-FEAT-013) ---
-    st.markdown("---")
-    st.subheader("👥 Copias Internas (CC / CCO)")
-    st.info("Configura las listas de distribución interna. Estas copias se envían con cada correo a cliente (Solo en Producción).")
     
-    # --- State Management for Dirty Check (Internal Copies) ---
-    current_internal_copies = config.get('internal_copies', {})
-    if 'prev_internal_copies' not in st.session_state:
-        st.session_state['prev_internal_copies'] = current_internal_copies.copy()
+    st.divider()
+    
+    # --- SECTION 6: COPIAS INTERNAS (CC/CCO) ---
+    with st.container(border=True):
+        st.markdown("### 👥 Copias Internas (CC / CCO)")
+        st.caption("Configura listas de distribución que recibirán copia de cada correo")
         
-    saved_cc = ", ".join(current_internal_copies.get('cc_list', []))
-    saved_bcc = ", ".join(current_internal_copies.get('bcc_list', []))
+        # --- State Management for Dirty Check (Internal Copies) ---
+        current_internal_copies = config.get('internal_copies', {})
+        if 'prev_internal_copies' not in st.session_state:
+            st.session_state['prev_internal_copies'] = current_internal_copies.copy()
+            
+        saved_cc = ", ".join(current_internal_copies.get('cc_list', []))
+        saved_bcc = ", ".join(current_internal_copies.get('bcc_list', []))
 
-    c_copy1, c_copy2 = st.columns(2)
-    with c_copy1:
-        st.markdown("##### CC (Copia Visible)")
-        cc_input = st.text_area("Emails visibles (separados por coma/línea)", value=saved_cc, height=100, help="Estos correos aparecerán en el header 'Cc' del correo.", key="cc_input_area")
-        
-    with c_copy2:
-        st.markdown("##### CCO (Copia Oculta)")
-        bcc_input = st.text_area("Emails ocultos (separados por coma/línea)", value=saved_bcc, height=100, help="Estos correos recibirán copia pero NO aparecerán en el header.", key="bcc_input_area")
+        col_cc1, col_cc2 = st.columns(2)
+        with col_cc1:
+            st.markdown("##### 📋 CC (Visible)")
+            st.caption("Aparecerá en header 'Cc' del correo")
+            cc_input = st.text_area(
+                "Emails separados por coma o salto de línea",
+                value=saved_cc,
+                height=100,
+                help="Estos correos verán quién más recibió el mensaje",
+                key="cc_input_area"
+            )
+            
+        with col_cc2:
+            st.markdown("##### 🔒 CCO (Oculto)")
+            st.caption("NO aparecerá en header del correo")
+            bcc_input = st.text_area(
+                "Emails separados por coma o salto de línea",
+                value=saved_bcc,
+                height=100,
+                help="Estos correos recibirán copia pero será oculta",
+                key="bcc_input_area"
+            )
 
-    if st.button("💾 Guardar Copias Internas", type="primary", use_container_width=True):
+        # Only show button when ready to save
+        if st.button("💾 Guardar Copias Internas", type="primary", use_container_width=True):
         # Normalizar SOLO aquí (al guardar, no mientras escribe)
         norm_cc = helpers.normalize_emails(cc_input)
         norm_bcc = helpers.normalize_emails(bcc_input)
