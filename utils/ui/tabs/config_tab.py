@@ -219,9 +219,9 @@ def render_tab(config):
     st.write("")  # Spacing
     
     # --- SECTION 5: PLANTILLA DE CORREO ---
-    with st.expander("📝 Plantillas de Correo", expanded=False):
-        st.markdown("##### Personaliza el contenido de los correos")
-        st.caption("Estas plantillas se usan automáticamente en correos masivos")
+    with st.container(border=True):
+        st.markdown("### 📝 Plantillas de Correo")
+        st.caption("Personaliza el contenido de los correos que se enviarán automáticamente")
         
         col_t1, col_t2 = st.columns(2)
         with col_t1:
@@ -251,6 +251,26 @@ def render_tab(config):
             height=80,
             help="Instrucciones finales (ej: envío de vouchers). Déjalo vacío para no mostrar."
         )
+        
+        st.caption("💡 **Nota:** Edita los textos y haz clic en 'Guardar Plantillas' para guardar los cambios")
+        
+        if st.button("💾 Guardar Plantillas", type="primary", use_container_width=True):
+            # Guardar plantillas
+            config['email_template'] = {
+                "intro_text": new_intro,
+                "footer_text": new_footer,
+                "alert_text": new_alert,
+                "voucher_text": new_voucher
+            }
+            
+            if sm.save_settings(config):
+                st.success("✅ Plantillas de correo guardadas correctamente.")
+                st.toast("Plantillas actualizadas", icon="📝")
+                import time
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("Error al guardar las plantillas.")
 
     st.write("")  # Spacing
     
@@ -266,12 +286,6 @@ def render_tab(config):
             "features": {
                 "show_analysis": f_analysis,
                 "show_sales": f_sales
-            },
-            "email_template": {
-                "intro_text": new_intro,
-                "footer_text": new_footer,
-                "alert_text": new_alert,
-                "voucher_text": new_voucher
             },
             "smtp_config": {
                 "server": new_smtp_server,
