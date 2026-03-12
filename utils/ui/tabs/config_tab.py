@@ -138,32 +138,26 @@ def render_tab(config):
     c_copy1, c_copy2 = st.columns(2)
     with c_copy1:
         st.markdown("##### CC (Copia Visible)")
-        cc_input = st.text_area("Emails visibles (separados por coma/línea)", value=saved_cc, height=100, help="Estos correos aparecerán en el header 'Cc' del correo.")
+        cc_input = st.text_area("Emails visibles (separados por coma/línea)", value=saved_cc, height=100, help="Estos correos aparecerán en el header 'Cc' del correo.", key="cc_input_area")
         
     with c_copy2:
         st.markdown("##### CCO (Copia Oculta)")
-        bcc_input = st.text_area("Emails ocultos (separados por coma/línea)", value=saved_bcc, height=100, help="Estos correos recibirán copia pero NO aparecerán en el header.")
-        
-    # Preview & Diff Logic
-    norm_cc = helpers.normalize_emails(cc_input)
-    norm_bcc = helpers.normalize_emails(bcc_input)
-    
-    # Calculate Changes
-    has_changes_copies = (
-        norm_cc != current_internal_copies.get('cc_list', []) or 
-        norm_bcc != current_internal_copies.get('bcc_list', [])
-    )
-    
-    if True: # Force render
-            st.caption(f"📝 Vista Previa: Se enviarán **{len(norm_cc)}** copias visibles y **{len(norm_bcc)}** ocultas por cada correo.")
-            if norm_cc or norm_bcc:
-                p_c1, p_c2 = st.columns(2)
-                with p_c1:
-                    if norm_cc: st.info(f"**CC**: {', '.join(norm_cc)}")
-                with p_c2:
-                    if norm_bcc: st.warning(f"**CCO**: {', '.join(norm_bcc)}")
+        bcc_input = st.text_area("Emails ocultos (separados por coma/línea)", value=saved_bcc, height=100, help="Estos correos recibirán copia pero NO aparecerán en el header.", key="bcc_input_area")
 
-    if st.button("💾 Guardar Copias Internas", disabled=not has_changes_copies, type="primary" if has_changes_copies else "secondary"):
+    if st.button("💾 Guardar Copias Internas", type="primary", use_container_width=True):
+        # Normalizar SOLO aquí (al guardar, no mientras escribe)
+        norm_cc = helpers.normalize_emails(cc_input)
+        norm_bcc = helpers.normalize_emails(bcc_input)
+        
+        # Mostrar preview ANTES de guardar
+        st.caption(f"📝 Vista Previa: Se enviarán **{len(norm_cc)}** copias visibles y **{len(norm_bcc)}** ocultas por cada correo.")
+        if norm_cc or norm_bcc:
+            p_c1, p_c2 = st.columns(2)
+            with p_c1:
+                if norm_cc: st.info(f"**CC**: {', '.join(norm_cc)}")
+            with p_c2:
+                if norm_bcc: st.warning(f"**CCO**: {', '.join(norm_bcc)}")
+        
         new_copies_cfg = {
             "cc_list": norm_cc,
             "bcc_list": norm_bcc
@@ -440,30 +434,30 @@ def render_tab(config):
         *   **Proceso**: Se aplica corte de bordes (trim) y redimensionado (resize) automático.
         """)
 
-    # 4. Processing Logic (Run once per file)
-    if uploaded_logo:
+    # 4. Processing Logic (SOLO cuando usuario hace clic)
+    if uploaded_logo and st.session_state.logo_staged is None:
+        st.info(f"📁 Archivo seleccionado: **{uploaded_logo.name}**")
+        
+        # Botón para procesar (NO automático)
+        if st.button("▶️ Procesar y Previsualizar", type="secondary", use_container_width=True):
             import hashlib
-            # Hash check to avoid loop/re-processing
             raw_bytes = uploaded_logo.getbuffer()
             file_hash = hashlib.md5(raw_bytes).hexdigest()
             
-            # If new file or different from last staged
-            last_hash = st.session_state.get('logo_last_hash')
-            
-            if last_hash != file_hash:
-                with st.spinner("Procesando logo (Trim + Resize)..."):
-                    # Process
-                    proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
-                    
-                    # Update Staging State
-                    st.session_state.logo_staged = {
-                        'bytes': proc_bytes,
-                        'w': proc_w,
-                        'h': proc_h, 
-                        'name': uploaded_logo.name,
-                        'orig_bytes': raw_bytes
-                    }
-                    st.session_state.logo_last_hash = file_hash
+            with st.spinner("Procesando logo (Trim + Resize)..."):
+                # Process SOLO aquí
+                proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
+                
+                # Update Staging State
+                st.session_state.logo_staged = {
+                    'bytes': proc_bytes,
+                    'w': proc_w,
+                    'h': proc_h, 
+                    'name': uploaded_logo.name,
+                    'orig_bytes': raw_bytes
+                }
+                st.session_state.logo_last_hash = file_hash
+                st.rerun()
 
     # 5. Staging Review & Commit (Save)
     if st.session_state.logo_staged:
