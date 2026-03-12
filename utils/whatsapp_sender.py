@@ -242,16 +242,66 @@ async def _connect_wa_session_async(timeout_seconds: int) -> tuple:
 
             if page_state != "logged_in":
                 logger.info(f"[CONNECT_WA_SESSION_ASYNC] Esperando login (estado={page_state}, timeout={timeout_seconds}s)...")
-                try:
-                    await page.wait_for_selector(
-                        PANE_XPATH, timeout=timeout_seconds * 1000
-                    )
-                    page_state = "logged_in"
-                    logger.info("[CONNECT_WA_SESSION_ASYNC] [OK] Login completado")
-                except PlaywrightTimeoutError:
-                    logger.error(f"[CONNECT_WA_SESSION_ASYNC] Timeout: No se completó el login en {timeout_seconds}s")
+                
+                # Estrategia 1: Esperar a que desaparezca el QR (más confiable que esperar por un selector específico)
+                qr_disappeared = False
+                start_time = time.time()
+                while (time.time() - start_time) < timeout_seconds:
+                    qr_exists = False
+                    for qr_xpath in QR_XPATHS:
+                        try:
+                            if await page.query_selector(qr_xpath):
+                                qr_exists = True
+                                break
+                        except Exception:
+                            pass
+                    
+                    if not qr_exists:
+                        logger.info("[CONNECT_WA_SESSION_ASYNC] QR ha desaparecido - probablemente escaneado")
+                        qr_disappeared = True
+                        break
+                    
+                    await page.wait_for_timeout(1000)  # Esperar 1 segundo antes de verificar nuevamente
+                
+                if not qr_disappeared:
+                    logger.error("[CONNECT_WA_SESSION_ASYNC] Timeout esperando que desaparezca el QR")
                     await context.close()
-                    return False, "", "", f"Timeout: No se completó el login en {timeout_seconds}s."
+                    return False, "", "", f"Timeout: QR no fue escaneado en {timeout_seconds}s."
+                
+                # Estrategia 2: Después de que desaparezca el QR, esperar a que cargue completamente
+                logger.info("[CONNECT_WA_SESSION_ASYNC] QR escaneado - esperando carga de datos...")
+                for retry in range(10):  # Intentar hasta 10 veces
+                    try:
+                        await page.wait_for_timeout(2000)  # Esperar 2 segundos para que cargue
+                        
+                        # Verificar si los datos están disponibles mediante JavaScript
+                        user_data = await page.evaluate("""
+                            () => {
+                                const user = window.Store?.User?.getMaybeMeUser?.();
+                                return {
+                                    has_user: !!user,
+                                    user_id: user?.id?.user,
+                                    title: document.title,
+                                    has_chat_list: !!document.querySelector('[data-testid="chat"]'),
+                                    has_pane: !!document.querySelector('#pane-side'),
+                                };
+                            }
+                        """)
+                        
+                        logger.info(f"[CONNECT_WA_SESSION_ASYNC] Estado JS: {user_data}")
+                        
+                        # Si tiene usuario o tiene lista de chats, considerar que logró login
+                        if user_data.get('has_user') or user_data.get('has_chat_list') or user_data.get('has_pane'):
+                            logger.info("[CONNECT_WA_SESSION_ASYNC] [OK] Datos de usuario detectados")
+                            page_state = "logged_in"
+                            break
+                    except Exception as e:
+                        logger.debug(f"[CONNECT_WA_SESSION_ASYNC] Intento {retry+1} falló: {e}")
+                        continue
+                
+                if page_state != "logged_in":
+                    logger.warning("[CONNECT_WA_SESSION_ASYNC] No se pudieron detectar datos del usuario - continuando de todos modos")
+                    # No fallar, continuar con la extracción de datos
 
             # Dar tiempo a que WhatsApp cargue el perfil en el DOM
             logger.info("[CONNECT_WA_SESSION_ASYNC] Esperando a que cargue el perfil...")
