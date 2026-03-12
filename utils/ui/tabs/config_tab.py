@@ -326,8 +326,8 @@ def render_tab(config):
                 help="Estos correos recibirán copia pero será oculta",
                 key="bcc_input_area"
             )
-
-        # Only show button when ready to save
+        
+        st.caption("💡 **Nota:** Escribe los emails y haz clic en el botón 'Guardar Copias Internas' para guardar los cambios")
         if st.button("💾 Guardar Copias Internas", type="primary", use_container_width=True):
             # Normalizar SOLO aquí (al guardar, no mientras escribe)
             norm_cc = helpers.normalize_emails(cc_input)
