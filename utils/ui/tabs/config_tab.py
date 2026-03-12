@@ -334,122 +334,134 @@ def render_tab(config):
         else:
             st.error("Error al guardar configuración.")
 
-    # --- SECCION: WHATSAPP — DISPOSITIVO DE ENVIO ---
-    st.markdown("---")
-    st.subheader("📱 WhatsApp — Dispositivo de Envío")
-    st.info(
-        "Conecta el dispositivo desde el que se enviarán los mensajes de WhatsApp. "
-        "Solo se necesita hacer esto una vez; la sesión queda guardada en el servidor.",
-        icon="📱",
-    )
+    st.divider()
+    
+    # --- SECTION 7: WHATSAPP — DISPOSITIVO DE ENVÍO ---
+    with st.container(border=True):
+        st.markdown("### 📱 WhatsApp — Dispositivo de Envío")
+        st.caption("Conecta tu teléfono para enviar mensajes de cobranza automáticamente")
+        
+        from utils.whatsapp_sender import (
+            get_wa_session_info,
+            connect_wa_session,
+            clear_wa_session,
+            update_wa_session_alias,
+            _SELENIUM_OK as _WA_SELENIUM_OK,
+        )
 
-    from utils.whatsapp_sender import (
-        get_wa_session_info,
-        connect_wa_session,
-        clear_wa_session,
-        update_wa_session_alias,
-        _SELENIUM_OK as _WA_SELENIUM_OK,
-    )
+        _wa_info = get_wa_session_info()
+        _wa_active = _wa_info.get("status") == "active"
 
-    _wa_info = get_wa_session_info()
-    _wa_active = _wa_info.get("status") == "active"
-
-    col_wa_status, col_wa_actions = st.columns([3, 1])
-
-    with col_wa_status:
+        # Indicador de Estado
         if _wa_active:
             _wa_phone   = _wa_info.get("phone", "")
             _wa_name    = _wa_info.get("profile_name", "")
             _wa_ts      = _wa_info.get("verified_at", "")
             _device_lbl = f"**{_wa_name}**" if _wa_name else "Dispositivo conectado"
             _phone_lbl  = f"  ·  `{_wa_phone}`" if _wa_phone else ""
-            st.success(f"Sesión activa: {_device_lbl}{_phone_lbl}  ·  verificada {_wa_ts}")
-        else:
-            st.warning("Sin sesión activa. Haz clic en **Conectar dispositivo** para vincular tu WhatsApp.")
-
-    with col_wa_actions:
-        if _wa_active:
-            if st.button("🔌 Desconectar", type="secondary", key="btn_wa_disconnect",
-                         help="Elimina la sesión guardada. En el próximo envío se pedirá escanear el QR."):
-                clear_wa_session()
-                st.toast("Sesión de WhatsApp eliminada.")
-                st.rerun()
-
-    # --- Formulario de etiqueta (solo visible cuando hay sesion activa) ---
-    if _wa_active:
-        with st.expander("✏️ Editar etiqueta del dispositivo", expanded=False):
-            st.caption("Completa o corrige el nombre y teléfono que se mostrarán en el panel de estado.")
-            _edit_c1, _edit_c2 = st.columns(2)
-            _new_alias = _edit_c1.text_input(
-                "Nombre / Alias",
-                value=_wa_info.get("profile_name", ""),
-                key="wa_alias_input",
-                placeholder="Ej: WhatsApp Cobranzas Antay",
-            )
-            _new_phone_lbl = _edit_c2.text_input(
-                "Número de teléfono",
-                value=_wa_info.get("phone", ""),
-                key="wa_phone_label_input",
-                placeholder="Ej: +51 998 080 797",
-            )
-            _alias_changed = (
-                _new_alias != _wa_info.get("profile_name", "") or
-                _new_phone_lbl != _wa_info.get("phone", "")
-            )
-            if st.button("💾 Guardar etiqueta", key="btn_wa_save_alias",
-                         disabled=not _alias_changed,
-                         type="primary" if _alias_changed else "secondary"):
-                if update_wa_session_alias(alias=_new_alias, phone=_new_phone_lbl):
-                    st.success("✅ Etiqueta actualizada.")
+            
+            st.success(f"🟢 **ACTIVO** - {_device_lbl}{_phone_lbl}")
+            st.caption(f"Verificado: {_wa_ts}")
+            
+            col_wa_edit, col_wa_disco = st.columns(2)
+            with col_wa_edit:
+                if st.button("✏️ Editar Etiqueta", type="secondary", use_container_width=True, key="btn_wa_edit_alias"):
+                    st.session_state['wa_edit_mode'] = True
+            
+            with col_wa_disco:
+                if st.button("🔌 Desconectar Dispositivo", type="secondary", use_container_width=True, key="btn_wa_disconnect"):
+                    clear_wa_session()
+                    st.toast("Sesión de WhatsApp eliminada.", icon="🔴")
                     st.rerun()
-                else:
-                    st.error("❌ No se pudo guardar. Verifica que la sesión sigue activa.")
-
-    if not _WA_SELENIUM_OK:
-        st.error(
-            "**Selenium no está instalado** en este servidor. "
-            "Ejecuta `_install_deps.bat` en el servidor QA y reinicia la app antes de conectar."
-        )
-    elif not _wa_active:
-        st.caption(
-            "Al hacer clic, Chrome se abrirá **en el servidor**. "
-            "Escanea el código QR con tu teléfono. "
-            f"Tienes hasta 120 segundos."
-        )
-        if st.button("📲 Conectar dispositivo", type="primary", key="btn_wa_connect"):
-            with st.spinner("Abriendo Chrome en el servidor — escanea el QR en el navegador que apareció..."):
-                ok, phone, profile, err = connect_wa_session(timeout_seconds=120)
-            if ok:
-                _label = f"**{profile}**" if profile else "dispositivo"
-                _ph    = f" (`{phone}`)" if phone else ""
-                st.success(f"✅ Sesión conectada: {_label}{_ph}")
-                st.rerun()
-            else:
-                st.error(f"❌ No se pudo conectar: {err}")
-
-    # --- RC-FEAT-LEGGER: MANTENIMIENTO ---
-    st.markdown("---")
-    # st.subheader("Gestión de Sesión") # Clean subheader or removed
-    with st.expander("⚙️ Opciones Avanzadas (Reenvío)", expanded=False):
-        # st.warning("Estas acciones afectan el historial de envíos. Úsalas con precaución.") # Removed warning if logic is safe now
+            
+            # Formulario de edición (expandible)
+            if st.session_state.get('wa_edit_mode', False):
+                with st.expander("✏️ Editar información del dispositivo", expanded=True):
+                    _edit_c1, _edit_c2 = st.columns(2)
+                    _new_alias = _edit_c1.text_input(
+                        "Nombre del Dispositivo",
+                        value=_wa_info.get("profile_name", ""),
+                        key="wa_alias_input",
+                        placeholder="Ej: WhatsApp Cobranzas",
+                    )
+                    _new_phone_lbl = _edit_c2.text_input(
+                        "Número de Teléfono",
+                        value=_wa_info.get("phone", ""),
+                        key="wa_phone_label_input",
+                        placeholder="Ej: +51 998 080 797",
+                    )
+                    _alias_changed = (
+                        _new_alias != _wa_info.get("profile_name", "") or
+                        _new_phone_lbl != _wa_info.get("phone", "")
+                    )
+                    col_save, col_cancel = st.columns(2)
+                    with col_save:
+                        if st.button("💾 Guardar", key="btn_wa_save_alias",
+                                     disabled=not _alias_changed,
+                                     type="primary" if _alias_changed else "secondary",
+                                     use_container_width=True):
+                            if update_wa_session_alias(alias=_new_alias, phone=_new_phone_lbl):
+                                st.success("✅ Información actualizada.")
+                                st.session_state['wa_edit_mode'] = False
+                                st.rerun()
+                            else:
+                                st.error("❌ Error al guardar. Verifica que la sesión sigue activa.")
+                    
+                    with col_cancel:
+                        if st.button("Cancelar", key="btn_wa_cancel", use_container_width=True):
+                            st.session_state['wa_edit_mode'] = False
+                            st.rerun()
         
-        c_dang1, c_dang2 = st.columns([3, 1])
-        with c_dang1:
-            st.markdown("**Nuevo Ciclo de Envíos**")
-            st.caption("Reinicia el contador de envíos para esta sesión. Útil si deseas volver a notificar a clientes ya gestionados hoy.")
-        with c_dang2:
+        else:
+            # Sin conexión activa
+            st.warning("🟡 **INACTIVO** - Sin dispositivo conectado")
+            st.caption("Necesitas vincular tu teléfono para enviar mensajes WhatsApp")
+            
+            if not _WA_SELENIUM_OK:
+                st.error(
+                    "⚠️ **Selenium no está instalado**  \n"
+                    "Ejecuta `_install_deps.bat` en el servidor QA y reinicia la app."
+                )
+            else:
+                st.info(
+                    "**Proceso:**  \n"
+                    "1. Al hacer clic, Chrome se abrirá en el servidor  \n"
+                    "2. Escanea el código QR con tu teléfono  \n"
+                    "3. Se guardará automáticamente (disponible 120 segundos)"
+                )
+                
+                if st.button("📲 Conectar Dispositivo", type="primary", use_container_width=True, key="btn_wa_connect"):
+                    with st.spinner("Abriendo Chrome — escanea el QR en el navegador..."):
+                        ok, phone, profile, err = connect_wa_session(timeout_seconds=120)
+                    if ok:
+                        _label = f"**{profile}**" if profile else "dispositivo"
+                        _ph    = f" (`{phone}`)" if phone else ""
+                        st.success(f"✅ Sesión conectada: {_label}{_ph}")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Error: {err}")
+
+    st.divider()
+    
+    # --- SECTION 8: OPCIONES AVANZADAS ---
+    with st.expander("⚙️ Opciones Avanzadas (Reenvío)", expanded=False):
+        st.markdown("##### Gestión Avanzada de Ciclos")
+        st.caption("⚠️ Estas acciones son sensibles. Úsalas con precaución")
+        
+        with st.container(border=True):
+            st.markdown("###### 🔄 Reiniciar Ciclo de Envíos")
+            st.caption("Limpia el estado de envíos para renotificar a clientes ya gestionados hoy")
+            
             # Initialize confirmation state
             if 'confirm_reset' not in st.session_state:
                 st.session_state['confirm_reset'] = False
             
             if not st.session_state['confirm_reset']:
-                # Step 1: Show confirmation button
-                if st.button("Reiniciar Sesión", type="secondary", help="Limpia visualización de enviados"):
-                    # Calculate how many records will be affected
+                if st.button("🔄 Reiniciar Ciclo", type="secondary", use_container_width=True):
+                    # Calculate affected
                     affected_count = 0
                     if 'df_final' in st.session_state and st.session_state['df_final'] is not None:
                         df = st.session_state['df_final']
-                        # Count records with EMAIL_FINAL populated
                         if 'EMAIL_FINAL' in df.columns:
                             affected_count = (df['EMAIL_FINAL'].notna() & (df['EMAIL_FINAL'] != "")).sum()
                     
@@ -457,50 +469,44 @@ def render_tab(config):
                     st.session_state['affected_count'] = affected_count
                     st.rerun()
             else:
-                # Step 2: Show confirmation dialog
                 affected_count = st.session_state.get('affected_count', 0)
                 
                 st.warning(f"""
                 ⚠️ **Confirmación Requerida**
                 
-                Esto reiniciará el ciclo de envíos:
-                - Limpiará: `EMAIL_FINAL`, `ESTADO_EMAIL`, `FECHA_ULTIMO_ENVIO`
-                - **{affected_count} registros** volverán a estado "Pendiente"
-                
-                ¿Deseas continuar?
+                **Se reiniciará el ciclo de envíos:**
+                - EMAIL_FINAL, ESTADO_EMAIL, FECHA_ULTIMO_ENVIO serán limpiados
+                - **{affected_count} registros** volverán a "Pendiente"
                 """)
                 
                 col_yes, col_no = st.columns(2)
                 with col_yes:
-                    if st.button("✅ Sí, Reiniciar", type="primary"):
-                        # Execute reset
+                    if st.button("✅ Sí, Reiniciar Ahora", type="primary", use_container_width=True):
                         st.session_state['session_start_ts'] = datetime.now()
                         
                         reset_details = []
                         if 'df_final' in st.session_state and st.session_state['df_final'] is not None:
                             df = st.session_state['df_final']
                             
-                            # Track what was cleared
                             if 'EMAIL_FINAL' in df.columns:
                                 cleared_emails = (df['EMAIL_FINAL'].notna() & (df['EMAIL_FINAL'] != "")).sum()
                                 df['EMAIL_FINAL'] = ""
-                                reset_details.append(f"EMAIL_FINAL: {cleared_emails} registros")
+                                reset_details.append(f"📧 EMAIL_FINAL: {cleared_emails} registros")
                             
                             if 'ESTADO_EMAIL' in df.columns:
                                 df['ESTADO_EMAIL'] = ""
-                                reset_details.append("ESTADO_EMAIL: limpiado")
+                                reset_details.append("📧 ESTADO_EMAIL: limpiado")
                             
                             if 'ESTADO_ENVIO_TEXTO' in df.columns:
                                 df['ESTADO_ENVIO_TEXTO'] = "PENDIENTE"
-                                reset_details.append("ESTADO_ENVIO_TEXTO: reset a PENDIENTE")
+                                reset_details.append("📱 ESTADO_ENVIO_TEXTO: → PENDIENTE")
                             
                             if 'FECHA_ULTIMO_ENVIO' in df.columns:
                                 df['FECHA_ULTIMO_ENVIO'] = pd.NaT
-                                reset_details.append("FECHA_ULTIMO_ENVIO: limpiado")
+                                reset_details.append("📅 FECHA_ULTIMO_ENVIO: limpiado")
                             
                             st.session_state['df_final'] = df
                         
-                        # Store reset details for display after rerun
                         st.session_state['reset_complete'] = True
                         st.session_state['reset_details'] = reset_details
                         st.session_state['confirm_reset'] = False
@@ -511,186 +517,178 @@ def render_tab(config):
                         st.rerun()
                 
                 with col_no:
-                    if st.button("❌ Cancelar", type="secondary"):
+                    if st.button("❌ Cancelar", use_container_width=True):
                         st.session_state['confirm_reset'] = False
                         st.rerun()
             
-            # Show success message if reset was just completed
+            # Success message
             if st.session_state.get('reset_complete', False):
                 affected = st.session_state.get('affected_count', 0)
-                st.success(f"✅ Ciclo reiniciado: **{affected} registros** pendientes nuevamente")
+                st.success(f"✅ Ciclo reiniciado: {affected} registros ahora en 'Pendiente'")
                 
-                with st.expander("📋 Ver detalle"):
+                with st.expander("📋 Ver detalles"):
                     for detail in st.session_state.get('reset_details', []):
-                        st.caption(f"• {detail}")
+                        st.caption(f"✓ {detail}")
                 
-                # Clear the flag
                 st.session_state['reset_complete'] = False
-
-    st.markdown("---")
-    st.subheader("Logo de la Empresa (Visuals Enterprise)")
-    # --- RC-UX-LOGO-STD: Enterprise Staging Flow + Anti-Loop ---
-    
-    # 1. Initialization & State Management
-    if 'logo_uploader_key' not in st.session_state:
-        st.session_state.logo_uploader_key = 0
+    # --- SECTION 9: Logo Empresarial (Enterprise Staging Flow) ---
+    with st.container(border=True):
+        st.markdown("### 📸 Logo Empresarial")
+        st.caption("Carga y personaliza el logo que aparecerá en correos y documentos exportados")
+        st.write("")
         
-    if 'logo_staged' not in st.session_state:
-        st.session_state.logo_staged = None # {bytes, w, h, name}
-
-    # 2. Display Active Logo (Current State)
-    current_logo_path = storage_mgr.resolve_logo_path(config) or config.get('logo_path')
-    logo_active_exists = False
-    if current_logo_path and os.path.exists(current_logo_path):
-        logo_active_exists = True
+        # Initialize state
+        if 'logo_uploader_key' not in st.session_state:
+            st.session_state.logo_uploader_key = 0
+        if 'logo_staged' not in st.session_state:
+            st.session_state.logo_staged = None
         
-    st.markdown("##### Logo Activo (En Producción)")
-    if logo_active_exists and st.session_state.logo_staged is None:
-        # Show Active only if not staging (or show both? User wants "Vista previa final" on upload)
-        # Strategy: Show Active. If Staged exists, show Staged below in "Review" section.
+        # Determine current logo status
+        current_logo_path = storage_mgr.resolve_logo_path(config) or config.get('logo_path')
+        logo_active_exists = False
+        if current_logo_path and os.path.exists(current_logo_path):
+            logo_active_exists = True
         
-        c_active_img, c_active_info = st.columns([1, 2])
-        with c_active_img:
-            st.image(current_logo_path, width=200)
-        with c_active_info:
-            st.success("✅ Logo configurado y visible en correos.")
-            if st.button("🗑️ Eliminar Logo Actual", type="secondary", key="btn_del_logo"):
-                try:
-                    delete_info = storage_mgr.delete_logo_assets(config)
-                    config.update(delete_info.get("config_patch", {}))
-                except Exception:
-                    # Limpieza minima local/config aunque Storage falle.
-                    config['logo_path'] = None
-                    config['logo_storage_bucket'] = None
-                    config['logo_storage_path'] = None
-                    config['logo_storage_public_url'] = None
-                    config['logo_storage_original_path'] = None
-                    config['logo_storage_synced_at'] = None
-                if sm.save_settings(config):
-                    st.success("✅ Logo eliminado en configuracion.")
-                    st.rerun()
-                else:
-                    st.error("❌ No se pudo guardar la eliminacion del logo.")
-    elif not logo_active_exists and st.session_state.logo_staged is None:
-            st.info("ℹ️ No hay logo configurado. El correo saldrá SIN logo.")
-
-    
-    st.markdown("---")
-    st.markdown("##### Cargar Nuevo Logo (Staging Area)")
-    
-    # 3. Uploader (Staging Trigger)
-    # Using dynamic key to reset uploader after Save/Cancel
-    uploaded_logo = st.file_uploader(
-        "Seleccionar archivo (PNG/JPG)", 
-        type=['png', 'jpg', 'jpeg'],
-        key=f"uploader_logo_{st.session_state.logo_uploader_key}"
-    )
-    
-    # Recomendaciones (Collapsed)
-    with st.expander("ℹ️ Recomendaciones Técnicas"):
-        st.markdown("""
-        *   **Formato**: PNG (transparente) o JPG.
-        *   **Dimensiones**: > 800px ancho.
-        *   **Proceso**: Se aplica corte de bordes (trim) y redimensionado (resize) automático.
-        """)
-
-    # 4. Processing Logic (SOLO cuando usuario hace clic)
-    if uploaded_logo and st.session_state.logo_staged is None:
-        st.info(f"📁 Archivo seleccionado: **{uploaded_logo.name}**")
+        # TAB 1: View Active Logo
+        tab_view, tab_upload = st.tabs(["📋 Logo Activo", "📤 Cargar Nuevo"])
         
-        # Botón para procesar (NO automático)
-        if st.button("▶️ Procesar y Previsualizar", type="secondary", use_container_width=True):
-            import hashlib
-            raw_bytes = uploaded_logo.getbuffer()
-            file_hash = hashlib.md5(raw_bytes).hexdigest()
-            
-            with st.spinner("Procesando logo (Trim + Resize)..."):
-                # Process SOLO aquí
-                proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
+        with tab_view:
+            if logo_active_exists and st.session_state.logo_staged is None:
+                col_img, col_actions = st.columns([1.5, 2])
+                with col_img:
+                    st.markdown("**Previsualización Actual**")
+                    st.image(current_logo_path, width=220)
                 
-                # Update Staging State
-                st.session_state.logo_staged = {
-                    'bytes': proc_bytes,
-                    'w': proc_w,
-                    'h': proc_h, 
-                    'name': uploaded_logo.name,
-                    'orig_bytes': raw_bytes
-                }
-                st.session_state.logo_last_hash = file_hash
-                st.rerun()
-
-    # 5. Staging Review & Commit (Save)
-    if st.session_state.logo_staged:
-        st.divider()
-        st.warning("⚠️ Tienes cambios pendientes (Logo en Staging). No se usarán hasta que guardes.")
-        
-        staged = st.session_state.logo_staged
-        
-        col_rev1, col_rev2 = st.columns(2)
-        with col_rev1:
-            st.caption("Previsualización Final")
-            st.image(staged['bytes'], width=300)
-            st.caption(f"Dim: {staged['w']}x{staged['h']} px | {len(staged['bytes'])//1024} KB")
-        
-        with col_rev2:
-            st.caption("Acciones")
-            
-            # SAVE ACTION
-            if st.button("💾 GUARDAR Y APLICAR", type="primary", use_container_width=True):
-                # Persist to Disk
-                assets_dir = os.path.join(os.getcwd(), "assets")
-                if not os.path.exists(assets_dir):
-                    os.makedirs(assets_dir)
-                
-                # Save Original
-                fn_orig = f"logo_original_{staged['name']}"
-                with open(os.path.join(assets_dir, fn_orig), "wb") as f:
-                    f.write(staged['orig_bytes'])
+                with col_actions:
+                    st.markdown("**Estado**")
+                    st.success("🟢 **ACTIVO** — Visible en correos y exportes")
+                    st.write("")
                     
-                # Save Processed (Canonical)
-                path_proc = os.path.join(assets_dir, "logo_dacta_processed.png")
-                with open(path_proc, "wb") as f:
-                    f.write(staged['bytes'])
+                    if st.button("🗑️ Eliminar Logo", type="secondary", use_container_width=True, key="btn_del_logo"):
+                        try:
+                            delete_info = storage_mgr.delete_logo_assets(config)
+                            config.update(delete_info.get("config_patch", {}))
+                        except Exception:
+                            config['logo_path'] = None
+                            config['logo_storage_bucket'] = None
+                            config['logo_storage_path'] = None
+                            config['logo_storage_public_url'] = None
+                            config['logo_storage_original_path'] = None
+                            config['logo_storage_synced_at'] = None
+                        
+                        if sm.save_settings(config):
+                            st.success("✅ Logo eliminado. El siguiente exporte no lo incluirá.")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al guardar cambios.")
+            
+            elif not logo_active_exists and st.session_state.logo_staged is None:
+                st.info("🟡 **Sin Logo** — Los correos se enviarán sin logo. Carga uno en la pestaña 'Cargar Nuevo'")
+            
+            elif st.session_state.logo_staged:
+                st.info("📦 Tienes un logo en **revisión** (staging). Ve a la pestaña 'Cargar Nuevo' para completar.")
+        
+        with tab_upload:
+            st.markdown("**Paso 1: Selecciona archivo**")
+            uploaded_logo = st.file_uploader(
+                "PNG o JPG", 
+                type=['png', 'jpg', 'jpeg'],
+                key=f"uploader_logo_{st.session_state.logo_uploader_key}",
+                label_visibility="collapsed"
+            )
+            
+            if uploaded_logo:
+                st.markdown("**Paso 2: Procesar**")
+                if st.button("▶️ Procesar y Previsualizar", type="secondary", use_container_width=True):
+                    import hashlib
+                    raw_bytes = uploaded_logo.getbuffer()
+                    file_hash = hashlib.md5(raw_bytes).hexdigest()
+                    
+                    with st.spinner("Procesando logo..."):
+                        proc_bytes, proc_w, proc_h = img_proc.process_logo_image(raw_bytes)
+                        st.session_state.logo_staged = {
+                            'bytes': proc_bytes,
+                            'w': proc_w,
+                            'h': proc_h,
+                            'name': uploaded_logo.name,
+                            'orig_bytes': raw_bytes
+                        }
+                        st.session_state.logo_last_hash = file_hash
+                    st.rerun()
+            
+            with st.expander("ℹ️ Recomendaciones"):
+                st.markdown("""
+                - **Formato:** PNG (para fondo transparente) o JPG
+                - **Tamaño:** Mayor a 800px de ancho
+                - **Automático:** Se aplica recorte y redimensión sin perder calidad
+                """)
+            
+            # Staging Review Section
+            if st.session_state.logo_staged:
+                st.divider()
+                staged = st.session_state.logo_staged
                 
-                # Update Config
-                config['logo_path'] = path_proc
-
-                storage_sync_ok = False
-                storage_sync_error = None
-                try:
-                    sync_info = storage_mgr.upload_logo_assets(
-                        original_bytes=bytes(staged['orig_bytes']),
-                        processed_bytes=bytes(staged['bytes']),
-                        original_name=staged['name'],
-                    )
-                    config.update(sync_info.get("config_patch", {}))
-                    storage_sync_ok = True
-                except Exception as e_sync:
-                    storage_sync_error = str(e_sync)
-
-                if not sm.save_settings(config):
-                    st.error("❌ Error al guardar configuracion del logo.")
-                    return
+                st.markdown("**Paso 3: Revisar y guardar**")
+                col_preview, col_confirm = st.columns([1.5, 2])
                 
-                # Clear Staging & Reset Uploader
-                st.session_state.logo_staged = None
-                st.session_state.logo_last_hash = None
-                st.session_state.logo_uploader_key += 1 # Forces uploader reset
+                with col_preview:
+                    st.markdown("**Previsualización Final**")
+                    st.image(staged['bytes'], width=220)
+                    st.caption(f"📐 {staged['w']}×{staged['h']}px | 💾 {len(staged['bytes'])//1024}KB")
                 
-                if storage_sync_ok:
-                    st.success("✅ Logo guardado y sincronizado en Supabase Storage.")
-                else:
-                    st.warning("⚠️ Logo guardado localmente, pero no se pudo sincronizar en Storage.")
-                    if storage_sync_error:
-                        st.caption(storage_sync_error)
-                import time
-                time.sleep(1)
-                st.rerun()
-
-            st.write("")
-            # CANCEL ACTION
-            if st.button("✖️ Cancelar / Descartar", use_container_width=True):
-                st.session_state.logo_staged = None
-                st.session_state.logo_last_hash = None
-                st.session_state.logo_uploader_key += 1 # Reset uploader
-                st.rerun()
+                with col_confirm:
+                    st.markdown("**Acciones**")
+                    st.warning("⚠️ Cambios en staging — no se aplicarán hasta guardar")
+                    
+                    if st.button("💾 GUARDAR Y APLICAR", type="primary", use_container_width=True):
+                        assets_dir = os.path.join(os.getcwd(), "assets")
+                        if not os.path.exists(assets_dir):
+                            os.makedirs(assets_dir)
+                        
+                        fn_orig = f"logo_original_{staged['name']}"
+                        with open(os.path.join(assets_dir, fn_orig), "wb") as f:
+                            f.write(staged['orig_bytes'])
+                        
+                        path_proc = os.path.join(assets_dir, "logo_dacta_processed.png")
+                        with open(path_proc, "wb") as f:
+                            f.write(staged['bytes'])
+                        
+                        config['logo_path'] = path_proc
+                        
+                        storage_sync_ok = False
+                        storage_sync_error = None
+                        try:
+                            sync_info = storage_mgr.upload_logo_assets(
+                                original_bytes=bytes(staged['orig_bytes']),
+                                processed_bytes=bytes(staged['bytes']),
+                                original_name=staged['name'],
+                            )
+                            config.update(sync_info.get("config_patch", {}))
+                            storage_sync_ok = True
+                        except Exception as e_sync:
+                            storage_sync_error = str(e_sync)
+                        
+                        if not sm.save_settings(config):
+                            st.error("❌ Error al guardar configuración.")
+                            return
+                        
+                        st.session_state.logo_staged = None
+                        st.session_state.logo_last_hash = None
+                        st.session_state.logo_uploader_key += 1
+                        
+                        if storage_sync_ok:
+                            st.success("✅ Logo guardado y sincronizado. Ya está en uso.")
+                        else:
+                            st.warning("⚠️ Logo guardado localmente pero sin sincronización cloud.")
+                            if storage_sync_error:
+                                st.caption(f"Error: {storage_sync_error}")
+                        
+                        import time
+                        time.sleep(1)
+                        st.rerun()
+                    
+                    if st.button("✖️ Cancelar", use_container_width=True):
+                        st.session_state.logo_staged = None
+                        st.session_state.logo_last_hash = None
+                        st.session_state.logo_uploader_key += 1
+                        st.rerun()
