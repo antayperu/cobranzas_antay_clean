@@ -294,7 +294,7 @@ def render_tab(df_filtered, config):
                             det_info = f" | Detr: S/{det_val:,.2f} ({estado_str})"
                         
                         # --- DISEÑO SMART ---
-                        venc_short = pd.to_datetime(doc['FECH VENC']).strftime('%d/%m')
+                        venc_short = pd.to_datetime(doc['FECH VENC']).strftime('%d/%m/%Y')
                         
                         line1 = f"📄 *{comprobante}* (Venc: {venc_short})"
                         line2 = f"💰 Imp: {monto_emit}  »  Saldo: *{saldo_fmt}*"

@@ -10,6 +10,8 @@ EXPORT_COLUMNS_BASELINE = [
     'Enviar Email',
     'ESTADO_EMAIL',
     'FECHA_ULTIMO_ENVIO',
+    'ESTADO_WHATSAPP',
+    'FECHA_ULTIMO_WA',
     'NOTA',
     'CORREO',
     'TELÉFONO',
@@ -69,6 +71,7 @@ def generate_excel(df: pd.DataFrame) -> bytes:
     detra_fill = PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid") # Amarillo suave
     estado_dt_fill_pendiente = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid") # Rojo suave
     estado_dt_fill_pagado = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid") # Verde suave
+    estado_enviado_fill = PatternFill(start_color="C6F6D5", end_color="C6F6D5", fill_type="solid") # Verde claro para ENVIADO
 
     # Escribir encabezados en MAYÚSCULAS
     headers = [str(h).upper() for h in df.columns]
@@ -123,6 +126,10 @@ def generate_excel(df: pd.DataFrame) -> bytes:
             # Formato de Fechas
             if "FECH" in col_name and value:
                 cell.number_format = 'DD/MM/YYYY'
+            
+            # Formato Timestamp para FECHA_ULTIMO_WA
+            if col_name == "FECHA_ULTIMO_WA" and value:
+                cell.number_format = 'YYYY-MM-DD HH:MM:SS'
                 
             # Formato de Moneda y Números
             # Incluir nuevas columnas: SALDO REAL, IMPORTE REFERENCIAL (S/), TIPO CAMBIO
@@ -156,6 +163,11 @@ def generate_excel(df: pd.DataFrame) -> bytes:
             # Resaltar Columnas Detracción
             if col_name == "DETRACCIÓN":
                 cell.fill = detra_fill
+            
+            # Colorear Estados: ESTADO_EMAIL y ESTADO_WHATSAPP
+            if col_name in ["ESTADO_EMAIL", "ESTADO_WHATSAPP"]:
+                if value == "ENVIADO":
+                    cell.fill = estado_enviado_fill
                 
             if col_name == "ESTADO DETRACCION":
                 if value == "Pendiente":
