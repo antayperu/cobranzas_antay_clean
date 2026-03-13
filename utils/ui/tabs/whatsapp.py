@@ -50,14 +50,102 @@ def render_tab(df_filtered, config):
         if wa_res.get('details'):
             df_wa_res = pd.DataFrame(wa_res['details'])
             st.write("📝 **Detalle por Cliente:**")
-            st.dataframe(df_wa_res, use_container_width=True, hide_index=True)
-            csv_wa = df_wa_res.to_csv(index=False).encode('utf-8')
+            # Mostrar solo columnas visibles (ocultar CodCliente)
+            cols_display = [c for c in df_wa_res.columns if c != 'CodCliente']
+            st.dataframe(df_wa_res[cols_display], use_container_width=True, hide_index=True)
+            csv_wa = df_wa_res[cols_display].to_csv(index=False).encode('utf-8')
             st.download_button(
                 "📄 Descargar Reporte WA (CSV)",
                 data=csv_wa,
                 file_name=f"reporte_wa_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv"
             )
+
+        # --- RC-FEAT-019: Panel de Resultado por Cliente ---
+        st.divider()
+        st.subheader("🎯 Registrar Resultado de la Gestión")
+        st.caption("Indica qué respondió cada cliente. Se guarda en Supabase para alimentar el Dashboard de Efectividad.")
+
+        _OPCIONES_RESULTADO = [
+            "⏳ Sin registrar",
+            "✅ Acordó pagar",
+            "🤝 Prometió pagar",
+            "📵 Sin respuesta",
+            "🔴 Escalar / Pre-Legal",
+            "💬 Solicitó más plazo",
+        ]
+        _RESULTADO_MAP = {
+            "✅ Acordó pagar": "EXITOSO",
+            "🤝 Prometió pagar": "PENDIENTE",
+            "📵 Sin respuesta": "SIN_RESPUESTA",
+            "🔴 Escalar / Pre-Legal": "REPROGRAMADO",
+            "💬 Solicitó más plazo": "PENDIENTE",
+        }
+
+        resultados_guardados: dict = wa_res.get('resultados_registrados', {})
+        details = wa_res.get('details', [])
+        cycle_id_lote = wa_res.get('cycle_id', st.session_state.get('cycle_id', ''))
+
+        with st.form(key='form_resultados_wa'):
+            selecciones = {}
+            for i, det in enumerate(details):
+                cod = det.get('CodCliente', '')
+                ya_guardado = resultados_guardados.get(cod)
+                col_a, col_b = st.columns([2, 2])
+                with col_a:
+                    st.markdown(f"**{det.get('Cliente', '')}**  "
+                                f"<span style='color:#556B82;font-size:0.85em;'>Deuda: {det.get('Deuda','')}</span>",
+                                unsafe_allow_html=True)
+                with col_b:
+                    if ya_guardado:
+                        st.success(f"✅ Guardado: {ya_guardado}")
+                        selecciones[cod] = None  # ya procesado
+                    else:
+                        selecciones[cod] = st.selectbox(
+                            f"Resultado_{i}",
+                            _OPCIONES_RESULTADO,
+                            key=f"wa_res_{i}_{cod}",
+                            label_visibility="collapsed",
+                        )
+
+            submitted = st.form_submit_button("💾 Guardar Resultados en Supabase", type="primary")
+            if submitted:
+                guardados = 0
+                errores = 0
+                for det in details:
+                    cod = det.get('CodCliente', '')
+                    if not cod:
+                        continue
+                    opcion = selecciones.get(cod)
+                    if opcion is None or opcion == "⏳ Sin registrar":
+                        continue
+                    resultado_norm = _RESULTADO_MAP.get(opcion, "PENDIENTE")
+                    ok, _ = dbm.insert_gestion(
+                        cliente_id=cod,
+                        tipo_gestion='WHATSAPP',
+                        resultado=resultado_norm,
+                        notas=f"Resultado post-envío WA: {opcion} | Deuda: {det.get('Deuda', '')}",
+                        cycle_id=cycle_id_lote,
+                        metadata_extra={
+                            'source': 'panel_resultado_post_envio',
+                            'opcion_gestor': opcion,
+                        },
+                    )
+                    if ok:
+                        resultados_guardados[cod] = opcion
+                        guardados += 1
+                    else:
+                        errores += 1
+
+                wa_res['resultados_registrados'] = resultados_guardados
+                st.session_state['last_wa_send_results'] = wa_res
+                if guardados:
+                    st.success(f"✅ {guardados} resultado(s) guardado(s) en Supabase.")
+                if errores:
+                    st.warning(f"⚠️ {errores} resultado(s) no pudieron guardarse.")
+                st.rerun()
+        # --- Fin RC-FEAT-019 ---
+
         if st.button("✅ Cerrar Reporte WA"):
             del st.session_state['last_wa_send_results']
             st.rerun()
@@ -680,6 +768,7 @@ def render_tab(df_filtered, config):
                     for c in contacts_to_send:
                         wa_details.append({
                             'Cliente': c['nombre_cliente'],
+                            'CodCliente': str(c.get('cod_cliente', '')).strip(),
                             'Teléfono': c['telefono'],
                             'Estado': '✅ Enviado' if resultado_lote == 'EXITOSO' else '❌ Fallido',
                             'Deuda': c.get('TOTAL_SALDO_REAL', ''),
@@ -688,6 +777,8 @@ def render_tab(df_filtered, config):
                         'exitosos': results['exitosos'],
                         'fallidos': results['fallidos'],
                         'details': wa_details,
+                        'cycle_id': current_cycle_id,
+                        'resultados_registrados': {},
                     }
                     if current_wa_batch_id:
                         st.session_state['last_wa_batch_id'] = current_wa_batch_id
