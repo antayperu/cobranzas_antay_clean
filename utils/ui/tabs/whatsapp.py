@@ -8,6 +8,64 @@ import streamlit.components.v1 as components
 import utils.storage_manager as storage_mgr
 from datetime import datetime, date
 
+# RC-FEAT-020: Biblioteca de 7 Plantillas WA
+WA_PLANTILLAS_BIBLIOTECA = {
+    "📋 Cobranza Estándar": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes de pago:\n\n"
+        "{RESUMEN_DEUDA}\n\n"
+        "*Detalle de Documentos:*\n"
+        "{DETALLE_DOCS}\n\n"
+        "Agradeceremos gestionar el pago a la brevedad.\n\n"
+        "_DACTA S.A.C. | RUC: 20375779448 · Consultas: +51 998 080 797_"
+    ),
+    "🔔 Primer Recordatorio": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Le recordamos que tiene documentos próximos a vencer o ya vencidos:\n\n"
+        "{RESUMEN_DEUDA}\n\n"
+        "Por favor coordine el pago para evitar recargos.\n\n"
+        "_DACTA S.A.C. | Consultas: +51 998 080 797_"
+    ),
+    "⚠️ Segundo Recordatorio": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Le informamos que a pesar de nuestro recordatorio anterior, aún registra deuda pendiente:\n\n"
+        "{RESUMEN_DEUDA}\n\n"
+        "{DETALLE_DOCS}\n\n"
+        "Solicitamos su pronto pago o que nos contacte para coordinar un acuerdo.\n\n"
+        "_DACTA S.A.C. | Urgente: +51 998 080 797_"
+    ),
+    "🔴 Urgente / Pre-Legal": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "⚠️ AVISO FINAL: Su cuenta presenta una deuda de *S/ {TOTAL_SALDO_REAL}* con documentos vencidos.\n\n"
+        "{DETALLE_DOCS}\n\n"
+        "De no regularizar en 48 horas, el caso será derivado al área legal.\n\n"
+        "Contáctenos HOY: +51 998 080 797\n\n"
+        "_DACTA S.A.C. | RUC: 20375779448_"
+    ),
+    "💰 Solo Total": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Su saldo pendiente es de *S/ {TOTAL_SALDO_REAL}*.\n\n"
+        "Agradeceremos su pago a la brevedad.\n\n"
+        "_DACTA S.A.C. | +51 998 080 797_"
+    ),
+    "🤝 Confirmación de Acuerdo": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Confirmamos el acuerdo de pago acordado para regularizar su deuda de *S/ {TOTAL_SALDO_REAL}*.\n\n"
+        "Quedamos atentos a la confirmación de cada cuota pactada.\n\n"
+        "Ante cualquier inconveniente, comuníquese con nosotros.\n\n"
+        "_DACTA S.A.C. | +51 998 080 797_"
+    ),
+    "✅ Reconocimiento de Pago": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Hemos registrado su pago reciente. Gracias por regularizar su cuenta.\n\n"
+        "Si tiene algún comprobante pendiente de enviar, puede hacerlo por este medio.\n\n"
+        "_DACTA S.A.C. | +51 998 080 797_"
+    ),
+}
+
+_NOMBRE_PLANTILLA_PERSONALIZADA = "✏️ Personalizada (tu plantilla guardada)"
+
+
 def render_tab(df_filtered, config):
     """
     Renders the WhatsApp Marketing/Notifications tab.
@@ -68,31 +126,33 @@ def render_tab(df_filtered, config):
         
         with c1:
             st.markdown("##### Configurar Plantilla")
-            
-            # Cargar plantilla de CONFIG o usar default si no existe
-            saved_template = config.get('whatsapp_template', (
-                "Estimados *{EMPRESA}*,\n\n"
-                "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes de pago:\n\n"
-                "{RESUMEN_DEUDA}\n\n"
-                "*Detalle de Documentos:*\n"
-                "{DETALLE_DOCS}\n\n"
-                "Agradeceremos gestionar el pago a la brevedad.\n\n"
-                "_DACTA S.A.C. | RUC: 20375779448 Este es un mensaje automático de notificación de deuda. Consultas: +51 998 080 797_"
-            ))
-            
-            template = st.text_area("Plantilla del Mensaje", value=saved_template, height=350)
-            
+
+            # RC-FEAT-020: Selector de biblioteca de plantillas
+            _default_saved = config.get('whatsapp_template', list(WA_PLANTILLAS_BIBLIOTECA.values())[0])
+            _opciones_selector = [_NOMBRE_PLANTILLA_PERSONALIZADA] + list(WA_PLANTILLAS_BIBLIOTECA.keys())
+            _sel_plantilla = st.selectbox(
+                "📚 Biblioteca de Plantillas",
+                options=_opciones_selector,
+                index=0,
+                help="Elige una plantilla predefinida o usa tu plantilla guardada",
+            )
+            if _sel_plantilla == _NOMBRE_PLANTILLA_PERSONALIZADA:
+                _valor_inicial = _default_saved
+            else:
+                _valor_inicial = WA_PLANTILLAS_BIBLIOTECA[_sel_plantilla]
+
+            template = st.text_area("Plantilla del Mensaje", value=_valor_inicial, height=280)
+
             # --- BOTÓN GUARDAR PLANTILLA ---
             if st.button("💾 Guardar como Plantilla Predeterminada"):
                 new_config = config.copy()
                 new_config['whatsapp_template'] = template
                 if sm.save_settings(new_config):
                     st.success("✅ Plantilla guardada correctamente.")
-                    # Actualizamos CONFIG local para la sesión actual (modifies dictionary in place if passed by reference)
                     config['whatsapp_template'] = template
                 else:
                     st.error("❌ No se pudo guardar la plantilla.")
-            
+
             st.caption("Variables: `{EMPRESA}`, `{RESUMEN_DEUDA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
 
         with c2:
