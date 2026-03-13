@@ -1416,8 +1416,18 @@ def insert_acuerdo_pago(
             "notas": str(notas).strip() if notas else None,
             "estado": "ACTIVO",
         }
-        resp = _safe_execute(client.table("acuerdos_pago").insert(acuerdo_payload).select("id"))
-        acuerdo_id = resp.data[0]["id"] if resp and resp.data else None
+        # insert() sin .select() para compatibilidad con supabase-py < 2.x
+        _safe_execute(client.table("acuerdos_pago").insert(acuerdo_payload))
+        # Recuperar el id recién insertado por cliente_id + fecha_acuerdo
+        fetch_resp = _safe_execute(
+            client.table("acuerdos_pago")
+            .select("id")
+            .eq("cliente_id", acuerdo_payload["cliente_id"])
+            .eq("fecha_acuerdo", acuerdo_payload["fecha_acuerdo"])
+            .order("created_at", desc=True)
+            .limit(1)
+        )
+        acuerdo_id = fetch_resp.data[0]["id"] if fetch_resp and fetch_resp.data else None
         if not acuerdo_id:
             return False, "No se pudo obtener el ID del acuerdo creado."
 
