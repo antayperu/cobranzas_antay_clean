@@ -1,8 +1,93 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-02-21
-Version actual: v1.7.1
+Ultima actualizacion: 2026-03-13
+Version actual: v1.7.1 → v2.0 (CRM WhatsApp)
 Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + paridad de export + notificaciones por cliente + integridad/no-match + mantenimiento de clientes + reporte premium + quality gates + seguridad operacional + backup/restore completados. Iniciativa de Storage (SUPABASE-002) completada.
+Iniciativa CRM WhatsApp: Propuesta aprobada 2026-03-13. Implementacion TIER 1 en curso.
+
+---
+
+## 0. Sprint CRM WhatsApp — TIER 1 (Sprint Actual — 2026-03-13)
+
+### CRM-001: Resultado Post-Envío WhatsApp (RC-FEAT-019)
+- Estado: Ready
+- Esfuerzo: 2 puntos (1–2 horas)
+- Prioridad: P1 Alto
+- Dependencias: ninguna
+- Descripcion: Panel de seguimiento post-lote en Tab WhatsApp. El gestor registra con 1 click si el cliente acordó, prometió, no contestó o escalar. Persiste en `gestiones.resultado` en Supabase.
+- Criterios de Aceptacion:
+  - [ ] Aparece panel de resultados después de envío masivo
+  - [ ] Opciones: EXITOSO / PROMETIO_PAGAR / SIN_RESPUESTA / ESCALAR
+  - [ ] Cada resultado llama a `insert_gestion()` con tipo_gestion=WHATSAPP
+  - [ ] Se muestra resumen de resultados registrados
+  - [ ] Tests unitarios actualizados
+
+---
+
+### CRM-002: Biblioteca de 7 Plantillas WhatsApp (RC-FEAT-020)
+- Estado: Ready
+- Esfuerzo: 3 puntos (3–4 horas)
+- Prioridad: P1 Alto
+- Dependencias: ninguna (puede ir en paralelo con CRM-001)
+- Descripcion: Selector visual de plantilla antes del envío masivo. 7 plantillas por escenario (primer aviso, recordatorio, aviso firme, acuerdo, pre-legal, felicitación, solicitud datos). Editables desde Configuración. Guardadas en Supabase `app_config`.
+- Criterios de Aceptacion:
+  - [ ] Selector desplegable de plantilla visible antes de enviar
+  - [ ] 7 plantillas predefinidas con variables: {empresa}, {monto}, {fecha_venc}, {gestor}
+  - [ ] Plantillas editables en Tab Configuración
+  - [ ] Plantilla seleccionada se graba en `gestiones.metadata.template`
+  - [ ] Tests unitarios para resolución de variables
+
+---
+
+### CRM-003: Módulo de Acuerdos de Pago con Cuotas (RC-FEAT-021)
+- Estado: Ready
+- Esfuerzo: 5 puntos (4–6 horas)
+- Prioridad: P1 Alto
+- Dependencias: CRM-001 recomendado (para registrar gestión asociada)
+- Descripcion: Nueva sección en Centro de Gestiones. Formulario para registrar acuerdos de pago, cálculo automático de cuotas, timeline visual de estado, WA de confirmación automático. Requiere 2 nuevas tablas en Supabase.
+- Criterios de Aceptacion:
+  - [ ] CREATE TABLE acuerdos_pago en Supabase
+  - [ ] CREATE TABLE cuotas_acuerdo en Supabase
+  - [ ] Formulario: cliente, monto total, cuotas, fecha inicio
+  - [ ] Cálculo automático de fechas de vencimiento por cuota
+  - [ ] Timeline visual: cuotas PENDIENTE / PAGADA / VENCIDA
+  - [ ] WA automático de confirmación al crear acuerdo
+  - [ ] Tests unitarios para cálculo de cuotas
+
+---
+
+### CRM-004: Bandeja de Pendientes del Día (RC-FEAT-022)
+- Estado: Ready
+- Esfuerzo: 2 puntos (2–3 horas)
+- Prioridad: P1 Alto
+- Dependencias: CRM-003 (requiere tabla cuotas_acuerdo)
+- Descripcion: Nueva pestaña en Centro de Gestiones con lista priorizada de acciones diarias generada automáticamente. Detecta: WA sin respuesta +48h, cuotas venciendo hoy/en 3 días, clientes con mora crítica sin contacto. Cada ítem con botones de acción directa.
+- Criterios de Aceptacion:
+  - [ ] Lista de pendientes por prioridad (URGENTE / ALTO / MEDIO)
+  - [ ] Detecta WA enviado hace +48h sin resultado registrado
+  - [ ] Detecta cuotas venciendo en ≤3 días
+  - [ ] Detecta clientes +30 días mora sin ninguna gestión
+  - [ ] Botón acción directa por ítem (Registrar resultado / Enviar WA / Ver acuerdo)
+  - [ ] Tests unitarios para lógica de detección
+
+---
+
+### CRM-009: Trazabilidad Completa — Cruce documentos + 2 tablas resumen (RC-FEAT-023)
+- Estado: Ready
+- Esfuerzo: 4 puntos (4–5 horas)
+- Prioridad: P1 Alto
+- Dependencias: ninguna (trabaja sobre tablas existentes)
+- Descripcion: Al cargar ciclo nuevo, cruzar documentos_ciclo anterior con cobranzas de Integrens para marcar documentos RECUPERADOS con fecha, forma de pago y banco. Crear tablas resumen_cliente_ciclo y resumen_ciclo para alimentar dashboard e informe gerencial.
+- Criterios de Aceptacion:
+  - [ ] CREATE TABLE resumen_cliente_ciclo en Supabase
+  - [ ] CREATE TABLE resumen_ciclo en Supabase
+  - [ ] Función reconcile_ciclo_recovery() en db_manager.py
+  - [ ] Al cargar ciclo: documentos desaparecidos → estado RECUPERADO + fecha + forma_pago + banco
+  - [ ] Al cierre de ciclo: 1 fila en resumen_cliente_ciclo por cliente
+  - [ ] Al cierre de ciclo: 1 fila en resumen_ciclo con totales de cartera
+  - [ ] Tests unitarios para reconciliación
+
+---
 
 ---
 
