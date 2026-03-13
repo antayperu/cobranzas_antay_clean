@@ -50,7 +50,8 @@ class TestEmailGates(unittest.TestCase):
             'plain_body': 'Hola'
         }
         
-        with patch("smtplib.SMTP") as mock_smtp:
+        with patch("utils.db_manager.is_cloud_mode", return_value=False), \
+             patch("smtplib.SMTP") as mock_smtp:
             instance = mock_smtp.return_value
             
             # First Send
@@ -66,15 +67,13 @@ class TestEmailGates(unittest.TestCase):
         """RC-FEAT-011: Verify Supervisor receives copy via BCC (Envelope only)"""
         msg = {'email': 'client@test.com', 'client_name': 'C', 'subject': 'S', 'html_body': 'B'}
         
-        supervisor_cfg = {
-            "email": "boss@test.com", 
-            "enabled": True, 
-            "mode": "BCC"
+        internal_cfg = {
+            "bcc_list": ["boss@test.com"]
         }
         
         with patch("smtplib.SMTP") as mock_smtp:
             instance = mock_smtp.return_value
-            send_email_batch(self.smtp_config, [msg], supervisor_config=supervisor_cfg)
+            send_email_batch(self.smtp_config, [msg], internal_copies_config=internal_cfg)
             
             # Verify send_message arguments
             call_args = instance.send_message.call_args
@@ -95,15 +94,13 @@ class TestEmailGates(unittest.TestCase):
         """RC-FEAT-011: Verify Supervisor receives copy via CC (Envelope + Header)"""
         msg = {'email': 'client@test.com', 'client_name': 'C', 'subject': 'S', 'html_body': 'B'}
         
-        supervisor_cfg = {
-            "email": "boss@test.com", 
-            "enabled": True, 
-            "mode": "CC"
+        internal_cfg = {
+            "cc_list": ["boss@test.com"]
         }
         
         with patch("smtplib.SMTP") as mock_smtp:
             instance = mock_smtp.return_value
-            send_email_batch(self.smtp_config, [msg], supervisor_config=supervisor_cfg)
+            send_email_batch(self.smtp_config, [msg], internal_copies_config=internal_cfg)
             
             call_args = instance.send_message.call_args
             sent_msg = call_args[0][0]
@@ -120,15 +117,9 @@ class TestEmailGates(unittest.TestCase):
         """RC-FEAT-011: Verify no copy if disabled"""
         msg = {'email': 'client@test.com', 'client_name': 'C', 'subject': 'S', 'html_body': 'B'}
         
-        supervisor_cfg = {
-            "email": "boss@test.com", 
-            "enabled": False, 
-            "mode": "BCC"
-        }
-        
         with patch("smtplib.SMTP") as mock_smtp:
             instance = mock_smtp.return_value
-            send_email_batch(self.smtp_config, [msg], supervisor_config=supervisor_cfg)
+            send_email_batch(self.smtp_config, [msg])
             
             call_args = instance.send_message.call_args
             sent_to_addrs = call_args[1]['to_addrs']
@@ -140,16 +131,17 @@ class TestEmailGates(unittest.TestCase):
     def test_force_resend_with_supervisor(self):
         """RC-FEAT-011: Verify override works and still copies supervisor"""
         msg = {'email': 'client@test.com', 'client_name': 'C', 'subject': 'S', 'html_body': 'B'}
-        supervisor_cfg = {"email": "boss@test.com", "enabled": True, "mode": "BCC"}
+        internal_cfg = {"bcc_list": ["boss@test.com"]}
         
-        with patch("smtplib.SMTP") as mock_smtp:
+        with patch("utils.db_manager.is_cloud_mode", return_value=False), \
+             patch("smtplib.SMTP") as mock_smtp:
             instance = mock_smtp.return_value
             
             # First send
-            send_email_batch(self.smtp_config, [msg], supervisor_config=supervisor_cfg)
+            send_email_batch(self.smtp_config, [msg], internal_copies_config=internal_cfg)
             
             # Second send FORCED
-            stats = send_email_batch(self.smtp_config, [msg], force_resend=True, supervisor_config=supervisor_cfg)
+            stats = send_email_batch(self.smtp_config, [msg], force_resend=True, internal_copies_config=internal_cfg)
             
             self.assertEqual(stats['success'], 1)
             self.assertEqual(stats['blocked'], 0)

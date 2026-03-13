@@ -43,7 +43,7 @@ class TestUIInitialization(unittest.TestCase):
     def test_design_system_tokens(self):
         """Verify Design System tokens are present."""
         self.assertIn("primary", self.styles.COLORS)
-        self.assertEqual(self.styles.COLORS["primary"], "#0F52BA")
+        self.assertEqual(self.styles.COLORS["primary"], "#0D3B66")
         print("✅ Design System Tokens Verified")
 
     def test_sidebar_logic_interface_exists(self):
