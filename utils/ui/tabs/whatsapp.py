@@ -23,6 +23,7 @@ WA_PLANTILLAS_BIBLIOTECA = {
         "Estimados *{EMPRESA}*,\n\n"
         "Le recordamos que tiene documentos próximos a vencer o ya vencidos:\n\n"
         "{RESUMEN_DEUDA}\n\n"
+        "📅 Próximo vencimiento: *{PROX_VENC}*\n\n"
         "Por favor coordine el pago para evitar recargos.\n\n"
         "_DACTA S.A.C. | Consultas: +51 998 080 797_"
     ),
@@ -218,10 +219,13 @@ def render_tab(df_filtered, config):
             # RC-FEAT-020: Selector de biblioteca de plantillas
             _default_saved = config.get('whatsapp_template', list(WA_PLANTILLAS_BIBLIOTECA.values())[0])
             _opciones_selector = [_NOMBRE_PLANTILLA_PERSONALIZADA] + list(WA_PLANTILLAS_BIBLIOTECA.keys())
+            # Usar key= para que Streamlit recuerde la selección entre reruns.
+            # El index=0 sólo aplica en la PRIMERA render (antes de que la key exista en session_state).
             _sel_plantilla = st.selectbox(
                 "📚 Biblioteca de Plantillas",
                 options=_opciones_selector,
                 index=0,
+                key="wa_plantilla_seleccionada",
                 help="Elige una plantilla predefinida o usa tu plantilla guardada",
             )
             if _sel_plantilla == _NOMBRE_PLANTILLA_PERSONALIZADA:
@@ -241,7 +245,7 @@ def render_tab(df_filtered, config):
                 else:
                     st.error("❌ No se pudo guardar la plantilla.")
 
-            st.caption("Variables: `{EMPRESA}`, `{RESUMEN_DEUDA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
+            st.caption("Variables: `{EMPRESA}`, `{RESUMEN_DEUDA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`, `{PROX_VENC}`")
 
         with c2:
             st.markdown("##### Enviar Mensajes")
@@ -489,6 +493,13 @@ def render_tab(df_filtered, config):
                         f"• Detracciones SUNAT Pendientes: {kpi_sunat_wa}"
                     )
 
+                    # RC-FEAT-020: {PROX_VENC} — fecha de vencimiento más próxima del cliente
+                    try:
+                        _fechas_venc = pd.to_datetime(docs_cli['FECH VENC'], errors='coerce').dropna()
+                        _prox_venc = _fechas_venc.min().strftime('%d/%m/%Y') if not _fechas_venc.empty else "—"
+                    except Exception:
+                        _prox_venc = "—"
+
                     # Data dict for replacement (and sending)
                     contact_data = {
                         'nombre_cliente': empresa,
@@ -507,6 +518,7 @@ def render_tab(df_filtered, config):
                         'COUNT_DOCS_D': count_d_cli,
                         'cod_cliente': cod_cli,  # Para referencia
                         'RESUMEN_DEUDA': resumen_deuda_wa,  # RC-FEAT-019
+                        'PROX_VENC': _prox_venc,            # RC-FEAT-020: próximo vencimiento
                     }
                     
                     msg_preview = template
@@ -515,6 +527,7 @@ def render_tab(df_filtered, config):
                     msg_preview = msg_preview.replace("{DETALLE_DOCS}", txt_detalle)
                     msg_preview = msg_preview.replace("{TOTAL_SALDO_REAL}", contact_data['TOTAL_SALDO_REAL'])
                     msg_preview = msg_preview.replace("{TOTAL_SALDO_ORIGINAL}", contact_data['TOTAL_SALDO_ORIGINAL'])
+                    msg_preview = msg_preview.replace("{PROX_VENC}", _prox_venc)
                     
                     contact_data['mensaje'] = msg_preview
                     contacts_to_send.append(contact_data)

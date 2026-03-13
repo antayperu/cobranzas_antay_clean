@@ -147,6 +147,19 @@ def _docs_to_df(rows: list) -> pd.DataFrame:
     for df_col in _DF_TO_DB.keys():
         if df_col not in df.columns:
             df[df_col] = ""
+    # Rellenar valores nulos en columnas de tracking con defaults seguros.
+    # Esto ocurre cuando la fila en documentos_ciclo tiene NULL (ciclos históricos
+    # o cuando update_estado_whatsapp_in_cycle falló silenciosamente).
+    _tracking_defaults = {
+        "ESTADO_EMAIL":       "PENDIENTE",
+        "ESTADO_WHATSAPP":    "PENDIENTE",
+        "ESTADO_ENVIO_TEXTO": "",
+        "FECHA_ULTIMO_ENVIO": "",
+        "FECHA_ULTIMO_WA":    "",
+    }
+    for _col, _default in _tracking_defaults.items():
+        if _col in df.columns:
+            df[_col] = df[_col].fillna(_default)
     return df
 
 
