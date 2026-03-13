@@ -1369,3 +1369,133 @@ def get_crm_dashboard_stats() -> Dict[str, Any]:
         print(f"get_crm_dashboard_stats Error: {e}")
 
     return stats
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-021: Acuerdos de Pago con Cuotas
+# ---------------------------------------------------------------------------
+
+ACUERDO_ESTADOS_VALIDOS = {"ACTIVO", "CUMPLIDO", "INCUMPLIDO", "CANCELADO"}
+CUOTA_ESTADOS_VALIDOS = {"PENDIENTE", "PAGADO", "VENCIDO", "REPACTADO"}
+
+
+def insert_acuerdo_pago(
+    *,
+    cliente_id: str,
+    monto_total: float,
+    numero_cuotas: int,
+    fecha_acuerdo: str,
+    cuotas: List[Dict[str, Any]],
+    gestor: Optional[str] = None,
+    ciclo_id: Optional[str] = None,
+    notas: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Insert an acuerdo_pago with its cuotas.
+
+    Args:
+        cuotas: list of dicts with keys:
+            numero_cuota (int), monto_cuota (float), fecha_vencimiento (str 'YYYY-MM-DD')
+    """
+    client = get_supabase_client()
+    if not client:
+        return False, "Supabase no disponible."
+
+    if not cliente_id or monto_total <= 0 or numero_cuotas < 1:
+        return False, "Parámetros inválidos: cliente_id, monto_total o numero_cuotas."
+    if len(cuotas) != numero_cuotas:
+        return False, f"Se esperaban {numero_cuotas} cuotas, se recibieron {len(cuotas)}."
+
+    try:
+        acuerdo_payload: Dict[str, Any] = {
+            "cliente_id": str(cliente_id).strip(),
+            "monto_total": float(monto_total),
+            "numero_cuotas": int(numero_cuotas),
+            "fecha_acuerdo": str(fecha_acuerdo),
+            "gestor": str(gestor).strip() if gestor else None,
+            "ciclo_id": str(ciclo_id).strip() if ciclo_id else None,
+            "notas": str(notas).strip() if notas else None,
+            "estado": "ACTIVO",
+        }
+        resp = _safe_execute(client.table("acuerdos_pago").insert(acuerdo_payload).select("id"))
+        acuerdo_id = resp.data[0]["id"] if resp and resp.data else None
+        if not acuerdo_id:
+            return False, "No se pudo obtener el ID del acuerdo creado."
+
+        cuotas_payload = [
+            {
+                "acuerdo_id": acuerdo_id,
+                "numero_cuota": int(c["numero_cuota"]),
+                "monto_cuota": float(c["monto_cuota"]),
+                "fecha_vencimiento": str(c["fecha_vencimiento"]),
+                "estado": "PENDIENTE",
+            }
+            for c in cuotas
+        ]
+        _safe_execute(client.table("cuotas_acuerdo").insert(cuotas_payload))
+        return True, acuerdo_id
+    except Exception as e:
+        print(f"insert_acuerdo_pago Error: {e}")
+        return False, f"Error al crear acuerdo: {e}"
+
+
+def get_acuerdos_by_cliente(cliente_id: str) -> List[Dict[str, Any]]:
+    """Return acuerdos_pago for a client, each with a 'cuotas' list."""
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        acuerdos_resp = _safe_execute(
+            client.table("acuerdos_pago")
+            .select("*")
+            .eq("cliente_id", str(cliente_id).strip())
+            .order("fecha_acuerdo", desc=True)
+        )
+        acuerdos = acuerdos_resp.data if acuerdos_resp and acuerdos_resp.data else []
+
+        for acuerdo in acuerdos:
+            cuotas_resp = _safe_execute(
+                client.table("cuotas_acuerdo")
+                .select("*")
+                .eq("acuerdo_id", acuerdo["id"])
+                .order("numero_cuota")
+            )
+            acuerdo["cuotas"] = cuotas_resp.data if cuotas_resp and cuotas_resp.data else []
+        return acuerdos
+    except Exception as e:
+        print(f"get_acuerdos_by_cliente Error: {e}")
+        return []
+
+
+def update_cuota_estado(
+    cuota_id: str,
+    nuevo_estado: str,
+    *,
+    fecha_pago: Optional[str] = None,
+    notas: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Update the estado of a cuota_acuerdo row."""
+    client = get_supabase_client()
+    if not client:
+        return False, "Supabase no disponible."
+
+    estado_norm = str(nuevo_estado).strip().upper()
+    if estado_norm not in CUOTA_ESTADOS_VALIDOS:
+        return False, f"Estado inválido: {nuevo_estado}"
+
+    try:
+        payload: Dict[str, Any] = {
+            "estado": estado_norm,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        if fecha_pago:
+            payload["fecha_pago"] = str(fecha_pago)
+        if notas:
+            payload["notas"] = str(notas).strip()
+
+        _safe_execute(
+            client.table("cuotas_acuerdo").update(payload).eq("id", str(cuota_id))
+        )
+        return True, "Cuota actualizada correctamente."
+    except Exception as e:
+        print(f"update_cuota_estado Error: {e}")
+        return False, f"No se pudo actualizar cuota: {e}"

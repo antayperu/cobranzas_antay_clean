@@ -68,7 +68,7 @@ def render_tab(df_final: pd.DataFrame, config: dict):
     # ── Section selector ────────────────────────────────────────────────
     section = st.radio(
         "Seccion",
-        ["Timeline de Actividad", "Historial por Cliente", "Registrar Gestion"],
+        ["Timeline de Actividad", "Historial por Cliente", "Registrar Gestion", "Acuerdos de Pago"],
         horizontal=True,
         key="crm_section",
         label_visibility="collapsed",
@@ -80,6 +80,8 @@ def render_tab(df_final: pd.DataFrame, config: dict):
         _render_client_drilldown()
     elif section == "Registrar Gestion":
         _render_register_gestion()
+    elif section == "Acuerdos de Pago":
+        _render_acuerdos_pago()
 
 
 # ---------------------------------------------------------------------------
@@ -755,3 +757,199 @@ def _render_register_gestion():
             st.balloons()
         else:
             st.error(msg)
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-021: Acuerdos de Pago con Cuotas
+# ---------------------------------------------------------------------------
+
+_CUOTA_ESTADO_ICONS = {
+    "PENDIENTE": "🕐",
+    "PAGADO": "✅",
+    "VENCIDO": "🔴",
+    "REPACTADO": "🔄",
+}
+
+_ACUERDO_ESTADO_COLORS = {
+    "ACTIVO": "#1a7f37",
+    "CUMPLIDO": "#0b7285",
+    "INCUMPLIDO": "#c62828",
+    "CANCELADO": "#888888",
+}
+
+
+def _render_acuerdos_pago():
+    st.markdown("#### Acuerdos de Pago")
+    st.markdown(
+        """
+        <div class="antay-inline-note">
+            Registra y gestiona acuerdos de pago en cuotas.
+            Manten el seguimiento de cada cuota para recuperar deuda de forma ordenada.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    tab1, tab2 = st.tabs(["📋 Ver Acuerdos por Cliente", "➕ Nuevo Acuerdo"])
+
+    with tab1:
+        _render_ver_acuerdos()
+
+    with tab2:
+        _render_nuevo_acuerdo()
+
+
+def _render_ver_acuerdos():
+    """Show acuerdos and allow updating cuota states."""
+    nombre_map_ap: Dict[str, str] = dbm.get_clientes_nombres_map()
+    client_opts_ap = sorted(
+        [f"{cid} — {nombre}" for cid, nombre in nombre_map_ap.items() if cid],
+        key=lambda x: x.split(" — ")[0],
+    )
+
+    sel_ap = st.selectbox(
+        f"Buscar cliente ({len(client_opts_ap)} disponibles):",
+        options=[None] + client_opts_ap,
+        index=0,
+        placeholder="Escribe código o nombre...",
+        key="acuerdo_ver_client",
+        format_func=lambda x: "— Selecciona un cliente —" if x is None else x,
+    )
+
+    if not sel_ap:
+        st.info("Selecciona un cliente para ver sus acuerdos.")
+        return
+
+    cliente_id_ap = sel_ap.split(" — ")[0].strip()
+    acuerdos = dbm.get_acuerdos_by_cliente(cliente_id_ap)
+
+    if not acuerdos:
+        st.info(f"El cliente **{sel_ap}** no tiene acuerdos de pago registrados.")
+        return
+
+    for idx, acuerdo in enumerate(acuerdos):
+        estado_color = _ACUERDO_ESTADO_COLORS.get(acuerdo.get("estado", ""), "#555")
+        with st.expander(
+            f"📄 Acuerdo {acuerdo['fecha_acuerdo']} — "
+            f"S/ {float(acuerdo.get('monto_total', 0)):,.2f} — "
+            f"{acuerdo.get('numero_cuotas', 0)} cuota(s)",
+            expanded=(idx == 0),
+        ):
+            col_est, col_ges, col_ciclo = st.columns(3)
+            col_est.markdown(
+                f"**Estado:** <span style='color:{estado_color}; font-weight:700;'>"
+                f"{acuerdo.get('estado','—')}</span>",
+                unsafe_allow_html=True,
+            )
+            col_ges.markdown(f"**Gestor:** {acuerdo.get('gestor') or '—'}")
+            col_ciclo.markdown(f"**Ciclo:** {acuerdo.get('ciclo_id') or '—'}")
+
+            if acuerdo.get("notas"):
+                st.caption(f"📝 {acuerdo['notas']}")
+
+            cuotas = acuerdo.get("cuotas", [])
+            if not cuotas:
+                st.warning("Este acuerdo no tiene cuotas registradas.")
+                continue
+
+            st.markdown("**Cuotas:**")
+            for cuota in cuotas:
+                c_ico = _CUOTA_ESTADO_ICONS.get(cuota.get("estado", ""), "❓")
+                c_c1, c_c2, c_c3, c_c4, c_c5 = st.columns([1, 2, 2, 2, 3])
+                c_c1.markdown(f"**#{cuota['numero_cuota']}**")
+                c_c2.markdown(f"S/ {float(cuota.get('monto_cuota', 0)):,.2f}")
+                c_c3.markdown(f"Vence: {cuota.get('fecha_vencimiento','—')}")
+                c_c4.markdown(f"{c_ico} {cuota.get('estado','—')}")
+
+                if cuota.get("estado") == "PENDIENTE":
+                    btn_key = f"cuota_pagar_{cuota['id']}"
+                    if c_c5.button("✅ Marcar Pagado", key=btn_key):
+                        ok, msg = dbm.update_cuota_estado(
+                            cuota["id"], "PAGADO",
+                            fecha_pago=date.today().isoformat(),
+                        )
+                        if ok:
+                            st.success(f"Cuota #{cuota['numero_cuota']} marcada como PAGADO.")
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+
+def _render_nuevo_acuerdo():
+    """Form to create a new acuerdo de pago with N cuotas."""
+    nombre_map_np: Dict[str, str] = dbm.get_clientes_nombres_map()
+    client_opts_np = sorted(
+        [f"{cid} — {nombre}" for cid, nombre in nombre_map_np.items() if cid],
+        key=lambda x: x.split(" — ")[0],
+    )
+
+    with st.form("form_nuevo_acuerdo"):
+        sel_np = st.selectbox(
+            "Cliente",
+            options=[None] + client_opts_np,
+            index=0,
+            key="acuerdo_nuevo_client",
+            format_func=lambda x: "— Selecciona un cliente —" if x is None else x,
+        )
+
+        n_c1, n_c2, n_c3 = st.columns(3)
+        monto_total = n_c1.number_input(
+            "Monto Total (S/)", min_value=0.01, value=1000.00, step=100.0, format="%.2f"
+        )
+        num_cuotas = n_c2.number_input(
+            "Número de Cuotas", min_value=1, max_value=24, value=3, step=1
+        )
+        fecha_acuerdo = n_c3.date_input("Fecha del Acuerdo", value=date.today())
+
+        n_c4, n_c5 = st.columns(2)
+        gestor = n_c4.text_input("Gestor / Responsable")
+        primera_cuota_fecha = n_c5.date_input(
+            "Fecha 1ª Cuota",
+            value=date.today().replace(day=1),
+            help="Las cuotas siguientes se programan mensualmente.",
+        )
+
+        notas_acuerdo = st.text_area(
+            "Notas del Acuerdo",
+            placeholder="Detalles del acuerdo pactado con el cliente...",
+            height=80,
+        )
+
+        submitter = st.form_submit_button("💾 Crear Acuerdo", type="primary")
+
+    if submitter:
+        if not sel_np:
+            st.warning("Selecciona un cliente.")
+            return
+
+        cliente_id_np = sel_np.split(" — ")[0].strip()
+        monto_cuota = round(float(monto_total) / int(num_cuotas), 2)
+        cuotas_list = []
+        from dateutil.relativedelta import relativedelta
+        fecha_base = primera_cuota_fecha
+        for i in range(int(num_cuotas)):
+            cuotas_list.append({
+                "numero_cuota": i + 1,
+                "monto_cuota": monto_cuota,
+                "fecha_vencimiento": (fecha_base + relativedelta(months=i)).isoformat(),
+            })
+
+        ciclo_actual = st.session_state.get("current_cycle_id")
+        ok, result = dbm.insert_acuerdo_pago(
+            cliente_id=cliente_id_np,
+            monto_total=float(monto_total),
+            numero_cuotas=int(num_cuotas),
+            fecha_acuerdo=fecha_acuerdo.isoformat(),
+            cuotas=cuotas_list,
+            gestor=gestor.strip() if gestor else None,
+            ciclo_id=ciclo_actual,
+            notas=notas_acuerdo.strip() if notas_acuerdo else None,
+        )
+        if ok:
+            st.success(
+                f"✅ Acuerdo creado (ID: `{result}`) — "
+                f"{int(num_cuotas)} cuotas de S/ {monto_cuota:,.2f} para **{sel_np}**."
+            )
+            st.balloons()
+        else:
+            st.error(f"❌ {result}")
