@@ -1369,3 +1369,368 @@ def get_crm_dashboard_stats() -> Dict[str, Any]:
         print(f"get_crm_dashboard_stats Error: {e}")
 
     return stats
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-021: Acuerdos de Pago con Cuotas
+# ---------------------------------------------------------------------------
+
+ACUERDO_ESTADOS_VALIDOS = {"ACTIVO", "CUMPLIDO", "INCUMPLIDO", "CANCELADO"}
+CUOTA_ESTADOS_VALIDOS = {"PENDIENTE", "PAGADO", "VENCIDO", "REPACTADO"}
+
+
+def insert_acuerdo_pago(
+    *,
+    cliente_id: str,
+    monto_total: float,
+    numero_cuotas: int,
+    fecha_acuerdo: str,
+    cuotas: List[Dict[str, Any]],
+    gestor: Optional[str] = None,
+    ciclo_id: Optional[str] = None,
+    notas: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Insert an acuerdo_pago with its cuotas.
+
+    Args:
+        cuotas: list of dicts with keys:
+            numero_cuota (int), monto_cuota (float), fecha_vencimiento (str 'YYYY-MM-DD')
+    """
+    client = get_supabase_client()
+    if not client:
+        return False, "Supabase no disponible."
+
+    if not cliente_id or monto_total <= 0 or numero_cuotas < 1:
+        return False, "Parámetros inválidos: cliente_id, monto_total o numero_cuotas."
+    if len(cuotas) != numero_cuotas:
+        return False, f"Se esperaban {numero_cuotas} cuotas, se recibieron {len(cuotas)}."
+
+    try:
+        acuerdo_payload: Dict[str, Any] = {
+            "cliente_id": str(cliente_id).strip(),
+            "monto_total": float(monto_total),
+            "numero_cuotas": int(numero_cuotas),
+            "fecha_acuerdo": str(fecha_acuerdo),
+            "gestor": str(gestor).strip() if gestor else None,
+            "ciclo_id": str(ciclo_id).strip() if ciclo_id else None,
+            "notas": str(notas).strip() if notas else None,
+            "estado": "ACTIVO",
+        }
+        resp = _safe_execute(client.table("acuerdos_pago").insert(acuerdo_payload).select("id"))
+        acuerdo_id = resp.data[0]["id"] if resp and resp.data else None
+        if not acuerdo_id:
+            return False, "No se pudo obtener el ID del acuerdo creado."
+
+        cuotas_payload = [
+            {
+                "acuerdo_id": acuerdo_id,
+                "numero_cuota": int(c["numero_cuota"]),
+                "monto_cuota": float(c["monto_cuota"]),
+                "fecha_vencimiento": str(c["fecha_vencimiento"]),
+                "estado": "PENDIENTE",
+            }
+            for c in cuotas
+        ]
+        _safe_execute(client.table("cuotas_acuerdo").insert(cuotas_payload))
+        return True, acuerdo_id
+    except Exception as e:
+        print(f"insert_acuerdo_pago Error: {e}")
+        return False, f"Error al crear acuerdo: {e}"
+
+
+def get_acuerdos_by_cliente(cliente_id: str) -> List[Dict[str, Any]]:
+    """Return acuerdos_pago for a client, each with a 'cuotas' list."""
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        acuerdos_resp = _safe_execute(
+            client.table("acuerdos_pago")
+            .select("*")
+            .eq("cliente_id", str(cliente_id).strip())
+            .order("fecha_acuerdo", desc=True)
+        )
+        acuerdos = acuerdos_resp.data if acuerdos_resp and acuerdos_resp.data else []
+
+        for acuerdo in acuerdos:
+            cuotas_resp = _safe_execute(
+                client.table("cuotas_acuerdo")
+                .select("*")
+                .eq("acuerdo_id", acuerdo["id"])
+                .order("numero_cuota")
+            )
+            acuerdo["cuotas"] = cuotas_resp.data if cuotas_resp and cuotas_resp.data else []
+        return acuerdos
+    except Exception as e:
+        print(f"get_acuerdos_by_cliente Error: {e}")
+        return []
+
+
+def update_cuota_estado(
+    cuota_id: str,
+    nuevo_estado: str,
+    *,
+    fecha_pago: Optional[str] = None,
+    notas: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Update the estado of a cuota_acuerdo row."""
+    client = get_supabase_client()
+    if not client:
+        return False, "Supabase no disponible."
+
+    estado_norm = str(nuevo_estado).strip().upper()
+    if estado_norm not in CUOTA_ESTADOS_VALIDOS:
+        return False, f"Estado inválido: {nuevo_estado}"
+
+    try:
+        payload: Dict[str, Any] = {
+            "estado": estado_norm,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        if fecha_pago:
+            payload["fecha_pago"] = str(fecha_pago)
+        if notas:
+            payload["notas"] = str(notas).strip()
+
+        _safe_execute(
+            client.table("cuotas_acuerdo").update(payload).eq("id", str(cuota_id))
+        )
+        return True, "Cuota actualizada correctamente."
+    except Exception as e:
+        print(f"update_cuota_estado Error: {e}")
+        return False, f"No se pudo actualizar cuota: {e}"
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-023: Trazabilidad Completa — reconcile_ciclo_recovery
+# ---------------------------------------------------------------------------
+
+def _get_docs_simple_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
+    """Fetch match_key, cliente_id, saldo from documentos_ciclo for a cycle."""
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        resp = _safe_execute(
+            client.table("documentos_ciclo")
+            .select("match_key,cliente_id,saldo_real,saldo_original")
+            .eq("cycle_id", str(cycle_id))
+            .limit(5000)
+        )
+        return resp.data if resp and resp.data else []
+    except Exception as e:
+        print(f"_get_docs_simple_by_cycle Error: {e}")
+        return []
+
+
+def reconcile_ciclo_recovery(
+    cycle_id_anterior: str,
+    cycle_id_nuevo: str,
+) -> Dict[str, Any]:
+    """Detect recovered documents between two cycles and persist summary tables.
+
+    A document is considered "recovered" (client paid) when its match_key
+    was present in cycle_id_anterior but is absent in cycle_id_nuevo.
+
+    Persists:
+       - resumen_cliente_ciclo: one row per client in cycle_id_nuevo
+       - resumen_ciclo:         one aggregate row for cycle_id_nuevo
+
+    Returns a dict with keys: ok (bool), mensaje (str), stats (dict).
+    """
+    if not cycle_id_anterior or not cycle_id_nuevo:
+        return {"ok": False, "mensaje": "cycle_id_anterior y cycle_id_nuevo son requeridos.", "stats": {}}
+
+    client = get_supabase_client()
+    if not client:
+        return {"ok": False, "mensaje": "Supabase no disponible.", "stats": {}}
+
+    try:
+        docs_ant = _get_docs_simple_by_cycle(cycle_id_anterior)
+        docs_nue = _get_docs_simple_by_cycle(cycle_id_nuevo)
+
+        keys_ant: Dict[str, Dict] = {str(d.get("match_key", "")): d for d in docs_ant if d.get("match_key")}
+        keys_nue: Dict[str, Dict] = {str(d.get("match_key", "")): d for d in docs_nue if d.get("match_key")}
+
+        # Docs in anterior but NOT in nuevo → recovered
+        keys_recuperados = set(keys_ant.keys()) - set(keys_nue.keys())
+
+        # Build per-client stats for cycle_id_nuevo
+        cliente_nuevo: Dict[str, Dict[str, Any]] = {}
+        for doc in docs_nue:
+            cid = str(doc.get("cliente_id", "")).strip()
+            if not cid:
+                continue
+            if cid not in cliente_nuevo:
+                cliente_nuevo[cid] = {"docs_total": 0, "monto_total": 0.0,
+                                       "docs_recuperados": 0, "monto_recuperado": 0.0}
+            cliente_nuevo[cid]["docs_total"] += 1
+            cliente_nuevo[cid]["monto_total"] += float(doc.get("saldo_real") or 0)
+
+        # Build per-client recovered stats
+        for mk in keys_recuperados:
+            doc = keys_ant[mk]
+            cid = str(doc.get("cliente_id", "")).strip()
+            if not cid:
+                continue
+            if cid not in cliente_nuevo:
+                cliente_nuevo[cid] = {"docs_total": 0, "monto_total": 0.0,
+                                       "docs_recuperados": 0, "monto_recuperado": 0.0}
+            cliente_nuevo[cid]["docs_recuperados"] += 1
+            cliente_nuevo[cid]["monto_recuperado"] += float(doc.get("saldo_real") or 0)
+
+        # Gestiones por cliente en el ciclo nuevo
+        gestiones_nuevas = get_gestiones_list(limit=5000)  # All recent
+        gestiones_por_cliente: Dict[str, int] = {}
+        for g in gestiones_nuevas:
+            cid = str(g.get("cliente_id", "")).strip()
+            if cid:
+                gestiones_por_cliente[cid] = gestiones_por_cliente.get(cid, 0) + 1
+
+        # Acuerdos activos por cliente
+        acuerdos_resp = _safe_execute(
+            client.table("acuerdos_pago").select("cliente_id").eq("estado", "ACTIVO")
+        )
+        clientes_con_acuerdo: set = set()
+        if acuerdos_resp and acuerdos_resp.data:
+            clientes_con_acuerdo = {str(r["cliente_id"]).strip() for r in acuerdos_resp.data}
+
+        # Persist resumen_cliente_ciclo
+        ahora = datetime.utcnow().isoformat()
+        resumen_rows = []
+        for cid, stats in cliente_nuevo.items():
+            n_gestiones = gestiones_por_cliente.get(cid, 0)
+            tiene_acuerdo = cid in clientes_con_acuerdo
+            if stats["docs_total"] == 0 and stats["docs_recuperados"] > 0:
+                estado_cli = "RECUPERADO"
+            elif stats["docs_recuperados"] > 0:
+                estado_cli = "PARCIAL"
+            elif n_gestiones == 0:
+                estado_cli = "SIN_ACTIVIDAD"
+            else:
+                estado_cli = "PENDIENTE"
+
+            resumen_rows.append({
+                "cliente_id": cid,
+                "cycle_id": cycle_id_nuevo,
+                "docs_total": stats["docs_total"],
+                "monto_total": round(stats["monto_total"], 2),
+                "docs_recuperados": stats["docs_recuperados"],
+                "monto_recuperado": round(stats["monto_recuperado"], 2),
+                "gestiones_count": n_gestiones,
+                "tiene_acuerdo_pago": tiene_acuerdo,
+                "estado": estado_cli,
+                "updated_at": ahora,
+            })
+
+        if resumen_rows:
+            _safe_execute(
+                client.table("resumen_cliente_ciclo")
+                .upsert(resumen_rows, on_conflict="cliente_id,cycle_id")
+            )
+
+        # Persist resumen_ciclo
+        total_docs_rec = sum(v["docs_recuperados"] for v in cliente_nuevo.values())
+        total_monto_rec = sum(v["monto_recuperado"] for v in cliente_nuevo.values())
+        total_docs_ant = len(keys_ant)
+        tasa = round(total_docs_rec / total_docs_ant * 100, 2) if total_docs_ant > 0 else 0.0
+
+        total_gestiones = len(gestiones_nuevas)
+        total_acuerdos_resp = _safe_execute(
+            client.table("acuerdos_pago").select("id", count="exact").eq("estado", "ACTIVO")
+        )
+        total_acuerdos = total_acuerdos_resp.count if total_acuerdos_resp else 0
+
+        resumen_ciclo_row = {
+            "cycle_id": cycle_id_nuevo,
+            "cycle_id_anterior": cycle_id_anterior,
+            "clientes_total": len(cliente_nuevo),
+            "docs_total": len(keys_nue),
+            "monto_total": round(sum(v["monto_total"] for v in cliente_nuevo.values()), 2),
+            "clientes_recuperados": sum(1 for v in cliente_nuevo.values() if v["docs_recuperados"] > 0),
+            "docs_recuperados": total_docs_rec,
+            "monto_recuperado": round(total_monto_rec, 2),
+            "tasa_recuperacion": tasa,
+            "gestiones_total": total_gestiones,
+            "acuerdos_total": total_acuerdos or 0,
+            "updated_at": ahora,
+        }
+        _safe_execute(
+            client.table("resumen_ciclo")
+            .upsert([resumen_ciclo_row], on_conflict="cycle_id")
+        )
+
+        stats_out = {
+            "clientes_total": len(cliente_nuevo),
+            "docs_recuperados": total_docs_rec,
+            "monto_recuperado": round(total_monto_rec, 2),
+            "tasa_recuperacion": tasa,
+        }
+        return {
+            "ok": True,
+            "mensaje": (
+                f"Trazabilidad calculada: {total_docs_rec} docs recuperados "
+                f"({tasa}%) sobre {total_docs_ant} del ciclo anterior."
+            ),
+            "stats": stats_out,
+        }
+    except Exception as e:
+        print(f"reconcile_ciclo_recovery Error: {e}")
+        return {"ok": False, "mensaje": f"Error en reconciliación: {e}", "stats": {}}
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-022: Bandeja de Pendientes
+# ---------------------------------------------------------------------------
+
+def get_cuotas_pendientes_hoy(limit: int = 200) -> List[Dict[str, Any]]:
+    """Return cuotas_acuerdo with estado=PENDIENTE and fecha_vencimiento <= today."""
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        resp = _safe_execute(
+            client.table("cuotas_acuerdo")
+            .select("id,acuerdo_id,numero_cuota,monto_cuota,fecha_vencimiento,estado,notas,"
+                    "acuerdos_pago(cliente_id,gestor,ciclo_id)")
+            .eq("estado", "PENDIENTE")
+            .lte("fecha_vencimiento", today_str)
+            .order("fecha_vencimiento")
+            .limit(limit)
+        )
+        return resp.data if resp and resp.data else []
+    except Exception as e:
+        print(f"get_cuotas_pendientes_hoy Error: {e}")
+        return []
+
+
+def get_clientes_sin_gestion_ciclo(cycle_id: str, limit: int = 200) -> List[str]:
+    """Return cliente_ids in cycle_id that have zero gestiones registered."""
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        # Get all clients in cycle
+        docs_resp = _safe_execute(
+            client.table("documentos_ciclo")
+            .select("cliente_id")
+            .eq("cycle_id", str(cycle_id))
+            .limit(2000)
+        )
+        all_clients = {str(d["cliente_id"]).strip() for d in (docs_resp.data or []) if d.get("cliente_id")}
+
+        # Get clients with gestiones in cycle
+        gestiones_resp = _safe_execute(
+            client.table("gestiones")
+            .select("cliente_id")
+            .eq("cycle_id", str(cycle_id))
+            .limit(2000)
+        )
+        clients_with_gestiones = {str(d["cliente_id"]).strip() for d in (gestiones_resp.data or []) if d.get("cliente_id")}
+
+        sin_gestion = sorted(all_clients - clients_with_gestiones)
+        return sin_gestion[:limit]
+    except Exception as e:
+        print(f"get_clientes_sin_gestion_ciclo Error: {e}")
+        return []

@@ -7,7 +7,7 @@
 
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
-| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 018 |
+| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 023 |
 | **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 000 |
 | **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 012 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
@@ -76,10 +76,130 @@
 | **RC-UX-012** | **Clientes Premium — Layout mejorado (separador KPIs + filtros + botones)** | **P1** (Alto) | **Done** | Antigravity | 2026-02-21 |
 | **RC-OPS-003** | **Deploy en servidor QA antay-cobranza (puerto 8503, autostart, cloudflare)** | **P0** (Critico) | **Done** | Antigravity | 2026-02-21 |
 | **RC-OPS-004** | **Ciclos Persistentes con Tracking Reconciliado (cycle_id + selector + reconcile)** | **P0** (Critico) | **In Progress** | Antigravity | 2026-02-22 |
+| **RC-FEAT-019** | **CRM: Resultado Post-Envío WhatsApp (Panel de seguimiento post-lote)** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
+| **RC-FEAT-020** | **CRM: Biblioteca de 7 Plantillas WhatsApp con variables** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
+| **RC-FEAT-021** | **CRM: Módulo de Acuerdos de Pago con Cuotas (2 tablas Supabase)** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
+| **RC-FEAT-022** | **CRM: Bandeja de Pendientes del Día (alertas automáticas)** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
+| **RC-FEAT-023** | **CRM: Trazabilidad Completa (reconcile + resumen_cliente_ciclo + resumen_ciclo)** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
 
 ---
 
 ## 4. Detalle de Tickets (Últimos 5 activos)
+
+### [RC-FEAT-019] CRM: Resultado Post-Envío WhatsApp
+- **Contexto**: Hoy después de un envío masivo el gestor no tiene forma de registrar qué pasó con cada cliente. El campo `gestiones.resultado` existe en Supabase pero nunca se actualiza post-envío WA.
+- **Rama**: `dev`
+- **Archivos a modificar**: `utils/ui/tabs/whatsapp.py`, `utils/db_manager.py`
+- **Alcance IN**:
+  - Panel de resultados post-lote en Tab WhatsApp
+  - Opciones por cliente: EXITOSO / PROMETIO_PAGAR / SIN_RESPUESTA / ESCALAR
+  - Llama a `insert_gestion()` con tipo_gestion='WHATSAPP' y resultado seleccionado
+  - Resumen visual de resultados registrados del lote
+- **Alcance OUT**: No modifica el flujo de envío existente, no toca email
+- **Criterios de Aceptación**:
+  - [ ] Panel aparece solo después de un envío exitoso con al menos 1 contacto
+  - [ ] Cada resultado persiste en Supabase tabla `gestiones`
+  - [ ] El resultado queda vinculado al `cycle_id` del ciclo actual
+  - [ ] Tests: `test_whatsapp_resultado_post_envio` pasa
+- **Esfuerzo**: 1–2 horas | **Tier**: 1 | **Dependencias**: ninguna
+
+---
+
+### [RC-FEAT-020] CRM: Biblioteca de 7 Plantillas WhatsApp
+- **Contexto**: Hoy todos los WA se envían con el mismo mensaje hardcodeado. No hay forma de elegir tono según el estado del cliente (preventivo vs. pre-legal).
+- **Rama**: `dev`
+- **Archivos a modificar**: `utils/ui/tabs/whatsapp.py`, `utils/ui/tabs/config_tab.py`, `utils/db_manager.py`
+- **Alcance IN**:
+  - Selector de plantilla visible antes del envío masivo
+  - 7 plantillas predefinidas: Primer Aviso, Recordatorio, Aviso Firme, Acuerdo Confirmado, Pre-Legal, Felicitación Pago, Solicitud Datos de Contacto
+  - Variables soportadas: `{empresa}`, `{monto}`, `{moneda}`, `{fecha_venc}`, `{dias_mora}`, `{gestor}`
+  - Editables desde Tab Configuración y guardadas en tabla Supabase `app_config`
+  - Plantilla utilizada se graba en `gestiones.metadata.template`
+- **Alcance OUT**: No modifica envío de email, no cambia estructura de `gestiones`
+- **Criterios de Aceptación**:
+  - [ ] Selector de plantilla visible y funcional antes del envío
+  - [ ] Variables se resuelven correctamente con datos del cliente
+  - [ ] Plantillas persisten en Supabase entre sesiones
+  - [ ] Tests: `test_wa_plantilla_resolucion_variables` pasa
+- **Esfuerzo**: 3–4 horas | **Tier**: 1 | **Dependencias**: ninguna
+
+---
+
+### [RC-FEAT-021] CRM: Módulo de Acuerdos de Pago con Cuotas
+- **Contexto**: No existe forma de formalizar en el sistema un acuerdo de pago. Los acuerdos se hacen verbalmente o en papel y nunca quedan trazados.
+- **Rama**: `dev`
+- **Archivos a modificar**: `utils/ui/tabs/crm_gestiones.py`, `utils/db_manager.py`
+- **SQL nuevo**:
+  ```sql
+  CREATE TABLE acuerdos_pago (id, cliente_id, cycle_id, monto_total, num_cuotas,
+    fecha_inicio, estado, notas, usuario, created_at, updated_at)
+  CREATE TABLE cuotas_acuerdo (id, acuerdo_id, numero_cuota, monto, fecha_vencimiento,
+    fecha_pago, estado, notas, created_at)
+  ```
+- **Alcance IN**:
+  - Nueva sección "Acuerdos" en Tab Centro de Gestiones
+  - Formulario: cliente, monto total, número de cuotas, fecha de inicio
+  - Cálculo automático de fechas de vencimiento por cuota
+  - Timeline visual: cuotas PENDIENTE / PAGADA / VENCIDA
+  - WA automático de confirmación al crear acuerdo (usa RC-FEAT-020 si disponible)
+- **Alcance OUT**: No modifica flujo de carga de Excel, no toca tab WhatsApp directamente
+- **Criterios de Aceptación**:
+  - [ ] Tablas `acuerdos_pago` y `cuotas_acuerdo` creadas en Supabase
+  - [ ] Formulario funcional crea acuerdo con cuotas calculadas
+  - [ ] Timeline visual muestra estado actualizable de cada cuota
+  - [ ] Tests: `test_acuerdo_calculo_cuotas` pasa
+- **Esfuerzo**: 4–6 horas | **Tier**: 1 | **Dependencias**: RC-FEAT-019 recomendado
+
+---
+
+### [RC-FEAT-022] CRM: Bandeja de Pendientes del Día
+- **Contexto**: El gestor entra cada mañana sin saber exactamente qué hacer primero. No hay priorización automática de tareas de cobranza.
+- **Rama**: `dev`
+- **Archivos a modificar**: `utils/ui/tabs/crm_gestiones.py`, `utils/db_manager.py`
+- **Alcance IN**:
+  - Nueva pestaña "Pendientes Hoy" en Centro de Gestiones
+  - Reglas de detección automática:
+    - WA enviado hace +48h sin resultado registrado → prioridad URGENTE
+    - Cuota de acuerdo venciendo en ≤3 días → prioridad ALTO
+    - Cliente con mora >30 días sin ninguna gestión en el ciclo → prioridad ALTO
+    - Cliente en estado PRE-LEGAL sin gestión esta semana → prioridad URGENTE
+  - Botones de acción directa por ítem (Registrar resultado / Enviar WA / Ver acuerdo)
+- **Alcance OUT**: No genera acciones automáticas sin intervención del gestor
+- **Criterios de Aceptación**:
+  - [ ] Lista priorizada carga al abrir la pestaña
+  - [ ] Reglas de detección funcionan con datos reales de Supabase
+  - [ ] Tests: `test_pendientes_deteccion_reglas` pasa
+- **Esfuerzo**: 2–3 horas | **Tier**: 1 | **Dependencias**: RC-FEAT-021 (tabla cuotas_acuerdo)
+
+---
+
+### [RC-FEAT-023] CRM: Trazabilidad Completa (reconcile + 2 tablas resumen)
+- **Contexto**: Los datos de pago del ERP Integrens ya están en Supabase (`cobranzas`) pero nunca se cruzan con `documentos_ciclo` para marcar documentos como RECUPERADOS con fecha y forma de pago exacta. Tampoco existen tablas de resumen por cliente ni por ciclo para el informe gerencial.
+- **Rama**: `dev`
+- **Archivos a modificar**: `utils/db_manager.py`, `app.py`
+- **SQL nuevo**:
+  ```sql
+  CREATE TABLE resumen_cliente_ciclo (cycle_id, cod_cliente, empresa,
+    total_deuda, docs_vencidos, dias_mora_max, tendencia, created_at)
+  CREATE TABLE resumen_ciclo (cycle_id, fecha_corte, cartera_total,
+    cartera_vencida, cartera_prelegal, recuperado_vs_anterior, tasa_recuperacion,
+    created_at)
+  ```
+- **Alcance IN**:
+  - Función `reconcile_ciclo_recovery(cycle_id_anterior, cycle_id_nuevo)` en `db_manager.py`
+  - Documentos que desaparecen del Excel → busca en `cobranzas` → marca estado RECUPERADO + fecha_pago + forma_pago + banco
+  - Al cierre de ciclo: graba 1 fila en `resumen_cliente_ciclo` por cada cliente
+  - Al cierre de ciclo: graba 1 fila en `resumen_ciclo` con totales de toda la cartera
+  - `app.py` llama a reconcile después de `persist_cycle_to_supabase()`
+- **Alcance OUT**: No modifica el flujo de carga ni la UX existente
+- **Criterios de Aceptación**:
+  - [ ] Tablas `resumen_cliente_ciclo` y `resumen_ciclo` creadas en Supabase
+  - [ ] `reconcile_ciclo_recovery()` detecta documentos RECUPERADOS correctamente
+  - [ ] Al cargar ciclo nuevo, ambas tablas resumen se actualizan automáticamente
+  - [ ] Tests: `test_reconcile_recovery_deteccion` pasa
+- **Esfuerzo**: 4–5 horas | **Tier**: 1 | **Dependencias**: ninguna
+
+---
 
 ### [RC-OPS-004] Ciclos Persistentes con Tracking Reconciliado
 - **Descripcion**: Al restaurar un ciclo anterior, ESTADO_EMAIL aparecia en blanco aunque los correos ya habian sido enviados. El tracking solo vivia en memoria y nunca se reconciliaba con la tabla notificaciones.

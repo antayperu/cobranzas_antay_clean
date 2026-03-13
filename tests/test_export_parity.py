@@ -17,6 +17,8 @@ LEGACY_EXPORT_COLUMNS_BASELINE = [
     'Enviar Email',
     'ESTADO_EMAIL',
     'FECHA_ULTIMO_ENVIO',
+    'ESTADO_WHATSAPP',
+    'FECHA_ULTIMO_WA',
     'NOTA',
     'CORREO',
     'TELÉFONO',

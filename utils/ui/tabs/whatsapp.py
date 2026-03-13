@@ -8,6 +8,64 @@ import streamlit.components.v1 as components
 import utils.storage_manager as storage_mgr
 from datetime import datetime, date
 
+# RC-FEAT-020: Biblioteca de 7 Plantillas WA
+WA_PLANTILLAS_BIBLIOTECA = {
+    "📋 Cobranza Estándar": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes de pago:\n\n"
+        "{RESUMEN_DEUDA}\n\n"
+        "*Detalle de Documentos:*\n"
+        "{DETALLE_DOCS}\n\n"
+        "Agradeceremos gestionar el pago a la brevedad.\n\n"
+        "_DACTA S.A.C. | RUC: 20375779448 · Consultas: +51 998 080 797_"
+    ),
+    "🔔 Primer Recordatorio": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Le recordamos que tiene documentos próximos a vencer o ya vencidos:\n\n"
+        "{RESUMEN_DEUDA}\n\n"
+        "Por favor coordine el pago para evitar recargos.\n\n"
+        "_DACTA S.A.C. | Consultas: +51 998 080 797_"
+    ),
+    "⚠️ Segundo Recordatorio": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Le informamos que a pesar de nuestro recordatorio anterior, aún registra deuda pendiente:\n\n"
+        "{RESUMEN_DEUDA}\n\n"
+        "{DETALLE_DOCS}\n\n"
+        "Solicitamos su pronto pago o que nos contacte para coordinar un acuerdo.\n\n"
+        "_DACTA S.A.C. | Urgente: +51 998 080 797_"
+    ),
+    "🔴 Urgente / Pre-Legal": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "⚠️ AVISO FINAL: Su cuenta presenta una deuda de *S/ {TOTAL_SALDO_REAL}* con documentos vencidos.\n\n"
+        "{DETALLE_DOCS}\n\n"
+        "De no regularizar en 48 horas, el caso será derivado al área legal.\n\n"
+        "Contáctenos HOY: +51 998 080 797\n\n"
+        "_DACTA S.A.C. | RUC: 20375779448_"
+    ),
+    "💰 Solo Total": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Su saldo pendiente es de *S/ {TOTAL_SALDO_REAL}*.\n\n"
+        "Agradeceremos su pago a la brevedad.\n\n"
+        "_DACTA S.A.C. | +51 998 080 797_"
+    ),
+    "🤝 Confirmación de Acuerdo": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Confirmamos el acuerdo de pago acordado para regularizar su deuda de *S/ {TOTAL_SALDO_REAL}*.\n\n"
+        "Quedamos atentos a la confirmación de cada cuota pactada.\n\n"
+        "Ante cualquier inconveniente, comuníquese con nosotros.\n\n"
+        "_DACTA S.A.C. | +51 998 080 797_"
+    ),
+    "✅ Reconocimiento de Pago": (
+        "Estimados *{EMPRESA}*,\n\n"
+        "Hemos registrado su pago reciente. Gracias por regularizar su cuenta.\n\n"
+        "Si tiene algún comprobante pendiente de enviar, puede hacerlo por este medio.\n\n"
+        "_DACTA S.A.C. | +51 998 080 797_"
+    ),
+}
+
+_NOMBRE_PLANTILLA_PERSONALIZADA = "✏️ Personalizada (tu plantilla guardada)"
+
+
 def render_tab(df_filtered, config):
     """
     Renders the WhatsApp Marketing/Notifications tab.
@@ -50,14 +108,102 @@ def render_tab(df_filtered, config):
         if wa_res.get('details'):
             df_wa_res = pd.DataFrame(wa_res['details'])
             st.write("📝 **Detalle por Cliente:**")
-            st.dataframe(df_wa_res, use_container_width=True, hide_index=True)
-            csv_wa = df_wa_res.to_csv(index=False).encode('utf-8')
+            # Mostrar solo columnas visibles (ocultar CodCliente)
+            cols_display = [c for c in df_wa_res.columns if c != 'CodCliente']
+            st.dataframe(df_wa_res[cols_display], use_container_width=True, hide_index=True)
+            csv_wa = df_wa_res[cols_display].to_csv(index=False).encode('utf-8')
             st.download_button(
                 "📄 Descargar Reporte WA (CSV)",
                 data=csv_wa,
                 file_name=f"reporte_wa_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv"
             )
+
+        # --- RC-FEAT-019: Panel de Resultado por Cliente ---
+        st.divider()
+        st.subheader("🎯 Registrar Resultado de la Gestión")
+        st.caption("Indica qué respondió cada cliente. Se guarda en Supabase para alimentar el Dashboard de Efectividad.")
+
+        _OPCIONES_RESULTADO = [
+            "⏳ Sin registrar",
+            "✅ Acordó pagar",
+            "🤝 Prometió pagar",
+            "📵 Sin respuesta",
+            "🔴 Escalar / Pre-Legal",
+            "💬 Solicitó más plazo",
+        ]
+        _RESULTADO_MAP = {
+            "✅ Acordó pagar": "EXITOSO",
+            "🤝 Prometió pagar": "PENDIENTE",
+            "📵 Sin respuesta": "SIN_RESPUESTA",
+            "🔴 Escalar / Pre-Legal": "REPROGRAMADO",
+            "💬 Solicitó más plazo": "PENDIENTE",
+        }
+
+        resultados_guardados: dict = wa_res.get('resultados_registrados', {})
+        details = wa_res.get('details', [])
+        cycle_id_lote = wa_res.get('cycle_id', st.session_state.get('cycle_id', ''))
+
+        with st.form(key='form_resultados_wa'):
+            selecciones = {}
+            for i, det in enumerate(details):
+                cod = det.get('CodCliente', '')
+                ya_guardado = resultados_guardados.get(cod)
+                col_a, col_b = st.columns([2, 2])
+                with col_a:
+                    st.markdown(f"**{det.get('Cliente', '')}**  "
+                                f"<span style='color:#556B82;font-size:0.85em;'>Deuda: {det.get('Deuda','')}</span>",
+                                unsafe_allow_html=True)
+                with col_b:
+                    if ya_guardado:
+                        st.success(f"✅ Guardado: {ya_guardado}")
+                        selecciones[cod] = None  # ya procesado
+                    else:
+                        selecciones[cod] = st.selectbox(
+                            f"Resultado_{i}",
+                            _OPCIONES_RESULTADO,
+                            key=f"wa_res_{i}_{cod}",
+                            label_visibility="collapsed",
+                        )
+
+            submitted = st.form_submit_button("💾 Guardar Resultados en Supabase", type="primary")
+            if submitted:
+                guardados = 0
+                errores = 0
+                for det in details:
+                    cod = det.get('CodCliente', '')
+                    if not cod:
+                        continue
+                    opcion = selecciones.get(cod)
+                    if opcion is None or opcion == "⏳ Sin registrar":
+                        continue
+                    resultado_norm = _RESULTADO_MAP.get(opcion, "PENDIENTE")
+                    ok, _ = dbm.insert_gestion(
+                        cliente_id=cod,
+                        tipo_gestion='WHATSAPP',
+                        resultado=resultado_norm,
+                        notas=f"Resultado post-envío WA: {opcion} | Deuda: {det.get('Deuda', '')}",
+                        cycle_id=cycle_id_lote,
+                        metadata_extra={
+                            'source': 'panel_resultado_post_envio',
+                            'opcion_gestor': opcion,
+                        },
+                    )
+                    if ok:
+                        resultados_guardados[cod] = opcion
+                        guardados += 1
+                    else:
+                        errores += 1
+
+                wa_res['resultados_registrados'] = resultados_guardados
+                st.session_state['last_wa_send_results'] = wa_res
+                if guardados:
+                    st.success(f"✅ {guardados} resultado(s) guardado(s) en Supabase.")
+                if errores:
+                    st.warning(f"⚠️ {errores} resultado(s) no pudieron guardarse.")
+                st.rerun()
+        # --- Fin RC-FEAT-019 ---
+
         if st.button("✅ Cerrar Reporte WA"):
             del st.session_state['last_wa_send_results']
             st.rerun()
@@ -68,31 +214,33 @@ def render_tab(df_filtered, config):
         
         with c1:
             st.markdown("##### Configurar Plantilla")
-            
-            # Cargar plantilla de CONFIG o usar default si no existe
-            saved_template = config.get('whatsapp_template', (
-                "Estimados *{EMPRESA}*,\n\n"
-                "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes de pago:\n\n"
-                "{RESUMEN_DEUDA}\n\n"
-                "*Detalle de Documentos:*\n"
-                "{DETALLE_DOCS}\n\n"
-                "Agradeceremos gestionar el pago a la brevedad.\n\n"
-                "_DACTA S.A.C. | RUC: 20375779448 Este es un mensaje automático de notificación de deuda. Consultas: +51 998 080 797_"
-            ))
-            
-            template = st.text_area("Plantilla del Mensaje", value=saved_template, height=350)
-            
+
+            # RC-FEAT-020: Selector de biblioteca de plantillas
+            _default_saved = config.get('whatsapp_template', list(WA_PLANTILLAS_BIBLIOTECA.values())[0])
+            _opciones_selector = [_NOMBRE_PLANTILLA_PERSONALIZADA] + list(WA_PLANTILLAS_BIBLIOTECA.keys())
+            _sel_plantilla = st.selectbox(
+                "📚 Biblioteca de Plantillas",
+                options=_opciones_selector,
+                index=0,
+                help="Elige una plantilla predefinida o usa tu plantilla guardada",
+            )
+            if _sel_plantilla == _NOMBRE_PLANTILLA_PERSONALIZADA:
+                _valor_inicial = _default_saved
+            else:
+                _valor_inicial = WA_PLANTILLAS_BIBLIOTECA[_sel_plantilla]
+
+            template = st.text_area("Plantilla del Mensaje", value=_valor_inicial, height=280)
+
             # --- BOTÓN GUARDAR PLANTILLA ---
             if st.button("💾 Guardar como Plantilla Predeterminada"):
                 new_config = config.copy()
                 new_config['whatsapp_template'] = template
                 if sm.save_settings(new_config):
                     st.success("✅ Plantilla guardada correctamente.")
-                    # Actualizamos CONFIG local para la sesión actual (modifies dictionary in place if passed by reference)
                     config['whatsapp_template'] = template
                 else:
                     st.error("❌ No se pudo guardar la plantilla.")
-            
+
             st.caption("Variables: `{EMPRESA}`, `{RESUMEN_DEUDA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`")
 
         with c2:
@@ -680,6 +828,7 @@ def render_tab(df_filtered, config):
                     for c in contacts_to_send:
                         wa_details.append({
                             'Cliente': c['nombre_cliente'],
+                            'CodCliente': str(c.get('cod_cliente', '')).strip(),
                             'Teléfono': c['telefono'],
                             'Estado': '✅ Enviado' if resultado_lote == 'EXITOSO' else '❌ Fallido',
                             'Deuda': c.get('TOTAL_SALDO_REAL', ''),
@@ -688,6 +837,8 @@ def render_tab(df_filtered, config):
                         'exitosos': results['exitosos'],
                         'fallidos': results['fallidos'],
                         'details': wa_details,
+                        'cycle_id': current_cycle_id,
+                        'resultados_registrados': {},
                     }
                     if current_wa_batch_id:
                         st.session_state['last_wa_batch_id'] = current_wa_batch_id
