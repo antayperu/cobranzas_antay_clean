@@ -241,6 +241,23 @@ if wizard_action == "PROCESS_TRIGGERED":
                             f"Se detectaron {errors.get('cobranzas', 0)} filas de cobranza sin match documental. "
                             "No fueron insertadas por regla de integridad."
                         )
+
+                    # --- RC-FEAT-023: TRAZABILIDAD — reconcile recovery vs ciclo anterior ---
+                    _prev_cycle = st.session_state.get("prev_cycle_id")
+                    if _prev_cycle and _prev_cycle != cycle_id:
+                        _rec_result = dbm.reconcile_ciclo_recovery(
+                            cycle_id_anterior=_prev_cycle,
+                            cycle_id_nuevo=cycle_id,
+                        )
+                        if _rec_result.get("ok"):
+                            _s = _rec_result["stats"]
+                            st.toast(
+                                f"🔍 Trazabilidad: {_s.get('docs_recuperados', 0)} docs recuperados "
+                                f"({_s.get('tasa_recuperacion', 0)}%)",
+                                icon="📊",
+                            )
+                    st.session_state["prev_cycle_id"] = cycle_id
+
                     
                     # Mark session start
                     st.session_state['session_start_ts'] = datetime.now()
