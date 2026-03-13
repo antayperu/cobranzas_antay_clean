@@ -522,6 +522,46 @@ def reconcile_tracking_from_notifications(
     return df
 
 
+def update_estados_email_in_cycle(cycle_id: str, match_keys: list, fecha: str) -> bool:
+    """UPDATE documentos_ciclo.estado_email = ENVIADO para los match_keys del ciclo."""
+    if not cycle_id or not match_keys:
+        return False
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        _safe_execute(
+            client.table("documentos_ciclo")
+            .update({"estado_email": "ENVIADO", "fecha_ultimo_envio": fecha})
+            .eq("cycle_id", str(cycle_id))
+            .in_("match_key", [str(mk) for mk in match_keys])
+        )
+        return True
+    except Exception as e:
+        print(f"update_estados_email_in_cycle Error: {e}")
+        return False
+
+
+def update_estado_whatsapp_in_cycle(cycle_id: str, cliente_ids: list, fecha: str) -> bool:
+    """UPDATE documentos_ciclo.estado_whatsapp = ENVIADO para los cliente_ids del ciclo."""
+    if not cycle_id or not cliente_ids:
+        return False
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        _safe_execute(
+            client.table("documentos_ciclo")
+            .update({"estado_whatsapp": "ENVIADO", "fecha_ultimo_wa": fecha})
+            .eq("cycle_id", str(cycle_id))
+            .in_("cliente_id", [str(c) for c in cliente_ids])
+        )
+        return True
+    except Exception as e:
+        print(f"update_estado_whatsapp_in_cycle Error: {e}")
+        return False
+
+
 def get_documento_id_by_numero(cliente_id: str, numero_documento: str) -> Optional[str]:
     client = get_supabase_client()
     if not client:

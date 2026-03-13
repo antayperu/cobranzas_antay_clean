@@ -666,6 +666,14 @@ def render_tab(df_filtered, config):
                         if 'FECHA_ULTIMO_WA' in st.session_state['df_final'].columns:
                             st.session_state['df_final'].loc[mask_wa, 'FECHA_ULTIMO_WA'] = wa_ts
 
+                    # SSOT: Sincronizar estado_whatsapp en documentos_ciclo (Supabase)
+                    if cods_enviados:
+                        dbm.update_estado_whatsapp_in_cycle(
+                            cycle_id=st.session_state.get('cycle_id'),
+                            cliente_ids=list(cods_enviados),
+                            fecha=wa_ts,
+                        )
+
                     # --- RC-FEAT-WA-UX: Guardar resultados + rerun (igual que Email tab) ---
                     wa_details = []
                     for c in contacts_to_send:

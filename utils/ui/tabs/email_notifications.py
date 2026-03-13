@@ -591,7 +591,15 @@ def render_tab(df_final, df_filtered, config):
                                                         if 'ESTADO_ENVIO_TEXTO' in st.session_state['df_final'].columns:
                                                             st.session_state['df_final'].loc[mask, 'ESTADO_ENVIO_TEXTO'] = f"ENVIADO ({now_timestamp.strftime('%H:%M')})"
                                                         updated_match_keys.append(mk)
-                                    
+
+                                    # SSOT: Sincronizar estado_email en documentos_ciclo (Supabase)
+                                    if updated_match_keys:
+                                        dbm.update_estados_email_in_cycle(
+                                            cycle_id=st.session_state.get('cycle_id'),
+                                            match_keys=updated_match_keys,
+                                            fecha=now_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                                        )
+
                                     # Recalcular df_filtered desde df_final actualizado
                                     df_final_updated = st.session_state['df_final']
                                     df_filtered_new = df_final_updated.copy()
