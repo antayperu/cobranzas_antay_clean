@@ -46,8 +46,16 @@ CREATE INDEX IF NOT EXISTS idx_cuotas_vencimiento  ON cuotas_acuerdo (fecha_venc
 ALTER TABLE acuerdos_pago   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cuotas_acuerdo  ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "service_role_full_acuerdos"
-    ON acuerdos_pago FOR ALL TO service_role USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='acuerdos_pago' AND policyname='service_role_full_acuerdos') THEN
+    CREATE POLICY "service_role_full_acuerdos"
+        ON acuerdos_pago FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
-CREATE POLICY IF NOT EXISTS "service_role_full_cuotas"
-    ON cuotas_acuerdo FOR ALL TO service_role USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='cuotas_acuerdo' AND policyname='service_role_full_cuotas') THEN
+    CREATE POLICY "service_role_full_cuotas"
+        ON cuotas_acuerdo FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;

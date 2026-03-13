@@ -67,8 +67,16 @@ CREATE INDEX IF NOT EXISTS idx_resumen_ciclo_id       ON resumen_ciclo (cycle_id
 ALTER TABLE resumen_cliente_ciclo   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE resumen_ciclo           ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "service_role_full_resumen_cliente"
-    ON resumen_cliente_ciclo FOR ALL TO service_role USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='resumen_cliente_ciclo' AND policyname='service_role_full_resumen_cliente') THEN
+    CREATE POLICY "service_role_full_resumen_cliente"
+        ON resumen_cliente_ciclo FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
-CREATE POLICY IF NOT EXISTS "service_role_full_resumen_ciclo"
-    ON resumen_ciclo FOR ALL TO service_role USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='resumen_ciclo' AND policyname='service_role_full_resumen_ciclo') THEN
+    CREATE POLICY "service_role_full_resumen_ciclo"
+        ON resumen_ciclo FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
