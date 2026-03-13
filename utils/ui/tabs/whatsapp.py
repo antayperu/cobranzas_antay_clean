@@ -651,7 +651,8 @@ def render_tab(df_filtered, config):
                             resultado=resultado_lote,
                             notas=f"WA masivo | {contact.get('TOTAL_SALDO_REAL', '')} | Tel: {contact.get('telefono', '')}",
                             fecha=now_wa.isoformat(),
-                            metadata_extra={"cycle_id": current_cycle_id},
+                            cycle_id=current_cycle_id,
+                            metadata_extra={},
                         )
                         if ok:
                             persisted_wa += 1

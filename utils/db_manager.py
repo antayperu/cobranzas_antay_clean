@@ -453,14 +453,10 @@ def get_wa_gestiones_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
             client.table("gestiones")
             .select("cliente_id, resultado, fecha, created_at, metadata")
             .eq("tipo_gestion", "WHATSAPP")
+            .eq("cycle_id", str(cycle_id).strip())
             .order("created_at", desc=False)
         )
-        rows = res.data or []
-        cycle_id_str = str(cycle_id).strip()
-        return [
-            r for r in rows
-            if str((r.get("metadata") or {}).get("cycle_id", "")).strip() == cycle_id_str
-        ]
+        return res.data or []
     except Exception as e:
         print(f"get_wa_gestiones_by_cycle Error: {e}")
         return []
@@ -1156,6 +1152,7 @@ def insert_gestion(
     usuario: Optional[str] = None,
     duracion_minutos: Optional[int] = None,
     fecha: Optional[str] = None,
+    cycle_id: Optional[str] = None,
     metadata_extra: Optional[Dict[str, Any]] = None,
 ) -> Tuple[bool, str]:
     """Insert a manual gestion/interaction record."""
@@ -1181,6 +1178,7 @@ def insert_gestion(
         "usuario": str(usuario or "").strip() or None,
         "duracion_minutos": duracion_minutos if duracion_minutos and duracion_minutos > 0 else None,
         "metadata": metadata_extra or {},
+        "cycle_id": str(cycle_id).strip() if cycle_id else None,
     }
     if fecha:
         payload["fecha"] = fecha
