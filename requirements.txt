@@ -8,3 +8,5 @@ resend
 supabase>=2.27.3
 websockets>=13.0,<16
 playwright
+nest_asyncio
+pyperclip

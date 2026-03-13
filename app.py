@@ -1,3 +1,21 @@
+# FIX: Aplicar nest_asyncio y usar ProactorEventLoop en Windows
+# Esto permite que asyncio.run() + Playwright funcione correctamente dentro de Streamlit
+import asyncio
+import sys
+
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+except ImportError:
+    pass
+
+# En Windows, usar ProactorEventLoop para subprocesses async (requerido por Playwright)
+if sys.platform == 'win32':
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception as e:
+        print(f"[WARN] No se pudo configurar ProactorEventLoop: {e}")
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
