@@ -1499,3 +1499,181 @@ def update_cuota_estado(
     except Exception as e:
         print(f"update_cuota_estado Error: {e}")
         return False, f"No se pudo actualizar cuota: {e}"
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-023: Trazabilidad Completa — reconcile_ciclo_recovery
+# ---------------------------------------------------------------------------
+
+def _get_docs_simple_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
+    """Fetch match_key, cliente_id, saldo from documentos_ciclo for a cycle."""
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        resp = _safe_execute(
+            client.table("documentos_ciclo")
+            .select("match_key,cliente_id,saldo_real,saldo_original")
+            .eq("cycle_id", str(cycle_id))
+            .limit(5000)
+        )
+        return resp.data if resp and resp.data else []
+    except Exception as e:
+        print(f"_get_docs_simple_by_cycle Error: {e}")
+        return []
+
+
+def reconcile_ciclo_recovery(
+    cycle_id_anterior: str,
+    cycle_id_nuevo: str,
+) -> Dict[str, Any]:
+    """Detect recovered documents between two cycles and persist summary tables.
+
+    A document is considered "recovered" (client paid) when its match_key
+    was present in cycle_id_anterior but is absent in cycle_id_nuevo.
+
+    Persists:
+       - resumen_cliente_ciclo: one row per client in cycle_id_nuevo
+       - resumen_ciclo:         one aggregate row for cycle_id_nuevo
+
+    Returns a dict with keys: ok (bool), mensaje (str), stats (dict).
+    """
+    if not cycle_id_anterior or not cycle_id_nuevo:
+        return {"ok": False, "mensaje": "cycle_id_anterior y cycle_id_nuevo son requeridos.", "stats": {}}
+
+    client = get_supabase_client()
+    if not client:
+        return {"ok": False, "mensaje": "Supabase no disponible.", "stats": {}}
+
+    try:
+        docs_ant = _get_docs_simple_by_cycle(cycle_id_anterior)
+        docs_nue = _get_docs_simple_by_cycle(cycle_id_nuevo)
+
+        keys_ant: Dict[str, Dict] = {str(d.get("match_key", "")): d for d in docs_ant if d.get("match_key")}
+        keys_nue: Dict[str, Dict] = {str(d.get("match_key", "")): d for d in docs_nue if d.get("match_key")}
+
+        # Docs in anterior but NOT in nuevo → recovered
+        keys_recuperados = set(keys_ant.keys()) - set(keys_nue.keys())
+
+        # Build per-client stats for cycle_id_nuevo
+        cliente_nuevo: Dict[str, Dict[str, Any]] = {}
+        for doc in docs_nue:
+            cid = str(doc.get("cliente_id", "")).strip()
+            if not cid:
+                continue
+            if cid not in cliente_nuevo:
+                cliente_nuevo[cid] = {"docs_total": 0, "monto_total": 0.0,
+                                       "docs_recuperados": 0, "monto_recuperado": 0.0}
+            cliente_nuevo[cid]["docs_total"] += 1
+            cliente_nuevo[cid]["monto_total"] += float(doc.get("saldo_real") or 0)
+
+        # Build per-client recovered stats
+        for mk in keys_recuperados:
+            doc = keys_ant[mk]
+            cid = str(doc.get("cliente_id", "")).strip()
+            if not cid:
+                continue
+            if cid not in cliente_nuevo:
+                cliente_nuevo[cid] = {"docs_total": 0, "monto_total": 0.0,
+                                       "docs_recuperados": 0, "monto_recuperado": 0.0}
+            cliente_nuevo[cid]["docs_recuperados"] += 1
+            cliente_nuevo[cid]["monto_recuperado"] += float(doc.get("saldo_real") or 0)
+
+        # Gestiones por cliente en el ciclo nuevo
+        gestiones_nuevas = get_gestiones_list(limit=5000)  # All recent
+        gestiones_por_cliente: Dict[str, int] = {}
+        for g in gestiones_nuevas:
+            cid = str(g.get("cliente_id", "")).strip()
+            if cid:
+                gestiones_por_cliente[cid] = gestiones_por_cliente.get(cid, 0) + 1
+
+        # Acuerdos activos por cliente
+        acuerdos_resp = _safe_execute(
+            client.table("acuerdos_pago").select("cliente_id").eq("estado", "ACTIVO")
+        )
+        clientes_con_acuerdo: set = set()
+        if acuerdos_resp and acuerdos_resp.data:
+            clientes_con_acuerdo = {str(r["cliente_id"]).strip() for r in acuerdos_resp.data}
+
+        # Persist resumen_cliente_ciclo
+        ahora = datetime.utcnow().isoformat()
+        resumen_rows = []
+        for cid, stats in cliente_nuevo.items():
+            n_gestiones = gestiones_por_cliente.get(cid, 0)
+            tiene_acuerdo = cid in clientes_con_acuerdo
+            if stats["docs_total"] == 0 and stats["docs_recuperados"] > 0:
+                estado_cli = "RECUPERADO"
+            elif stats["docs_recuperados"] > 0:
+                estado_cli = "PARCIAL"
+            elif n_gestiones == 0:
+                estado_cli = "SIN_ACTIVIDAD"
+            else:
+                estado_cli = "PENDIENTE"
+
+            resumen_rows.append({
+                "cliente_id": cid,
+                "cycle_id": cycle_id_nuevo,
+                "docs_total": stats["docs_total"],
+                "monto_total": round(stats["monto_total"], 2),
+                "docs_recuperados": stats["docs_recuperados"],
+                "monto_recuperado": round(stats["monto_recuperado"], 2),
+                "gestiones_count": n_gestiones,
+                "tiene_acuerdo_pago": tiene_acuerdo,
+                "estado": estado_cli,
+                "updated_at": ahora,
+            })
+
+        if resumen_rows:
+            _safe_execute(
+                client.table("resumen_cliente_ciclo")
+                .upsert(resumen_rows, on_conflict="cliente_id,cycle_id")
+            )
+
+        # Persist resumen_ciclo
+        total_docs_rec = sum(v["docs_recuperados"] for v in cliente_nuevo.values())
+        total_monto_rec = sum(v["monto_recuperado"] for v in cliente_nuevo.values())
+        total_docs_ant = len(keys_ant)
+        tasa = round(total_docs_rec / total_docs_ant * 100, 2) if total_docs_ant > 0 else 0.0
+
+        total_gestiones = len(gestiones_nuevas)
+        total_acuerdos_resp = _safe_execute(
+            client.table("acuerdos_pago").select("id", count="exact").eq("estado", "ACTIVO")
+        )
+        total_acuerdos = total_acuerdos_resp.count if total_acuerdos_resp else 0
+
+        resumen_ciclo_row = {
+            "cycle_id": cycle_id_nuevo,
+            "cycle_id_anterior": cycle_id_anterior,
+            "clientes_total": len(cliente_nuevo),
+            "docs_total": len(keys_nue),
+            "monto_total": round(sum(v["monto_total"] for v in cliente_nuevo.values()), 2),
+            "clientes_recuperados": sum(1 for v in cliente_nuevo.values() if v["docs_recuperados"] > 0),
+            "docs_recuperados": total_docs_rec,
+            "monto_recuperado": round(total_monto_rec, 2),
+            "tasa_recuperacion": tasa,
+            "gestiones_total": total_gestiones,
+            "acuerdos_total": total_acuerdos or 0,
+            "updated_at": ahora,
+        }
+        _safe_execute(
+            client.table("resumen_ciclo")
+            .upsert([resumen_ciclo_row], on_conflict="cycle_id")
+        )
+
+        stats_out = {
+            "clientes_total": len(cliente_nuevo),
+            "docs_recuperados": total_docs_rec,
+            "monto_recuperado": round(total_monto_rec, 2),
+            "tasa_recuperacion": tasa,
+        }
+        return {
+            "ok": True,
+            "mensaje": (
+                f"Trazabilidad calculada: {total_docs_rec} docs recuperados "
+                f"({tasa}%) sobre {total_docs_ant} del ciclo anterior."
+            ),
+            "stats": stats_out,
+        }
+    except Exception as e:
+        print(f"reconcile_ciclo_recovery Error: {e}")
+        return {"ok": False, "mensaje": f"Error en reconciliación: {e}", "stats": {}}
