@@ -1677,3 +1677,60 @@ def reconcile_ciclo_recovery(
     except Exception as e:
         print(f"reconcile_ciclo_recovery Error: {e}")
         return {"ok": False, "mensaje": f"Error en reconciliación: {e}", "stats": {}}
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-022: Bandeja de Pendientes
+# ---------------------------------------------------------------------------
+
+def get_cuotas_pendientes_hoy(limit: int = 200) -> List[Dict[str, Any]]:
+    """Return cuotas_acuerdo with estado=PENDIENTE and fecha_vencimiento <= today."""
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        resp = _safe_execute(
+            client.table("cuotas_acuerdo")
+            .select("id,acuerdo_id,numero_cuota,monto_cuota,fecha_vencimiento,estado,notas,"
+                    "acuerdos_pago(cliente_id,gestor,ciclo_id)")
+            .eq("estado", "PENDIENTE")
+            .lte("fecha_vencimiento", today_str)
+            .order("fecha_vencimiento")
+            .limit(limit)
+        )
+        return resp.data if resp and resp.data else []
+    except Exception as e:
+        print(f"get_cuotas_pendientes_hoy Error: {e}")
+        return []
+
+
+def get_clientes_sin_gestion_ciclo(cycle_id: str, limit: int = 200) -> List[str]:
+    """Return cliente_ids in cycle_id that have zero gestiones registered."""
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        # Get all clients in cycle
+        docs_resp = _safe_execute(
+            client.table("documentos_ciclo")
+            .select("cliente_id")
+            .eq("cycle_id", str(cycle_id))
+            .limit(2000)
+        )
+        all_clients = {str(d["cliente_id"]).strip() for d in (docs_resp.data or []) if d.get("cliente_id")}
+
+        # Get clients with gestiones in cycle
+        gestiones_resp = _safe_execute(
+            client.table("gestiones")
+            .select("cliente_id")
+            .eq("cycle_id", str(cycle_id))
+            .limit(2000)
+        )
+        clients_with_gestiones = {str(d["cliente_id"]).strip() for d in (gestiones_resp.data or []) if d.get("cliente_id")}
+
+        sin_gestion = sorted(all_clients - clients_with_gestiones)
+        return sin_gestion[:limit]
+    except Exception as e:
+        print(f"get_clientes_sin_gestion_ciclo Error: {e}")
+        return []

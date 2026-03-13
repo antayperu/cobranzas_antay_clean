@@ -68,7 +68,8 @@ def render_tab(df_final: pd.DataFrame, config: dict):
     # ── Section selector ────────────────────────────────────────────────
     section = st.radio(
         "Seccion",
-        ["Timeline de Actividad", "Historial por Cliente", "Registrar Gestion", "Acuerdos de Pago"],
+        ["Timeline de Actividad", "Historial por Cliente", "Registrar Gestion",
+         "Acuerdos de Pago", "🔔 Bandeja de Pendientes"],
         horizontal=True,
         key="crm_section",
         label_visibility="collapsed",
@@ -82,6 +83,8 @@ def render_tab(df_final: pd.DataFrame, config: dict):
         _render_register_gestion()
     elif section == "Acuerdos de Pago":
         _render_acuerdos_pago()
+    elif section == "🔔 Bandeja de Pendientes":
+        _render_bandeja_pendientes()
 
 
 # ---------------------------------------------------------------------------
@@ -953,3 +956,104 @@ def _render_nuevo_acuerdo():
             st.balloons()
         else:
             st.error(f"❌ {result}")
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-022: Bandeja de Pendientes
+# ---------------------------------------------------------------------------
+
+def _render_bandeja_pendientes():
+    st.markdown("#### 🔔 Bandeja de Pendientes")
+    st.markdown(
+        """
+        <div class="antay-inline-note">
+            Vista consolidada de cuotas vencidas/pendientes de hoy y clientes sin gestión en el ciclo activo.
+            Actúa directamente desde aquí para no dejar ningún pendiente.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    tab_cuotas, tab_sin_gestion = st.tabs(["📅 Cuotas Vencidas/Hoy", "⚠️ Sin Gestión en Ciclo"])
+
+    with tab_cuotas:
+        _render_cuotas_pendientes()
+
+    with tab_sin_gestion:
+        _render_sin_gestion()
+
+
+def _render_cuotas_pendientes():
+    """Show cuotas with estado=PENDIENTE and fecha_vencimiento <= today."""
+    cuotas = dbm.get_cuotas_pendientes_hoy(limit=200)
+
+    if not cuotas:
+        st.success("✅ No hay cuotas vencidas ni pendientes para hoy.")
+        return
+
+    st.markdown(f"**{len(cuotas)} cuota(s)** con vencimiento pendiente:")
+
+    nombre_map_bp: Dict[str, str] = dbm.get_clientes_nombres_map()
+
+    for cuota in cuotas:
+        # Extract cliente_id from joined acuerdos_pago
+        acuerdo_info = cuota.get("acuerdos_pago") or {}
+        if isinstance(acuerdo_info, list):
+            acuerdo_info = acuerdo_info[0] if acuerdo_info else {}
+        cid = str(acuerdo_info.get("cliente_id", "")).strip()
+        nombre = nombre_map_bp.get(cid, cid)
+        gestor = acuerdo_info.get("gestor") or "—"
+
+        vence = cuota.get("fecha_vencimiento", "—")
+        monto = float(cuota.get("monto_cuota", 0))
+        estado = cuota.get("estado", "PENDIENTE")
+        icono = _CUOTA_ESTADO_ICONS.get(estado, "❓")
+        cuota_id = cuota.get("id", "")
+        num = cuota.get("numero_cuota", "?")
+
+        col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 1, 2])
+        col1.markdown(f"**{nombre}**")
+        col2.markdown(f"Cuota #{num} · S/ {monto:,.2f}")
+        col3.markdown(f"Vence: **{vence}**")
+        col4.markdown(f"{icono} {estado}")
+
+        btn_k = f"bp_pagar_{cuota_id}"
+        if col5.button("✅ Marcar Pagado", key=btn_k):
+            ok, msg = dbm.update_cuota_estado(
+                cuota_id, "PAGADO", fecha_pago=date.today().isoformat(),
+            )
+            if ok:
+                st.success(f"Cuota #{num} de **{nombre}** marcada como PAGADO.")
+                st.rerun()
+            else:
+                st.error(msg)
+
+
+def _render_sin_gestion():
+    """Show clients in the active cycle with no gestiones registered."""
+    cycle_id = st.session_state.get("current_cycle_id") or st.session_state.get("cycle_id")
+
+    if not cycle_id:
+        st.info("No hay un ciclo activo en la sesión. Carga archivos primero.")
+        return
+
+    sin_gestion = dbm.get_clientes_sin_gestion_ciclo(cycle_id, limit=200)
+    nombre_map_sg: Dict[str, str] = dbm.get_clientes_nombres_map()
+
+    if not sin_gestion:
+        st.success(f"✅ Todos los clientes del ciclo `{cycle_id}` tienen al menos una gestión registrada.")
+        return
+
+    st.markdown(
+        f"**{len(sin_gestion)} cliente(s)** sin gestión en el ciclo activo `{cycle_id}`:"
+    )
+    st.caption("Estos clientes no tienen ninguna llamada, visita, WhatsApp ni nota registrada.")
+
+    for cid in sin_gestion:
+        nombre = nombre_map_sg.get(cid, cid)
+        col_n, col_btn = st.columns([5, 2])
+        col_n.markdown(f"**{cid}** — {nombre}")
+        if col_btn.button("📝 Registrar Gestión", key=f"sg_reg_{cid}"):
+            st.session_state["crm_section"] = "Registrar Gestion"
+            st.session_state["crm_reg_client"] = f"{cid} — {nombre}"
+            st.rerun()
