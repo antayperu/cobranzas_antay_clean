@@ -7,15 +7,15 @@
 
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
-| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 023 |
-| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 000 |
-| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 012 |
+| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 026 |
+| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 029 |
+| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 013 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
 | **RC-SEC** | Seguridad | Manejo de datos sensibles, credenciales. | 000 |
 | **RC-QA** | Calidad | Pruebas, validaciones, checklists. | 002 |
-| **RC-DOC** | Documentación | Guías, manuales, actualización de estados. | 000 |
-| **RC-OPS** | Operación | Configuración, despliegue, limpieza. | 004 |
+| **RC-DOC** | Documentación | Guías, manuales, actualización de estados. | 001 |
+| **RC-OPS** | Operación | Configuración, despliegue, limpieza. | 007 |
 
 ## 2. Flujo de Estados
 
@@ -75,12 +75,26 @@
 | **RC-UX-011** | **CRM Gestiones — Buscar cliente con searchable selectbox** | **P1** (Alto) | **Done** | Antigravity | 2026-02-21 |
 | **RC-UX-012** | **Clientes Premium — Layout mejorado (separador KPIs + filtros + botones)** | **P1** (Alto) | **Done** | Antigravity | 2026-02-21 |
 | **RC-OPS-003** | **Deploy en servidor QA antay-cobranza (puerto 8503, autostart, cloudflare)** | **P0** (Critico) | **Done** | Antigravity | 2026-02-21 |
-| **RC-OPS-004** | **Ciclos Persistentes con Tracking Reconciliado (cycle_id + selector + reconcile)** | **P0** (Critico) | **In Progress** | Antigravity | 2026-02-22 |
-| **RC-FEAT-019** | **CRM: Resultado Post-Envío WhatsApp (Panel de seguimiento post-lote)** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
-| **RC-FEAT-020** | **CRM: Biblioteca de 7 Plantillas WhatsApp con variables** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
-| **RC-FEAT-021** | **CRM: Módulo de Acuerdos de Pago con Cuotas (2 tablas Supabase)** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
-| **RC-FEAT-022** | **CRM: Bandeja de Pendientes del Día (alertas automáticas)** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
-| **RC-FEAT-023** | **CRM: Trazabilidad Completa (reconcile + resumen_cliente_ciclo + resumen_ciclo)** | **P1** (Alto) | **Ready** | - | 2026-03-13 |
+| **RC-OPS-004** | **Ciclos Persistentes con Tracking Reconciliado (cycle_id + selector + reconcile)** | **P0** (Critico) | **Done** | Antigravity | 2026-02-22 |
+| **RC-FEAT-019** | **CRM: Resultado Post-Envío WhatsApp (Panel de seguimiento post-lote)** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-FEAT-020** | **CRM: Biblioteca de 7 Plantillas WhatsApp con variables** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-FEAT-021** | **CRM: Módulo de Acuerdos de Pago con Cuotas (2 tablas Supabase)** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-FEAT-022** | **CRM: Bandeja de Pendientes del Día (alertas automáticas)** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-FEAT-023** | **CRM: Trazabilidad Completa (reconcile + resumen_cliente_ciclo + resumen_ciclo)** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-BUG-024** | **Fix CREATE POLICY IF NOT EXISTS — compatibilidad PostgreSQL (sql/11, sql/12)** | **P0** (Critico) | **Done** | Antigravity | 2026-03-13 |
+| **RC-BUG-025** | **Fix insert_acuerdo_pago error .select() encadenado — supabase-py sync client** | **P0** (Critico) | **Done** | Antigravity | 2026-03-13 |
+| **RC-BUG-026** | **Fix ESTADO_EMAIL/WA en blanco al restaurar ciclo → fillna PENDIENTE** | **P0** (Critico) | **Done** | Antigravity | 2026-03-13 |
+| **RC-BUG-027** | **Fix selectbox plantilla WA se resetea en rerun → key=wa_plantilla_seleccionada** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-BUG-028** | **Fix variable {PROX_VENC} no disponible en plantillas WA** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-FEAT-024** | **CRM: Tabs persisten al preparar nuevo ciclo (no limpiar df_final)** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-FEAT-025** | **Auto-restore último ciclo al abrir la app** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-BUG-029** | **Fix Cambiar ciclo sobreescrito por auto-restore → flag skip_auto_restore** | **P0** (Critico) | **Done** | Antigravity | 2026-03-13 |
+| **RC-OPS-005** | **Documentar ALTER gestiones cycle_id en SQL (sql/13)** | **P2** (Medio) | **Done** | Antigravity | 2026-03-13 |
+| **RC-OPS-006** | **Setup ambiente staging — Supabase staging + .env.staging + gitignore** | **P1** (Alto) | **Done** | Antigravity | 2026-03-14 |
+| **RC-OPS-007** | **Limpieza repo — eliminar rama master remota + 5 feature branches mergeadas** | **P2** (Medio) | **Done** | Antigravity | 2026-03-13 |
+| **RC-UX-013** | **Banner indicador de ambiente STAGING/PROD en sidebar** | **P1** (Alto) | **Done** | Antigravity | 2026-03-14 |
+| **RC-DOC-001** | **Formalizar gitflow Antay: feature→dev→staging→main→PROD** | **P1** (Alto) | **Done** | Antigravity | 2026-03-13 |
+| **RC-FEAT-026** | **Panel envío WA de prueba en Tab Configuración (smoke test sin datos reales)** | **P1** (Alto) | **Backlog** | - | - |
 
 ---
 
@@ -211,7 +225,7 @@
     - [ ] Ciclos no se borran al iniciar nuevo procesamiento.
     - [ ] Excel export refleja tracking correcto tras restaurar.
 
-### [RC-FEAT-017] Home Operativo Estricto (2 Archivos)
+| **RC-FEAT-017** | **Home Operativo Estricto (2 Archivos)** — **Done** ✅
 - **Descripcion**: Ajustar la UI principal para procesar exclusivamente CtasxCobrar + Cobranza, tomando cartera desde Supabase.
 - **Alcance IN**: Sidebar sin uploader de cartera, validacion de 2 archivos, bloqueo operativo si falta cartera maestra.
 - **Criterios de Aceptacion**:

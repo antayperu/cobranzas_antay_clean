@@ -1,93 +1,130 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-03-13
-Version actual: v1.7.1 → v2.0 (CRM WhatsApp)
-Estado migracion Supabase: Base de datos + bootstrap + integracion runtime + paridad de export + notificaciones por cliente + integridad/no-match + mantenimiento de clientes + reporte premium + quality gates + seguridad operacional + backup/restore completados. Iniciativa de Storage (SUPABASE-002) completada.
-Iniciativa CRM WhatsApp: Propuesta aprobada 2026-03-13. Implementacion TIER 1 en curso.
+Ultima actualizacion: 2026-03-14
+Version actual: v1.7.2 (post-TIER1 hotfixes + staging)
+Estado migracion Supabase: Completada. Todas las fases MIG-000 a MIG-009 + SUPABASE-002 + CONFIG-001 cerradas.
+Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). Ambiente staging configurado. TIER 2 pendiente.
 
 ---
 
-## 0. Sprint CRM WhatsApp — TIER 1 (Sprint Actual — 2026-03-13)
+## 0. Sprint CRM WhatsApp — TIER 1 ✅ COMPLETADO (2026-03-13, tag v1.6.0)
 
 ### CRM-001: Resultado Post-Envío WhatsApp (RC-FEAT-019)
-- Estado: Ready
+- Estado: Done ✅
 - Esfuerzo: 2 puntos (1–2 horas)
 - Prioridad: P1 Alto
 - Dependencias: ninguna
 - Descripcion: Panel de seguimiento post-lote en Tab WhatsApp. El gestor registra con 1 click si el cliente acordó, prometió, no contestó o escalar. Persiste en `gestiones.resultado` en Supabase.
 - Criterios de Aceptacion:
-  - [ ] Aparece panel de resultados después de envío masivo
-  - [ ] Opciones: EXITOSO / PROMETIO_PAGAR / SIN_RESPUESTA / ESCALAR
-  - [ ] Cada resultado llama a `insert_gestion()` con tipo_gestion=WHATSAPP
-  - [ ] Se muestra resumen de resultados registrados
-  - [ ] Tests unitarios actualizados
+  - [x] Aparece panel de resultados después de envío masivo
+  - [x] Opciones: EXITOSO / PROMETIO_PAGAR / SIN_RESPUESTA / ESCALAR
+  - [x] Cada resultado llama a `insert_gestion()` con tipo_gestion=WHATSAPP
+  - [x] Se muestra resumen de resultados registrados
+  - [x] Tests unitarios actualizados
 
 ---
 
 ### CRM-002: Biblioteca de 7 Plantillas WhatsApp (RC-FEAT-020)
-- Estado: Ready
+- Estado: Done ✅
 - Esfuerzo: 3 puntos (3–4 horas)
 - Prioridad: P1 Alto
 - Dependencias: ninguna (puede ir en paralelo con CRM-001)
 - Descripcion: Selector visual de plantilla antes del envío masivo. 7 plantillas por escenario (primer aviso, recordatorio, aviso firme, acuerdo, pre-legal, felicitación, solicitud datos). Editables desde Configuración. Guardadas en Supabase `app_config`.
 - Criterios de Aceptacion:
-  - [ ] Selector desplegable de plantilla visible antes de enviar
-  - [ ] 7 plantillas predefinidas con variables: {empresa}, {monto}, {fecha_venc}, {gestor}
-  - [ ] Plantillas editables en Tab Configuración
-  - [ ] Plantilla seleccionada se graba en `gestiones.metadata.template`
-  - [ ] Tests unitarios para resolución de variables
+  - [x] Selector desplegable de plantilla visible antes de enviar
+  - [x] 7 plantillas predefinidas con variables: {empresa}, {monto}, {fecha_venc}, {gestor}
+  - [x] Plantillas editables en Tab Configuración
+  - [x] Plantilla seleccionada se graba en `gestiones.metadata.template`
+  - [x] Tests unitarios para resolución de variables
 
 ---
 
 ### CRM-003: Módulo de Acuerdos de Pago con Cuotas (RC-FEAT-021)
-- Estado: Ready
+- Estado: Done ✅
 - Esfuerzo: 5 puntos (4–6 horas)
 - Prioridad: P1 Alto
 - Dependencias: CRM-001 recomendado (para registrar gestión asociada)
 - Descripcion: Nueva sección en Centro de Gestiones. Formulario para registrar acuerdos de pago, cálculo automático de cuotas, timeline visual de estado, WA de confirmación automático. Requiere 2 nuevas tablas en Supabase.
 - Criterios de Aceptacion:
-  - [ ] CREATE TABLE acuerdos_pago en Supabase
-  - [ ] CREATE TABLE cuotas_acuerdo en Supabase
-  - [ ] Formulario: cliente, monto total, cuotas, fecha inicio
-  - [ ] Cálculo automático de fechas de vencimiento por cuota
-  - [ ] Timeline visual: cuotas PENDIENTE / PAGADA / VENCIDA
-  - [ ] WA automático de confirmación al crear acuerdo
-  - [ ] Tests unitarios para cálculo de cuotas
+  - [x] CREATE TABLE acuerdos_pago en Supabase
+  - [x] CREATE TABLE cuotas_acuerdo en Supabase
+  - [x] Formulario: cliente, monto total, cuotas, fecha inicio
+  - [x] Cálculo automático de fechas de vencimiento por cuota
+  - [x] Timeline visual: cuotas PENDIENTE / PAGADA / VENCIDA
+  - [x] WA automático de confirmación al crear acuerdo
+  - [x] Tests unitarios para cálculo de cuotas
 
 ---
 
 ### CRM-004: Bandeja de Pendientes del Día (RC-FEAT-022)
-- Estado: Ready
+- Estado: Done ✅
 - Esfuerzo: 2 puntos (2–3 horas)
 - Prioridad: P1 Alto
 - Dependencias: CRM-003 (requiere tabla cuotas_acuerdo)
 - Descripcion: Nueva pestaña en Centro de Gestiones con lista priorizada de acciones diarias generada automáticamente. Detecta: WA sin respuesta +48h, cuotas venciendo hoy/en 3 días, clientes con mora crítica sin contacto. Cada ítem con botones de acción directa.
 - Criterios de Aceptacion:
-  - [ ] Lista de pendientes por prioridad (URGENTE / ALTO / MEDIO)
-  - [ ] Detecta WA enviado hace +48h sin resultado registrado
-  - [ ] Detecta cuotas venciendo en ≤3 días
-  - [ ] Detecta clientes +30 días mora sin ninguna gestión
-  - [ ] Botón acción directa por ítem (Registrar resultado / Enviar WA / Ver acuerdo)
-  - [ ] Tests unitarios para lógica de detección
+  - [x] Lista de pendientes por prioridad (URGENTE / ALTO / MEDIO)
+  - [x] Detecta WA enviado hace +48h sin resultado registrado
+  - [x] Detecta cuotas venciendo en ≤3 días
+  - [x] Detecta clientes +30 días mora sin ninguna gestión
+  - [x] Botón acción directa por ítem (Registrar resultado / Enviar WA / Ver acuerdo)
+  - [x] Tests unitarios para lógica de detección
 
 ---
 
 ### CRM-009: Trazabilidad Completa — Cruce documentos + 2 tablas resumen (RC-FEAT-023)
-- Estado: Ready
+- Estado: Done ✅
 - Esfuerzo: 4 puntos (4–5 horas)
 - Prioridad: P1 Alto
 - Dependencias: ninguna (trabaja sobre tablas existentes)
 - Descripcion: Al cargar ciclo nuevo, cruzar documentos_ciclo anterior con cobranzas de Integrens para marcar documentos RECUPERADOS con fecha, forma de pago y banco. Crear tablas resumen_cliente_ciclo y resumen_ciclo para alimentar dashboard e informe gerencial.
 - Criterios de Aceptacion:
-  - [ ] CREATE TABLE resumen_cliente_ciclo en Supabase
-  - [ ] CREATE TABLE resumen_ciclo en Supabase
-  - [ ] Función reconcile_ciclo_recovery() en db_manager.py
-  - [ ] Al cargar ciclo: documentos desaparecidos → estado RECUPERADO + fecha + forma_pago + banco
-  - [ ] Al cierre de ciclo: 1 fila en resumen_cliente_ciclo por cliente
-  - [ ] Al cierre de ciclo: 1 fila en resumen_ciclo con totales de cartera
-  - [ ] Tests unitarios para reconciliación
+  - [x] CREATE TABLE resumen_cliente_ciclo en Supabase
+  - [x] CREATE TABLE resumen_ciclo en Supabase
+  - [x] Función reconcile_ciclo_recovery() en db_manager.py
+  - [x] Al cargar ciclo: documentos desaparecidos → estado RECUPERADO + fecha + forma_pago + banco
+  - [x] Al cierre de ciclo: 1 fila en resumen_cliente_ciclo por cliente
+  - [x] Al cierre de ciclo: 1 fila en resumen_ciclo con totales de cartera
+  - [x] Tests unitarios para reconciliación
 
 ---
+
+## 0.1. Post-TIER 1 — Hotfixes & Mejoras CRM (2026-03-13/14)
+
+### Hotfixes SQL Supabase
+- Estado: Done ✅
+- RC-BUG-024: Fix `CREATE POLICY IF NOT EXISTS` incompatible con PostgreSQL (sql/11, sql/12) → bloque `DO $$`
+- RC-BUG-025: Fix `insert_acuerdo_pago` error `.select()` encadenado — supabase-py sync client no lo soporta
+
+### Bugs Smoke Test WA (3 bugs)
+- Estado: Done ✅
+- RC-BUG-026: Campos ESTADO_EMAIL / ESTADO_WHATSAPP en blanco al restaurar ciclo → `fillna('PENDIENTE')` en `_docs_to_df()`
+- RC-BUG-027: Selectbox plantilla WA se resetea en cada rerun → `key="wa_plantilla_seleccionada"`
+- RC-BUG-028: Variable `{PROX_VENC}` no disponible en plantillas → agregada a `contact_data` y preview
+
+### Mejoras CRM Flow
+- Estado: Done ✅
+- RC-FEAT-024: Tabs CRM permanecen visibles al preparar nuevo ciclo — sidebar ya no limpia `df_final` al confirmar reemplazar
+- RC-FEAT-025: Auto-restore automático del último ciclo al abrir la app (`attempt_auto_restore()` en `app.py`)
+- RC-BUG-029: Botón "Cambiar ciclo" ya no es sobreescrito por auto-restore → flag `skip_auto_restore`
+
+### Infraestructura & Documentación
+- Estado: Done ✅
+- RC-OPS-005: `sql/13_alter_gestiones_add_cycle_id.sql` — documenta ALTER ya ejecutado en PROD (cycle_id en gestiones)
+- RC-OPS-006: Ambiente de staging configurado — Supabase staging + `.env.staging` + `.gitignore` actualizado
+- RC-UX-013: Banner de ambiente STAGING/PROD en sidebar — detección automática via `SUPABASE_URL`
+  - Gitflow completo: `feature/env-indicator-banner` → `dev` → `main` → push PROD
+
+### Limpieza de Repositorio
+- Estado: Done ✅
+- RC-OPS-007: Rama `master` remota eliminada (redundante, todos los commits ya en `main`)
+- 5 feature branches mergeadas eliminadas localmente (RC-FEAT-019 a RC-FEAT-023)
+- Gitflow Antay formalizado: `feature/* → dev → staging test → main → PROD`
+
+### Pendiente — TIER 2 (Próximo Sprint)
+- RC-FEAT-026: Panel de envío WA de prueba en Tab Configuración (smoke test sin datos reales)
+  - Smoke test completo del panel post-envío (RC-FEAT-019) en staging
+  - Testing de acuerdos de pago (RC-FEAT-021) en staging
 
 ---
 
