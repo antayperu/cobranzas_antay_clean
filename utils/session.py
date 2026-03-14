@@ -21,6 +21,9 @@ def attempt_auto_restore() -> bool:
         return False
     if st.session_state.get("loading_new_files", False):
         return False
+    # El usuario pidió explícitamente el selector de ciclos: no auto-restaurar.
+    if st.session_state.get("skip_auto_restore", False):
+        return False
 
     try:
         df, metadata, created_at = state_mgr.load_session_cloud()
@@ -68,6 +71,8 @@ def restore_session_by_id(cycle_id: str) -> bool:
         st.session_state["fresh_load"] = False
         st.session_state["restored_from_cloud"] = True
         st.session_state["cycle_id"] = cycle_id
+        # El usuario seleccionó un ciclo manualmente: el auto-restore puede operar con normalidad.
+        st.session_state["skip_auto_restore"] = False
 
         if created_at:
             st.session_state["session_start_ts"] = created_at
@@ -187,3 +192,6 @@ def init_session_state() -> None:
 
     if "restored_from_cloud" not in st.session_state:
         st.session_state["restored_from_cloud"] = False
+
+    if "skip_auto_restore" not in st.session_state:
+        st.session_state["skip_auto_restore"] = False

@@ -48,6 +48,9 @@ def render_sidebar():
                     st.session_state["restored_from_cloud"] = False
                     st.session_state["loading_new_files"] = False
                     st.session_state["confirm_new_load"] = False
+                    # Evita que attempt_auto_restore recargue el mismo ciclo
+                    # automáticamente antes de que el gestor elija otro.
+                    st.session_state["skip_auto_restore"] = True
                     st.rerun()
 
             if not st.session_state["confirm_new_load"]:
