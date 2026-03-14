@@ -40,6 +40,9 @@ Thumbs.db
 data/whatsapp_session/   # perfil Chrome + sesion WhatsApp (contiene cookies)
 config.json
 .env
+.env.staging
+.env.local
+.env.*
 .mcp.json
 *.db
 .cache/
