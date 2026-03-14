@@ -108,6 +108,12 @@ if not dbm.initialize_db():
     st.caption(dbm.get_last_error() or "Sin detalle tecnico de conexion.")
     st.stop()
 
+# --- CRM: AUTO-RESTORE del último ciclo al abrir la app ---
+# Si Supabase tiene ciclos guardados, el más reciente se carga automáticamente.
+# El gestor llega directamente a los tabs (WA, Email, CRM) sin interacción previa.
+# Si no hay ciclos, se muestra el selector/upload en la barra lateral como siempre.
+session_lib.attempt_auto_restore()
+
 # Render Sidebar Wizard
 wizard_action = ui_sidebar.render_sidebar()
 
