@@ -1,5 +1,23 @@
+import os
+
 import streamlit as st
 from datetime import date
+
+# ── Ambiente detection ────────────────────────────────────────────────────────
+_STAGING_URL = "hrnqngndnohkkegtzgjg.supabase.co"
+_SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+IS_STAGING = _STAGING_URL in _SUPABASE_URL
+
+
+def _render_env_banner() -> None:
+    """Muestra un banner visible cuando la app corre en staging."""
+    if IS_STAGING:
+        st.warning(
+            "🧪 **AMBIENTE DE PRUEBAS (STAGING)**  \n"
+            "Los datos aquí **no son reales** y no afectan producción.",
+            icon=None,
+        )
+    # En PROD no se muestra nada para no distraer
 
 
 def _render_sidebar_header() -> None:
@@ -23,6 +41,7 @@ def _render_sidebar_header() -> None:
 def render_sidebar():
     """Render sidebar with 2-file workflow and explicit replace confirmation."""
     with st.sidebar:
+        _render_env_banner()
         _render_sidebar_header()
         st.markdown("---")
 
