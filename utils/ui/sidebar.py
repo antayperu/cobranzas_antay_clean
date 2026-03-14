@@ -68,13 +68,13 @@ def render_sidebar():
                 col_yes, col_no = st.columns(2)
                 with col_yes:
                     if st.button("Si, reemplazar", type="primary"):
+                        # CRM: NO limpiar data_ready/df_final — los tabs siguen visibles
+                        # mientras el usuario prepara los nuevos archivos en la barra lateral.
+                        # El DataFrame actual se reemplaza recién al presionar "Procesar".
                         st.session_state["uploaded_files"] = {"ctas": None, "cobranza": None}
-                        st.session_state["data_ready"] = False
-                        st.session_state["df_final"] = None
-                        st.session_state["fresh_load"] = True
                         st.session_state["confirm_new_load"] = False
                         st.session_state["loading_new_files"] = True
-                        st.toast("Listo para nuevo ciclo.")
+                        st.toast("Sube los archivos en la barra lateral. El ciclo actual sigue activo.")
                         st.rerun()
 
                 with col_no:
@@ -84,12 +84,17 @@ def render_sidebar():
 
             st.markdown("---")
 
-        show_uploaders = (
-            not st.session_state.get("data_ready", False)
-            and st.session_state.get("loading_new_files", False)
-        )
+        # CRM: mostrar uploaders siempre que loading_new_files esté activo,
+        # independientemente de si hay un ciclo activo o no.
+        show_uploaders = st.session_state.get("loading_new_files", False)
         if show_uploaders:
             step_1_done = False
+            # Aviso contextual cuando hay un ciclo activo en paralelo
+            if st.session_state.get("data_ready", False):
+                st.info(
+                    "🔄 **Preparando nuevo ciclo** — los tabs del ciclo actual permanecen "
+                    "activos hasta que proceses los nuevos archivos."
+                )
             with st.expander("1. Carga base (2 archivos)", expanded=True):
                 st.markdown(
                     """
