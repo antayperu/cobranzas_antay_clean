@@ -1,9 +1,9 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-03-14
-Version actual: v1.7.2 (post-TIER1 hotfixes + staging)
+Ultima actualizacion: 2026-03-15
+Version actual: v1.7.3 (fix seguimiento post-envío WA)
 Estado migracion Supabase: Completada. Todas las fases MIG-000 a MIG-009 + SUPABASE-002 + CONFIG-001 cerradas.
-Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). Ambiente staging configurado. TIER 2 pendiente.
+Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). RC-BUG-030 cerrado 2026-03-15. TIER 2 pendiente.
 
 ---
 
@@ -120,6 +120,17 @@ Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). Ambiente 
 - RC-OPS-007: Rama `master` remota eliminada (redundante, todos los commits ya en `main`)
 - 5 feature branches mergeadas eliminadas localmente (RC-FEAT-019 a RC-FEAT-023)
 - Gitflow Antay formalizado: `feature/* → dev → staging test → main → PROD`
+
+### Bugs Sub-tab Seguimiento Post-Envío WA (2026-03-15)
+- Estado: Done ✅ — commit `58ca367`
+- RC-BUG-030: Tab "Seguimiento Post-Envío" reseteaba al tab 1 en cada rerun de widget
+  - Causa: `st.tabs` y luego `st.radio+key` con label dinámico (emoji 🔴 rompía el match de string)
+  - Fix: persistir por índice entero `wa_subtab_idx` en session_state
+- RC-BUG-031: Monto mostraba solo S/ (sin $) y doble conteo
+  - Causa: `wa_details` no guardaba montos por moneda; fallback Supabase usaba `SALDO REAL` plano
+  - Fix: guardar `DeudaS`/`DeudaD` explícitos al enviar y recalcular desde `df_filtered` en fallback
+  - Fix: deduplicar `CodCliente` en cálculo (un cliente tiene fila Envío + fila Gestión)
+- Criterios de aceptación definidos y documentados en `RETOMAR_SESION.md`
 
 ### Pendiente — TIER 2 (Próximo Sprint)
 - RC-FEAT-026: Panel de envío WA de prueba en Tab Configuración (smoke test sin datos reales)

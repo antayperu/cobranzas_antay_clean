@@ -1,8 +1,8 @@
 # RETOMAR SESIÓN - ReporteCobranzas
 
-**Fecha de pausa:** 2026-03-14  
+**Fecha de pausa:** 2026-03-15  
 **Proyecto:** ReporteCobranzas - Antay Perú  
-**Versión actual:** v1.7.2 (post-TIER1 hotfixes + staging configurado)
+**Versión actual:** v1.7.3 (fix seguimiento post-envío WA)
 
 ---
 
@@ -16,10 +16,9 @@ Adjunta este archivo al inicio del chat y escribe:
 
 ## ESTADO DEL REPOSITORIO
 
-- **Rama activa local:** `dev` (commit `d9d26e4`)
-- **`main` / `origin/main`:** commit `114a9c4` — banner STAGING/PROD en sidebar
-- **`dev` adelantado 1 commit:** docs backlog + tickets + PDF actualizados (pendiente merge a main)
-- **Ramas remotas:** solo `main` y `dev` (master eliminado)
+- **Rama activa local:** `dev` (commit `58ca367`)
+- **`main` / `origin/main`:** sincronizado (ramas actualizadas al cierre de sesión)
+- **Ramas remotas:** solo `main` y `dev`
 - **Tag producción:** `v1.6.0` (TIER 1 — 141/141 tests)
 
 ---
@@ -42,22 +41,39 @@ streamlit run app.py --server.port 8502
 
 ---
 
+## LO QUE SE HIZO HOY (2026-03-15)
+
+### RC-BUG-030: Fix Sub-tab Seguimiento Post-Envío ✅ (commit `58ca367`)
+- **Tab persistencia**: `st.tabs` → `st.radio` por **índice** (`wa_subtab_idx`)
+  - Causa raíz: el label cambia con emoji 🔴, lo que rompía el match de string y reseteaba al tab 0
+  - Fix: persistir índice entero, inmune a cambios de label
+- **Monto multimoneda**: guarda `DeudaS`/`DeudaD` explícitos en `wa_details` al enviar
+  - Fallback Supabase: recalcula `DeudaS`/`DeudaD` desde `df_filtered` por moneda
+  - Deduplicación por `CodCliente`: evita doble conteo cuando un cliente tiene fila Envío WA + fila Gestión
+- **Resultado esperado**: `S/ 623 + $ 374` (no el doble)
+
+### Criterios de aceptación definidos
+- Mensajes enviados = filas sin `metadata.source` (envío automático)
+- Con gestión = filas con `metadata.source` (cobrador registró)
+- Pendientes = clientes con envío WA sin gestión manual aún
+- Tabla: si cliente tiene Envío WA + Gestión → solo se muestra la Gestión
+- Monto: cada `CodCliente` se cuenta una sola vez
+
+---
+
 ## PRÓXIMOS PASOS (EN ORDEN)
 
-### 1. Merge docs a main (5 min)
-```powershell
-git checkout main
-git merge dev --no-ff -m "release: merge docs actualizados 2026-03-14"
-git push origin main
-git push origin dev
-```
-
-### 2. Smoke test en staging (localhost:8502)
+### 1. TIER 2 — Smoke test completo en staging (localhost:8502)
 Cargar archivos Excel y validar:
-- [ ] Panel post-envío WA (RC-FEAT-019) — registrar resultado por cliente
+- [ ] Panel post-envío WA (RC-FEAT-019) — registrar resultado, verificar KPIs y monto
 - [ ] Módulo Acuerdos de Pago (RC-FEAT-021) — crear acuerdo con cuotas
 - [ ] Bandeja Pendientes (RC-FEAT-022) — verificar alertas automáticas
 - [ ] Banner "🧪 AMBIENTE DE PRUEBAS" visible en sidebar
+
+### 2. RC-FEAT-026: Panel envío WA de prueba en Tab Configuración
+- Smoke test sin datos reales para validar plantillas y conexión WA
+
+### 3. Merge dev → main cuando staging esté verde
 
 ### 3. RC-FEAT-026 — Panel envío WA de prueba (feature branch)
 ```powershell
