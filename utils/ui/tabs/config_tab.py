@@ -709,8 +709,76 @@ def render_tab(config):
                             st.error(f"❌ Error: {err}")
 
     st.divider()
-    
-    # --- SECTION 8: OPCIONES AVANZADAS ---
+
+    # =========================================================================
+    # SECCIÓN 8: MENSAJE DE PRUEBA WHATSAPP (RC-FEAT-026)
+    # =========================================================================
+    with st.expander("🧪 Mensaje de Prueba WhatsApp", expanded=False):
+        st.caption("Envía un mensaje de prueba a un número para verificar que la conexión WA funciona correctamente")
+
+        from utils.whatsapp_sender import send_whatsapp_messages_direct, get_wa_session_info
+
+        _wa_activo = get_wa_session_info().get("status") == "active"
+        if not _wa_activo:
+            st.warning("⚠️ No hay sesión WhatsApp activa. Conéctala primero en la sección **📱 WhatsApp — Dispositivo de Envío**.")
+        else:
+            col_test_phone, col_test_speed = st.columns([2, 1])
+            with col_test_phone:
+                test_phone = st.text_input(
+                    "Número destino (con código de país)",
+                    value="+51921566036",
+                    key="wa_test_phone",
+                    help="Formato: +51XXXXXXXXX",
+                )
+            with col_test_speed:
+                test_speed = st.selectbox(
+                    "Velocidad",
+                    ["Normal (Recomendado)", "Rápida", "Lenta (Más seguro)"],
+                    key="wa_test_speed",
+                )
+
+            test_msg = st.text_area(
+                "Mensaje de prueba",
+                value="🧪 *Mensaje de prueba* — ReporteCobranzas Antay.\n\nSi recibes esto, la conexión WhatsApp funciona correctamente. ✅",
+                height=100,
+                key="wa_test_message",
+            )
+
+            if st.button("📤 Enviar Prueba", type="primary", use_container_width=False, key="btn_wa_send_test"):
+                if not test_phone.strip():
+                    st.error("❌ Ingresa un número de destino.")
+                elif not test_msg.strip():
+                    st.error("❌ El mensaje no puede estar vacío.")
+                else:
+                    dummy_contact = {
+                        "telefono":       test_phone.strip(),
+                        "nombre_cliente": "Prueba",
+                        "nombre":         "Prueba",
+                        "Empresa":        "Prueba",
+                        "SaldoReal":      0,
+                    }
+                    with st.spinner(f"Enviando mensaje de prueba a {test_phone.strip()}..."):
+                        try:
+                            resultado = send_whatsapp_messages_direct(
+                                contacts=[dummy_contact],
+                                message=test_msg,
+                                speed=test_speed,
+                                send_mode="texto",
+                            )
+                        except Exception as e:
+                            resultado = {"exitosos": 0, "fallidos": 1, "errores": [str(e)]}
+
+                    if resultado.get("exitosos", 0) > 0:
+                        st.success(f"✅ Mensaje enviado correctamente a `{test_phone.strip()}`.")
+                        st.toast("✅ Prueba WA exitosa", icon="✅")
+                    else:
+                        errs = resultado.get("errores", [])
+                        detalle = errs[0] if errs else "Error desconocido"
+                        st.error(f"❌ No se pudo enviar el mensaje.\n\n**Detalle:** {detalle}")
+
+    st.divider()
+
+    # --- SECTION 9: OPCIONES AVANZADAS ---
     with st.expander("⚙️ Opciones Avanzadas (Reenvío)", expanded=False):
         st.markdown("##### Gestión Avanzada de Ciclos")
         st.caption("⚠️ Estas acciones son sensibles. Úsalas con precaución")
