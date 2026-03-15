@@ -136,6 +136,12 @@ Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). RC-BUG-03
 - RC-FEAT-026: Panel de envío WA de prueba en Tab Configuración (smoke test sin datos reales)
   - Smoke test completo del panel post-envío (RC-FEAT-019) en staging
   - Testing de acuerdos de pago (RC-FEAT-021) en staging
+- RC-FEAT-027: Selección automática de plantilla por Aging
+- RC-FEAT-028: KPIs Expandidos de Efectividad de Cobranza
+
+### Pendiente — TIER 3 (Features futuras)
+- RC-FEAT-029: Registro de Pagos en Tiempo Real (sin esperar ERP)
+- RC-FEAT-030: Dashboard de Efectividad de Cobranza (analytics 7/15/30 días)
 
 ---
 
@@ -389,3 +395,116 @@ La migracion se considera cerrada cuando:
 4. Existen reportes operativos por cliente.
 5. Gates de calidad pasan en E2E.
 6. Backups y restore operativos validados.
+
+---
+
+## 7. Sprint TIER 2 — CRM WhatsApp Avanzado (Pendiente v1.8.x / v1.9.x)
+
+### CRM-010: Panel WA de Prueba en Tab Configuración (RC-FEAT-026)
+- Estado: Pendiente ⏳
+- Esfuerzo: 1 punto (~1 hora)
+- Prioridad: P1
+- Dependencias: Smoke Test TIER 2 en staging
+- Descripción: Panel en Tab Configuración para enviar un WA de prueba sin necesitar datos reales. Input de teléfono (default +51921566036), textarea de mensaje, botón "Enviar prueba". Llama a `send_whatsapp_messages_direct()` con contacto ficticio.
+- Archivo: `utils/ui/tabs/config_tab.py` — sección WA, después del panel de sesión activa
+- Criterios de Aceptación:
+  - [ ] Input teléfono con valor por defecto configurable
+  - [ ] Textarea para mensaje libre
+  - [ ] Botón "Enviar WA de prueba"
+  - [ ] Toast verde en éxito / mensaje claro en error
+  - [ ] NO requiere ciclo cargado ni df_final activo
+
+---
+
+### CRM-011: Selección Automática de Plantilla por Aging (RC-FEAT-027)
+- Estado: Pendiente ⏳
+- Esfuerzo: 2 puntos (~2 horas)
+- Prioridad: P2
+- Dependencias: RC-FEAT-020 (Biblioteca plantillas) — COMPLETADO
+- Descripción: Al abrir Tab WhatsApp, el sistema sugiere automáticamente la plantilla correcta por cliente según sus días de mora. El gestor puede sobreescribir antes de enviar.
+- Regla de negocio (segmentos):
+  - 0–14 días → Primer Aviso
+  - 15–30 días → Recordatorio
+  - 31–60 días → Aviso Firme
+  - 60+ días → Pre-Legal
+- Archivo: `utils/ui/tabs/whatsapp.py`
+- Criterios de Aceptación:
+  - [ ] Columna "Segmento" visible en tabla de selección de clientes
+  - [ ] Plantilla pre-seleccionada según segmento al cargar la vista
+  - [ ] Gestor puede cambiar plantilla por cliente antes de enviar
+  - [ ] Sin envío automático — siempre requiere acción explícita del gestor
+  - [ ] Tests unitarios para lógica de segmentación por días
+
+---
+
+### CRM-012: KPIs Expandidos de Efectividad de Cobranza (RC-FEAT-028)
+- Estado: Pendiente ⏳
+- Esfuerzo: 2 puntos (~2 horas)
+- Prioridad: P2
+- Dependencias: RC-FEAT-019, RC-FEAT-021, RC-FEAT-023 — todos COMPLETADOS
+- Descripción: Panel de métricas cruzadas en Tab WA y Centro de Gestiones. Indicadores de efectividad calculados en tiempo real desde Supabase.
+- Métricas:
+  - WA enviados hoy / esta semana
+  - Con respuesta (EXITOSO + PROMETIO_PAGAR) vs Sin respuesta
+  - Acuerdos de pago activos
+  - Cuotas venciendo en ≤3 días
+  - Monto total gestionado (S/ + $) vs monto con acuerdo formal
+- Archivos: `utils/ui/tabs/whatsapp.py`, `utils/ui/tabs/crm_gestiones.py`, `utils/db_manager.py`
+- Criterios de Aceptación:
+  - [ ] KPIs calculados desde Supabase (gestiones + acuerdos_pago + cuotas_acuerdo)
+  - [ ] Sin afectar df_final ni df_filtered (solo lectura Supabase)
+  - [ ] Visible en Tab WA y en Centro de Gestiones
+  - [ ] Actualización al recargar la sección (no tiempo real)
+
+---
+
+## 8. Sprint TIER 3 — Analytics y Cierre de Ciclo (Features futuras v2.x)
+
+> Origen: Propuesta CRM WhatsApp v1.0 (2025). Documento de propuesta ahora obsoleto — estas features
+> fueron aprobadas y se documentan aquí como roadmap. Prerequisito: TIER 2 completado.
+
+### CRM-013: Registro de Pagos en Tiempo Real (RC-FEAT-029)
+- Estado: Backlog futuro 📋
+- Esfuerzo: 3 puntos (~4 horas)
+- Prioridad: P3
+- Dependencias: RC-FEAT-021 (Acuerdos de pago) — COMPLETADO
+- Descripción: Formulario en CRM para que el gestor registre un pago recibido directamente en la app, sin esperar sincronización del ERP. El registro es provisional hasta que el próximo ciclo Excel lo confirme.
+- Campos: cliente, monto, moneda, fecha, forma de pago, banco, referencia, nota
+- Efecto:
+  - Actualiza `documentos.monto_pendiente` con flag `provisional=true`
+  - Marca cuota del acuerdo como `PAGADA` si corresponde
+  - Genera WA de agradecimiento (plantilla Felicitación)
+  - El próximo ciclo Excel reconcilia y confirma o revierte el registro provisional
+- Riesgo documentado: posible desincronización con ERP si el Excel no llega o llega tarde
+- Archivos: `utils/ui/tabs/crm_gestiones.py`, `utils/db_manager.py`
+- Criterios de Aceptación:
+  - [ ] Formulario de registro de pago en pestaña CRM
+  - [ ] Flag `provisional` visible en la UI con advertencia
+  - [ ] Cuota correspondiente marcada como PAGADA
+  - [ ] WA de agradecimiento generado automáticamente
+  - [ ] Al cargar siguiente ciclo: reconciliación automática provisional vs. Excel
+
+---
+
+### CRM-014: Dashboard de Efectividad de Cobranza (RC-FEAT-030)
+- Estado: Backlog futuro 📋
+- Esfuerzo: 5 puntos (~6 horas)
+- Prioridad: P3
+- Dependencias: RC-FEAT-023 (Trazabilidad) — COMPLETADO; requiere ≥2 ciclos en producción para tener datos suficientes
+- Descripción: Nuevo Tab "Analytics" con reportes para el supervisor/dirección sobre efectividad de gestión de cobranza.
+- Métricas objetivo:
+  - % de WA que resultan en pago (ventanas 7 / 15 / 30 días)
+  - Ranking de clientes por dificultad de cobranza
+  - Saldo total gestionado (S/ + $) vs saldo recuperado — por ciclo y acumulado
+  - Evolución mensual de recuperación
+  - Acuerdos cumplidos vs incumplidos
+  - Tasa de respuesta por plantilla WA (qué plantilla convierte más)
+- Fuente: `resumen_cliente_ciclo`, `resumen_ciclo`, `gestiones`, `acuerdos_pago`, `cuotas_acuerdo`
+- Archivo: Nuevo `utils/ui/tabs/analytics.py`
+- Criterios de Aceptación:
+  - [ ] Nuevo tab "Analytics" visible en la app
+  - [ ] Gráficos de evolución mensual
+  - [ ] Tabla ranking de clientes por dificultad
+  - [ ] KPI: % conversión por plantilla WA
+  - [ ] Exportable a Excel/CSV
+  - [ ] Sin impacto en flujo operativo principal

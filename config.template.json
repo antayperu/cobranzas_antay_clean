@@ -12,7 +12,12 @@
     "smtp_config": {
         "server": "smtp.gmail.com",
         "port": "587",
-        "user": "your-email@gmail.com"
+        "user": "",
+        "password": "",
+        "resend_api_key": "",
+        "sendgrid_api_key": "",
+        "force_smtp": false,
+        "_note": "Credentials must be set via env vars: SMTP_USER, SMTP_PASSWORD, RESEND_API_KEY, SENDGRID_API_KEY"
     },
     "supervisor_config": {
         "email": "supervisor@example.com",
