@@ -1135,6 +1135,12 @@ def render_tab(df_filtered, config):
                                 if _ok:
                                     _resultados_guard[_row_key] = _sel
                                     if _wa_res_sesion:
+                                        # RC-BUG-032: persistir nota en session_state para que
+                                        # el historial la muestre tras st.rerun()
+                                        for _d in _wa_res_sesion.get('details', []):
+                                            if _d.get('RowKey') == _row_key:
+                                                _d['Notas'] = _nota if _nota else f"Resultado: {_sel}"
+                                                break
                                         _wa_res_sesion['resultados_registrados'] = _resultados_guard
                                         st.session_state['last_wa_send_results'] = _wa_res_sesion
                                     st.toast(f"Guardado: {_cli}", icon="✅")
