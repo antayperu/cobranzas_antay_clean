@@ -1162,7 +1162,19 @@ def render_tab(df_filtered, config):
                         _row_key_h  = _det.get('RowKey', _cod_h)
                         _cli_h      = _det.get('Cliente', '')
                         _tel_h      = _det.get('Teléfono', '')
-                        _deu_h      = _det.get('Deuda', '')
+                        # Mostrar saldo con moneda — usar DeudaS/DeudaD si existen,
+                        # fallback a Deuda raw si no hay info de moneda
+                        _deu_s_h    = _det.get('DeudaS', '')
+                        _deu_d_h    = _det.get('DeudaD', '')
+                        if _deu_s_h or _deu_d_h:
+                            _parts = [p for p in [_deu_s_h, _deu_d_h] if p]
+                            _deu_h = ' + '.join(_parts)
+                        else:
+                            _raw = _det.get('Deuda', '')
+                            try:
+                                _deu_h = f"S/ {float(_raw):,.2f}" if _raw else '—'
+                            except (ValueError, TypeError):
+                                _deu_h = str(_raw) if _raw else '—'
                         _tipo_h     = _det.get('Tipo', 'Envío WA')
                         _notas_h    = _det.get('Notas', '')
                         _hora_h_raw = _det.get('Hora', '')
