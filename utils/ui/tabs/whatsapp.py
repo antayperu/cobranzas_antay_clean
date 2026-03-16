@@ -154,8 +154,6 @@ def render_tab(df_filtered, config):
         c1, c2 = st.columns([1, 1])
         
         with c1:
-            st.markdown("##### Configurar Plantilla")
-
             # Datos dinámicos de la empresa desde Identidad Corporativa
             _empresa  = config.get('company_name', 'DACTA S.A.C.')
             _ruc      = config.get('company_ruc', '20375779448')
@@ -194,32 +192,38 @@ def render_tab(df_filtered, config):
                     st.session_state['wa_template_editor'] = _biblioteca_dinamica[_sel_lib_actual]
             st.session_state['_wa_sel_lib_prev'] = _sel_lib_actual
 
-            # ── Selectbox biblioteca ───────────────────────────────────────────
-            st.selectbox(
-                "📚 Cargar desde biblioteca",
-                options=_opciones_lib,
-                key="wa_sel_lib",
-                help="Selecciona una plantilla para cargarla en el editor.",
-            )
+            # template siempre disponible (aunque el expander esté colapsado)
+            template = st.session_state.get('wa_template_editor', _default_saved)
 
-            # ── Editor ────────────────────────────────────────────────────────
-            template = st.text_area(
-                "Plantilla del Mensaje",
-                height=280,
-                key="wa_template_editor",
-            )
+            # — Mejora 1: widgets de plantilla colapsados por defecto —
+            _sel_lib_label = _sel_lib_actual
+            with st.expander(f"✏️ Plantilla · {_sel_lib_label}", expanded=False):
+                # ── Selectbox biblioteca ───────────────────────────────────────
+                st.selectbox(
+                    "📚 Cargar desde biblioteca",
+                    options=_opciones_lib,
+                    key="wa_sel_lib",
+                    help="Selecciona una plantilla para cargarla en el editor.",
+                )
 
-            # ── Guardar ───────────────────────────────────────────────────────
-            if st.button("💾 Guardar como Plantilla Predeterminada", type="primary", use_container_width=True):
-                new_config = config.copy()
-                new_config['whatsapp_template'] = template
-                if sm.save_settings(new_config):
-                    config['whatsapp_template'] = template
-                    st.toast("✅ Plantilla guardada. Persistirá al recargar la app.", icon="💾")
-                else:
-                    st.error("❌ No se pudo guardar la plantilla.")
+                # ── Editor ────────────────────────────────────────────────────
+                template = st.text_area(
+                    "Plantilla del Mensaje",
+                    height=280,
+                    key="wa_template_editor",
+                )
 
-            st.caption("Variables: `{EMPRESA}`, `{RESUMEN_DEUDA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`, `{PROX_VENC}`")
+                # ── Guardar ───────────────────────────────────────────────────
+                if st.button("💾 Guardar como Plantilla Predeterminada", type="primary", use_container_width=True):
+                    new_config = config.copy()
+                    new_config['whatsapp_template'] = template
+                    if sm.save_settings(new_config):
+                        config['whatsapp_template'] = template
+                        st.toast("✅ Plantilla guardada. Persistirá al recargar la app.", icon="💾")
+                    else:
+                        st.error("❌ No se pudo guardar la plantilla.")
+
+                st.caption("Variables: `{EMPRESA}`, `{RESUMEN_DEUDA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`, `{PROX_VENC}`")
 
         with c2:
             st.markdown("##### Enviar Mensajes")
@@ -263,7 +267,23 @@ def render_tab(df_filtered, config):
 
             pendientes_wa = len(client_group)
             c_wa_s1.metric("⏳ Pendientes WA", pendientes_wa)
-            c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count)
+            # Mejora 5: badge "hace X horas" junto al KPI de enviados hoy
+            if clientes_wa_hoy_count > 0 and not df_ssot.empty and 'FECHA_ULTIMO_WA' in df_ssot.columns:
+                try:
+                    _ultimas = pd.to_datetime(
+                        df_ssot[mask_wa_env & mask_wa_hoy]['FECHA_ULTIMO_WA'], errors='coerce'
+                    ).dropna()
+                    if not _ultimas.empty:
+                        _delta_h = (datetime.now() - _ultimas.max().to_pydatetime()).total_seconds() / 3600
+                        _hace_str = f"{int(_delta_h)}h" if _delta_h >= 1 else f"{int(_delta_h*60)}min"
+                        c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count, delta=f"hace {_hace_str}",
+                                       delta_color="off")
+                    else:
+                        c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count)
+                except Exception:
+                    c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count)
+            else:
+                c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count)
             st.markdown("---")
 
             # Crear lista de opciones formateada
@@ -320,6 +340,67 @@ def render_tab(df_filtered, config):
                             st.session_state['wa_sel_key'] = list(_ya_sel | set(_sin_resp_labels))
                             st.rerun()
 
+            # Mejora 3: chips de filtro rápido por segmento
+            # (solo llamadas a setear wa_sel_key, igual que select_all_wa_callback)
+            _aging_col = next((c for c in df_ssot.columns if 'AGING' in c.upper() or 'DIAS' in c.upper() or 'DÍAS' in c.upper()), None)
+            _chip_c1, _chip_c2, _chip_c3 = st.columns(3)
+            # Chip: mora crítica +60d
+            if _chip_c1.button("🔴 Mora crítica", key="chip_mora", use_container_width=True,
+                               help="Selecciona clientes con más de 60 días de mora"):
+                _mora_cods: list = []
+                for _lbl_m, _cod_m in client_map.items():
+                    if not df_ssot.empty and _aging_col:
+                        _dias_mora = df_ssot[df_ssot['COD CLIENTE'] == _cod_m][_aging_col]
+                        if not _dias_mora.empty and pd.to_numeric(_dias_mora, errors='coerce').max() > 60:
+                            _mora_cods.append(_lbl_m)
+                    else:
+                        # fallback: saldo alto como proxy
+                        _row_m = client_group[client_group['COD CLIENTE'] == _cod_m]
+                        if not _row_m.empty and _row_m['SALDO REAL'].values[0] >= 5000:
+                            _mora_cods.append(_lbl_m)
+                if _mora_cods:
+                    st.session_state['wa_sel_key'] = _mora_cods
+                    st.rerun()
+                else:
+                    st.toast("No hay clientes con mora crítica +60d en la vista actual", icon="ℹ️")
+            # Chip: sin contacto WA previo
+            if _chip_c2.button("⚫ Sin contacto", key="chip_sin_contacto", use_container_width=True,
+                               help="Selecciona clientes que nunca recibieron WA"):
+                _sc_cods: list = []
+                for _lbl_sc, _cod_sc in client_map.items():
+                    if not df_ssot.empty and 'ESTADO_WHATSAPP' in df_ssot.columns:
+                        _est = df_ssot[df_ssot['COD CLIENTE'] == _cod_sc]['ESTADO_WHATSAPP']
+                        if _est.empty or _est.iloc[0] in ('PENDIENTE', '', None):
+                            _sc_cods.append(_lbl_sc)
+                    else:
+                        _sc_cods.append(_lbl_sc)
+                if _sc_cods:
+                    st.session_state['wa_sel_key'] = _sc_cods
+                    st.rerun()
+                else:
+                    st.toast("Todos los clientes ya tienen contacto WA registrado", icon="ℹ️")
+            # Chip: sin respuesta del último lote
+            if _chip_c3.button("↩ Sin respuesta", key="chip_sin_resp", use_container_width=True,
+                               help="Selecciona clientes sin respuesta del último lote enviado"):
+                _sr_cods: list = []
+                _lr = st.session_state.get('last_wa_send_results', {})
+                if _lr:
+                    _lrg = _lr.get('resultados_registrados', {})
+                    for _d_c in _lr.get('details', []):
+                        _rk_c = _d_c.get('RowKey', _d_c.get('CodCliente', ''))
+                        _r_c = _lrg.get(_rk_c, '')
+                        for _p in ['✅ ', '🤝 ', '📵 ', '🔴 ', '💬 ', '⏳ ']:
+                            if _r_c.startswith(_p): _r_c = _r_c[len(_p):]; break
+                        if _r_c == 'Sin respuesta':
+                            _lbl_c = next((l for l, c in client_map.items() if c == _d_c.get('CodCliente', '')), None)
+                            if _lbl_c and _lbl_c in valid_wa_opts:
+                                _sr_cods.append(_lbl_c)
+                if _sr_cods:
+                    st.session_state['wa_sel_key'] = _sr_cods
+                    st.rerun()
+                else:
+                    st.toast("No hay clientes sin respuesta en el último lote", icon="ℹ️")
+
             def select_all_wa_callback():
                 st.session_state["wa_sel_key"] = client_options
 
@@ -331,7 +412,38 @@ def render_tab(df_filtered, config):
             )
             col_sel2.button("Seleccionar Todos", on_click=select_all_wa_callback)
 
-            st.info(f"Se generarán enlaces para **{len(selected_labels)}** clientes seleccionados.")
+            # Mejora 4: vista previa compacta del mensaje con el primer cliente seleccionado
+            # (read-only, no toca lógica de envío)
+            if selected_labels:
+                _prev_lbl = selected_labels[0]
+                _prev_cod = client_map.get(_prev_lbl)
+                _prev_docs = df_filtered[df_filtered['COD CLIENTE'] == _prev_cod] if _prev_cod else pd.DataFrame()
+                if not _prev_docs.empty:
+                    _prev_empresa = _prev_docs['EMPRESA'].iloc[0]
+                    _prev_tel     = _prev_docs['TELÉFONO'].iloc[0]
+                    # Resolver variables básicas para la preview
+                    _prev_s = _prev_docs[_prev_docs['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
+                    _prev_d = _prev_docs[~_prev_docs['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
+                    _prev_partes = ([f"S/ {_prev_s:,.2f}" ] if _prev_s > 0.01 else []) + \
+                                   ([f"$ {_prev_d:,.2f}"] if _prev_d > 0.01 else [])
+                    _prev_saldo  = " + ".join(_prev_partes) if _prev_partes else "S/ 0.00"
+                    try:
+                        _prev_venc = pd.to_datetime(_prev_docs['FECH VENC'], errors='coerce').dropna().min().strftime('%d/%m/%Y')
+                    except Exception:
+                        _prev_venc = "—"
+                    _prev_msg = (st.session_state.get('wa_template_editor', '')
+                                 .replace('{EMPRESA}', _prev_empresa)
+                                 .replace('{TOTAL_SALDO_REAL}', _prev_saldo)
+                                 .replace('{PROX_VENC}', _prev_venc)
+                                 .replace('{RESUMEN_DEUDA}', f"• Saldo: {_prev_saldo}")
+                                 .replace('{DETALLE_DOCS}', f"({len(_prev_docs)} documento(s))")
+                                 .replace('{TOTAL_SALDO_ORIGINAL}', _prev_saldo))
+                    with st.expander(
+                        f"👁 Vista previa — {_prev_empresa} · {_prev_tel}"
+                        + (f" +{len(selected_labels)-1} más" if len(selected_labels) > 1 else ""),
+                        expanded=False
+                    ):
+                        st.code(_prev_msg, language=None)
             
             # ========== NUEVO: SELECTOR DE MODO DE ENVÍO v5.0 ==========
             st.markdown("---")
@@ -707,11 +819,16 @@ def render_tab(df_filtered, config):
                     st.session_state['last_wa_batch_id'] = None
                     st.rerun()
 
-            # BOTON ENVIAR WHATSAPP
+            # BOTON ENVIAR — Mejora 2: label dinámico con conteo y estado
             if not _wa_session_active:
                 st.warning("⚠️ Conecta un dispositivo en **Configuración → WhatsApp** para habilitar el envío.")
-            if st.button("Enviar Mensajes por WhatsApp", type="primary",
-                         disabled=is_wa_processed or not _wa_session_active):
+            _n_sel = len(contacts_to_send)
+            _btn_label = (
+                f"📤 Enviar a {_n_sel} cliente{'s' if _n_sel != 1 else ''}"
+                if _n_sel > 0 else "📤 Selecciona clientes para enviar"
+            )
+            if st.button(_btn_label, type="primary",
+                         disabled=is_wa_processed or not _wa_session_active or _n_sel == 0):
                 # --- DEDUPLICACIÓN DE SEGURIDAD ---
                 # Aseguramos que no se envíen mensajes dobles si hubo duplicados en la lista UI
                 seen_keys = set()
