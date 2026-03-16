@@ -1194,78 +1194,56 @@ def render_tab(df_filtered, config):
 
                     # ── Acción masiva ─────────────────────────────────────────
                     _n_pend = len(_rows_pending)
-                    # Mapa label → (_ai, _ad) para búsqueda rápida
-                    _am_opciones_map = {
-                        f"{_ad.get('Cliente','')} ({_ad.get('CodCliente','')})": (_ai, _ad)
-                        for _ai, _ad in _rows_pending
-                    }
-                    _am_labels_todos = list(_am_opciones_map.keys())
+                    # Mapa chk_key → (_ai, _ad, _ak) para aplicar resultado
+                    _chk_det_map = {}
+                    for _ai, _ad in _rows_pending:
+                        _ak = _ad.get('RowKey', _ad.get('CodCliente', ''))
+                        _chk_det_map[f"seg_chk_{_ai}_{_ak}"] = (_ai, _ad, _ak)
+                    _chk_keys = list(_chk_det_map.keys())
+                    st.session_state['_seg_pending_chk_keys'] = _chk_keys
+                    _n_sel_am = sum(1 for _k in _chk_keys if st.session_state.get(_k, False))
 
-                    with st.container():
-                        st.markdown(
-                            '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;'
-                            'padding:14px 16px;margin-bottom:14px;">'
-                            '<span style="font-size:0.82rem;font-weight:700;color:#0369a1;">⚡ Acción masiva</span>'
-                            '<span style="font-size:0.78rem;color:#475569;margin-left:8px;">'
-                            '— Selecciona clientes y asigna resultado. Repite para distintos grupos. '
-                            'Sin selección = aplica a todos los pendientes.</span></div>',
-                            unsafe_allow_html=True
-                        )
-                        _am_sel_labels = st.multiselect(
-                            "Clientes a los que aplicar",
-                            options=_am_labels_todos,
-                            key="seg_am_sel_clientes",
-                            placeholder="Selecciona clientes (vacío = todos los pendientes)",
-                        )
-                        _am_r_col, _am_b1_col, _am_b2_col = st.columns([2, 1.5, 1.5])
-                        _am_resultado = _am_r_col.selectbox(
-                            "Resultado a aplicar",
-                            options=[o for o in _OPCIONES_RESULTADO if o != "⏳ Sin registrar"],
-                            key="seg_accion_masiva_res",
-                        )
-                        _n_sel_am  = len(_am_sel_labels)
-                        _n_rest_am = _n_pend - _n_sel_am
-                        if _am_b1_col.button(
-                            f"✅ Aplicar a selec. ({_n_sel_am})",
-                            key="seg_btn_am_sel",
-                            disabled=(_n_sel_am == 0),
-                            use_container_width=True,
-                        ):
-                            for _lbl_am in _am_sel_labels:
-                                _ai_am, _ad_am = _am_opciones_map[_lbl_am]
-                                _ak_am = _ad_am.get('RowKey', _ad_am.get('CodCliente', ''))
+                    def _seg_sel_all_toggle():
+                        _v = st.session_state.get('seg_chk_all', False)
+                        for _k in st.session_state.get('_seg_pending_chk_keys', []):
+                            st.session_state[_k] = _v
+
+                    _am_lbl_col, _am_res_col, _am_btn_col = st.columns([3, 2.5, 2])
+                    _am_lbl_col.markdown(
+                        f'<span style="font-size:0.82rem;font-weight:700;color:#0369a1;">⚡ Acción masiva</span>'
+                        f'<span style="font-size:0.78rem;color:#94a3b8;margin-left:6px;">'
+                        f'— Marca filas y asigna resultado · <b>{_n_sel_am}</b> seleccionado(s)</span>',
+                        unsafe_allow_html=True
+                    )
+                    _am_resultado = _am_res_col.selectbox(
+                        "Resultado masivo",
+                        options=[o for o in _OPCIONES_RESULTADO if o != "⏳ Sin registrar"],
+                        key="seg_accion_masiva_res",
+                        label_visibility="collapsed",
+                    )
+                    if _am_btn_col.button(
+                        f"✅ Aplicar a marcados ({_n_sel_am})",
+                        key="seg_btn_am_aplicar",
+                        type="primary",
+                        disabled=(_n_sel_am == 0),
+                        use_container_width=True,
+                    ):
+                        for _k, (_ai_am, _ad_am, _ak_am) in _chk_det_map.items():
+                            if st.session_state.get(_k, False):
                                 st.session_state[f"seg_res_{_ai_am}_{_ak_am}"] = _am_resultado
-                            st.session_state['seg_am_sel_clientes'] = []
-                            st.toast(f"⚡ '{_am_resultado}' aplicado a {_n_sel_am} clientes.", icon="✅")
-                            st.rerun()
-                        _lbl_rest = (
-                            f"✅ Aplicar a restantes ({_n_rest_am})"
-                            if _n_sel_am > 0 else
-                            f"✅ Aplicar a todos ({_n_pend})"
-                        )
-                        if _am_b2_col.button(
-                            _lbl_rest,
-                            key="seg_btn_am_rest",
-                            type="primary",
-                            use_container_width=True,
-                        ):
-                            _sel_set_am = set(_am_sel_labels)
-                            _aplicados_am = 0
-                            for _lbl_am2 in _am_labels_todos:
-                                if _lbl_am2 not in _sel_set_am:
-                                    _ai_am2, _ad_am2 = _am_opciones_map[_lbl_am2]
-                                    _ak_am2 = _ad_am2.get('RowKey', _ad_am2.get('CodCliente', ''))
-                                    st.session_state[f"seg_res_{_ai_am2}_{_ak_am2}"] = _am_resultado
-                                    _aplicados_am += 1
-                            st.session_state['seg_am_sel_clientes'] = []
-                            st.toast(f"⚡ '{_am_resultado}' aplicado a {_aplicados_am} clientes.", icon="✅")
-                            st.rerun()
+                                st.session_state[_k] = False
+                        st.session_state.pop('seg_chk_all', None)
+                        st.toast(f"⚡ '{_am_resultado}' aplicado a {_n_sel_am} clientes.", icon="✅")
+                        st.rerun()
                     # ── Fin acción masiva ────────────────────────────────────
 
-                    _COL_P = [0.4, 1.2, 2.8, 1.5, 1.5, 2.5, 2, 1.5]
+                    _COL_P = [0.4, 0.4, 1.2, 2.8, 1.5, 1.5, 2.5, 2, 1.5]
                     _hdr_p = st.columns(_COL_P)
-                    for _hp, _ht in zip(_hdr_p, ["#", "Código", "Cliente", "Saldo Real", "Enviado",
-                                                  "Resultado", "Notas", "Acción"]):
+                    _hdr_p[0].checkbox("", key="seg_chk_all",
+                                       on_change=_seg_sel_all_toggle,
+                                       label_visibility="collapsed")
+                    for _hp, _ht in zip(_hdr_p[1:], ["#", "Código", "Cliente", "Saldo Real", "Enviado",
+                                                      "Resultado", "Notas", "Acción"]):
                         _hp.markdown(f"<span style='font-size:0.75rem;color:#64748b;font-weight:700;"
                                      f"letter-spacing:.04em;text-transform:uppercase;'>{_ht}</span>",
                                      unsafe_allow_html=True)
@@ -1292,12 +1270,14 @@ def render_tab(df_filtered, config):
                         else:
                             _hora = _hora_raw
                         _cols_p = st.columns(_COL_P)
-                        _cols_p[0].markdown(f"<span style='color:#94a3b8;font-size:0.82rem;'>{_ri+1}</span>",
+                        _cols_p[0].checkbox("", key=f"seg_chk_{_i}_{_row_key}",
+                                            label_visibility="collapsed")
+                        _cols_p[1].markdown(f"<span style='color:#94a3b8;font-size:0.82rem;'>{_ri+1}</span>",
                                             unsafe_allow_html=True)
-                        _cols_p[1].markdown(f"<code style='font-size:0.78rem;background:#f1f5f9;"
+                        _cols_p[2].markdown(f"<code style='font-size:0.78rem;background:#f1f5f9;"
                                             f"padding:1px 5px;border-radius:3px;'>{_cod}</code>",
                                             unsafe_allow_html=True)
-                        _cols_p[2].markdown(f"<span style='font-weight:600;color:#0f172a;'>{_cli}</span>",
+                        _cols_p[3].markdown(f"<span style='font-weight:600;color:#0f172a;'>{_cli}</span>",
                                             unsafe_allow_html=True)
                         # #7 Color semántico en saldo — rojo para deuda alta, verde para baja
                         import re as _re_saldo
@@ -1311,25 +1291,25 @@ def render_tab(df_filtered, config):
                             _saldo_color = '#d97706'   # naranja — deuda media
                         else:
                             _saldo_color = '#374151'   # gris — deuda baja
-                        _cols_p[3].markdown(
+                        _cols_p[4].markdown(
                             f"<span style='color:{_saldo_color};font-weight:600;'>{_deu}</span>",
                             unsafe_allow_html=True
                         )
-                        _cols_p[4].markdown(f"<span style='font-size:0.82rem;color:#64748b;'>{_hora}</span>",
+                        _cols_p[5].markdown(f"<span style='font-size:0.82rem;color:#64748b;'>{_hora}</span>",
                                             unsafe_allow_html=True)
-                        _sel = _cols_p[5].selectbox(
+                        _sel = _cols_p[6].selectbox(
                             f"res_{_i}", _OPCIONES_RESULTADO,
                             key=f"seg_res_{_i}_{_row_key}",
                             label_visibility="collapsed",
                         )
-                        _nota = _cols_p[6].text_input(
+                        _nota = _cols_p[7].text_input(
                             f"nota_{_i}",
                             key=f"seg_nota_{_i}_{_row_key}",
                             placeholder="Agregar nota...",
                             label_visibility="collapsed",
                         )
                         _btn_t = "primary" if _sel == "Acordó pagar" else "secondary"
-                        if _cols_p[7].button("Guardar", key=f"seg_btn_{_i}_{_row_key}",
+                        if _cols_p[8].button("Guardar", key=f"seg_btn_{_i}_{_row_key}",
                                              type=_btn_t, use_container_width=True):
                             if _sel != "⏳ Sin registrar":
                                 _res_norm = _RESULTADO_MAP.get(_sel, "PENDIENTE")
