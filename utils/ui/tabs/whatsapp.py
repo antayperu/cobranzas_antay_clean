@@ -1194,40 +1194,71 @@ def render_tab(df_filtered, config):
 
                     # ── Acción masiva ─────────────────────────────────────────
                     _n_pend = len(_rows_pending)
+                    # Mapa label → (_ai, _ad) para búsqueda rápida
+                    _am_opciones_map = {
+                        f"{_ad.get('Cliente','')} ({_ad.get('CodCliente','')})": (_ai, _ad)
+                        for _ai, _ad in _rows_pending
+                    }
+                    _am_labels_todos = list(_am_opciones_map.keys())
+
                     with st.container():
                         st.markdown(
                             '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;'
-                            'padding:12px 16px;margin-bottom:12px;">'
+                            'padding:14px 16px;margin-bottom:14px;">'
                             '<span style="font-size:0.82rem;font-weight:700;color:#0369a1;">⚡ Acción masiva</span>'
-                            '</div>',
+                            '<span style="font-size:0.78rem;color:#475569;margin-left:8px;">'
+                            '— Selecciona clientes y asigna resultado. Repite para distintos grupos. '
+                            'Sin selección = aplica a todos los pendientes.</span></div>',
                             unsafe_allow_html=True
                         )
-                        _am_c1, _am_c2, _am_c3 = st.columns([2, 1, 1])
-                        _am_c1.markdown(
-                            f"<span style='font-size:0.88rem;color:#334155;'>"
-                            f"Aplicar a los <b>{_n_pend}</b> pendientes:</span>",
-                            unsafe_allow_html=True
+                        _am_sel_labels = st.multiselect(
+                            "Clientes a los que aplicar",
+                            options=_am_labels_todos,
+                            key="seg_am_sel_clientes",
+                            placeholder="Selecciona clientes (vacío = todos los pendientes)",
                         )
-                        _am_resultado = _am_c2.selectbox(
-                            "accion_masiva_res",
+                        _am_r_col, _am_b1_col, _am_b2_col = st.columns([2, 1.5, 1.5])
+                        _am_resultado = _am_r_col.selectbox(
+                            "Resultado a aplicar",
                             options=[o for o in _OPCIONES_RESULTADO if o != "⏳ Sin registrar"],
                             key="seg_accion_masiva_res",
-                            label_visibility="collapsed",
                         )
-                        if _am_c3.button(
-                            f"✅ Aplicar a todos ({_n_pend})",
-                            key="seg_btn_accion_masiva",
+                        _n_sel_am  = len(_am_sel_labels)
+                        _n_rest_am = _n_pend - _n_sel_am
+                        if _am_b1_col.button(
+                            f"✅ Aplicar a selec. ({_n_sel_am})",
+                            key="seg_btn_am_sel",
+                            disabled=(_n_sel_am == 0),
+                            use_container_width=True,
+                        ):
+                            for _lbl_am in _am_sel_labels:
+                                _ai_am, _ad_am = _am_opciones_map[_lbl_am]
+                                _ak_am = _ad_am.get('RowKey', _ad_am.get('CodCliente', ''))
+                                st.session_state[f"seg_res_{_ai_am}_{_ak_am}"] = _am_resultado
+                            st.session_state['seg_am_sel_clientes'] = []
+                            st.toast(f"⚡ '{_am_resultado}' aplicado a {_n_sel_am} clientes.", icon="✅")
+                            st.rerun()
+                        _lbl_rest = (
+                            f"✅ Aplicar a restantes ({_n_rest_am})"
+                            if _n_sel_am > 0 else
+                            f"✅ Aplicar a todos ({_n_pend})"
+                        )
+                        if _am_b2_col.button(
+                            _lbl_rest,
+                            key="seg_btn_am_rest",
                             type="primary",
                             use_container_width=True,
                         ):
-                            for _ai, _ad in _rows_pending:
-                                _ak = _ad.get('RowKey', _ad.get('CodCliente', ''))
-                                st.session_state[f"seg_res_{_ai}_{_ak}"] = _am_resultado
-                            st.toast(
-                                f"✅ '{_am_resultado}' aplicado a {_n_pend} clientes. "
-                                "Ajusta excepciones y luego pulsa «Guardar todos».",
-                                icon="⚡"
-                            )
+                            _sel_set_am = set(_am_sel_labels)
+                            _aplicados_am = 0
+                            for _lbl_am2 in _am_labels_todos:
+                                if _lbl_am2 not in _sel_set_am:
+                                    _ai_am2, _ad_am2 = _am_opciones_map[_lbl_am2]
+                                    _ak_am2 = _ad_am2.get('RowKey', _ad_am2.get('CodCliente', ''))
+                                    st.session_state[f"seg_res_{_ai_am2}_{_ak_am2}"] = _am_resultado
+                                    _aplicados_am += 1
+                            st.session_state['seg_am_sel_clientes'] = []
+                            st.toast(f"⚡ '{_am_resultado}' aplicado a {_aplicados_am} clientes.", icon="✅")
                             st.rerun()
                     # ── Fin acción masiva ────────────────────────────────────
 
