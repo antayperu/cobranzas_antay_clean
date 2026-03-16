@@ -899,6 +899,7 @@ def render_tab(df_filtered, config):
                             # RC-BUG-047: registrar hora/tipo/rowkey para que el cálculo
                             # "último envío" vs "última gestión" funcione en casos de reenvío.
                             'Hora': now_wa.strftime('%d/%m/%Y %H:%M'),
+                            'HoraISO': now_wa.isoformat(),  # RC-BUG-051: timestamp para gestiones posteriores
                             'Tipo': 'Envío WA',
                             'RowKey': f"{_cod_c}_{now_wa.strftime('%Y%m%d%H%M%S')}_envio",
                             'Notas': f"WA masivo | {c.get('TOTAL_SALDO_REAL', '')} | Tel: {c.get('telefono', '')}",
@@ -1376,10 +1377,18 @@ def render_tab(df_filtered, config):
                                              type=_btn_t, use_container_width=True):
                             if _sel != "⏳ Sin registrar":
                                 _res_norm = _RESULTADO_MAP.get(_sel, "PENDIENTE")
+                                # RC-BUG-051: Recuperar timestamp original del envío para consistencia de fecha
+                                _hora_iso = None
+                                if _wa_res_sesion:
+                                    for _d in _wa_res_sesion.get('details', []):
+                                        if _d.get('RowKey') == _row_key or _d.get('CodCliente') == _cod:
+                                            _hora_iso = _d.get('HoraISO')
+                                            break
                                 _ok, _ = dbm.insert_gestion(
                                     cliente_id=_cod, tipo_gestion='WHATSAPP',
                                     resultado=_res_norm,
                                     notas=_nota if _nota else f"Resultado: {_sel}",
+                                    fecha=_hora_iso,  # RC-BUG-051: fecha explícita del envío original
                                     cycle_id=_cycle_id_lote,
                                     metadata_extra={'source': 'seguimiento_post_envio', 'opcion_gestor': _sel},
                                 )
@@ -1547,10 +1556,18 @@ def render_tab(df_filtered, config):
                         if _sel2 == "⏳ Sin registrar":
                             continue
                         _res_norm2 = _RESULTADO_MAP.get(_sel2, "PENDIENTE")
+                        # RC-BUG-051: Recuperar timestamp original del envío para consistencia de fecha
+                        _hora_iso2 = None
+                        if _wa_res_sesion:
+                            for _d in _wa_res_sesion.get('details', []):
+                                if _d.get('RowKey') == _row_key2 or _d.get('CodCliente') == _cod2:
+                                    _hora_iso2 = _d.get('HoraISO')
+                                    break
                         _ok2, _ = dbm.insert_gestion(
                             cliente_id=_cod2, tipo_gestion='WHATSAPP',
                             resultado=_res_norm2,
                             notas=_nota2 if _nota2 else f"Resultado: {_sel2}",
+                            fecha=_hora_iso2,  # RC-BUG-051: fecha explícita del envío original
                             cycle_id=_cycle_id_lote,
                             metadata_extra={'source': 'seguimiento_guardar_todos', 'opcion_gestor': _sel2},
                         )
