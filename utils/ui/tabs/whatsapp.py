@@ -843,6 +843,17 @@ def render_tab(df_filtered, config):
                         cod = str(contact.get('cod_cliente', '')).strip()
                         if not cod:
                             continue
+                        # Evidencia de auditoría: conservar en metadata el mensaje exacto enviado.
+                        _meta_envio = {
+                            'origen': 'wa_envio_masivo',
+                            'template_label': st.session_state.get('wa_sel_lib', _sel_lib_actual),
+                            'template_text': str(template or ''),
+                            'mensaje_enviado': str(contact.get('mensaje', '') or ''),
+                            'telefono_destino': str(contact.get('telefono', '') or ''),
+                            'send_mode': str(send_mode_value or 'texto'),
+                        }
+                        if current_wa_batch_id:
+                            _meta_envio['batch_id'] = current_wa_batch_id
                         ok, _ = dbm.insert_gestion(
                             cliente_id=cod,
                             tipo_gestion='WHATSAPP',
@@ -850,7 +861,7 @@ def render_tab(df_filtered, config):
                             notas=f"WA masivo | {contact.get('TOTAL_SALDO_REAL', '')} | Tel: {contact.get('telefono', '')}",
                             fecha=now_wa.isoformat(),
                             cycle_id=current_cycle_id,
-                            metadata_extra={},
+                            metadata_extra=_meta_envio,
                         )
                         if ok:
                             persisted_wa += 1
@@ -876,14 +887,22 @@ def render_tab(df_filtered, config):
                     # --- RC-FEAT-WA-UX: Guardar resultados + rerun (igual que Email tab) ---
                     wa_details = []
                     for c in contacts_to_send:
+                        _cod_c = str(c.get('cod_cliente', '')).strip()
                         wa_details.append({
                             'Cliente': c['nombre_cliente'],
-                            'CodCliente': str(c.get('cod_cliente', '')).strip(),
+                            'CodCliente': _cod_c,
                             'Teléfono': c['telefono'],
                             'Estado': '✅ Enviado' if resultado_lote == 'EXITOSO' else '❌ Fallido',
                             'Deuda': c.get('TOTAL_SALDO_REAL', ''),
                             'DeudaS': c.get('TOTAL_SALDO_S', ''),  # "S/ 623.00"
                             'DeudaD': c.get('TOTAL_SALDO_D', ''),  # "$ 373.94"
+                            # RC-BUG-047: registrar hora/tipo/rowkey para que el cálculo
+                            # "último envío" vs "última gestión" funcione en casos de reenvío.
+                            'Hora': now_wa.strftime('%d/%m/%Y %H:%M'),
+                            'Tipo': 'Envío WA',
+                            'RowKey': f"{_cod_c}_{now_wa.strftime('%Y%m%d%H%M%S')}_envio",
+                            'Notas': f"WA masivo | {c.get('TOTAL_SALDO_REAL', '')} | Tel: {c.get('telefono', '')}",
+                            'Mensaje': str(c.get('mensaje', '') or ''),
                         })
                     st.session_state['last_wa_send_results'] = {
                         'exitosos': results['exitosos'],
@@ -912,7 +931,9 @@ def render_tab(df_filtered, config):
         _wa_res_sesion   = st.session_state.get('last_wa_send_results')
 
         # Obtener datos del último envío en sesión para la tabla interactiva
-        _details_sesion = _wa_res_sesion.get('details', []) if _wa_res_sesion else []
+        # RC-BUG-048: list() crea una COPIA local, no una referencia al objeto en session_state.
+        # Sin esto, cada rerun iba acumulando filas de Supabase sobre el mismo objeto → duplicados.
+        _details_sesion = list(_wa_res_sesion.get('details', [])) if _wa_res_sesion else []
         _cycle_id_lote  = _wa_res_sesion.get('cycle_id', _cycle_id_actual) if _wa_res_sesion else _cycle_id_actual
 
         if not _details_sesion and not _cycle_id_actual:
@@ -975,12 +996,16 @@ def render_tab(df_filtered, config):
                         except Exception:
                             pass
                         _notas_fb   = str(_g.get('notas', '') or '')
+                        _msg_fb     = ''
+                        if isinstance(_meta_fb, dict):
+                            _msg_fb = str(_meta_fb.get('mensaje_enviado', '') or '')
                         _row_key_fb = f"{_cid}_{_idx}"
                         _details_sesion.append({
                             'Cliente': _empresa, 'CodCliente': _cid,
                             'Teléfono': _tel, 'Deuda': _saldo, 'Hora': _fecha_hora_g,
                             'RowKey': _row_key_fb, 'Tipo': _tipo_fb, 'Notas': _notas_fb,
                             'DeudaS': _deuda_s_fb, 'DeudaD': _deuda_d_fb,
+                            'Mensaje': _msg_fb,
                         })
                         _cids_sesion.add(_cid)  # evita duplicar cliente si aparece en otro lote histórico
                     # Gestiones manuales → marcar como ya guardadas
@@ -1376,6 +1401,7 @@ def render_tab(df_filtered, config):
                     st.markdown("**Historial de gestiones registradas**")
 
                     _html_rows = ''
+                    import html as _html_utils
                     for _ri, (_i, _det) in enumerate(_rows_saved):
                         _cod_h      = _det.get('CodCliente', '')
                         _row_key_h  = _det.get('RowKey', _cod_h)
@@ -1394,9 +1420,13 @@ def render_tab(df_filtered, config):
                                 _deu_h = str(_raw) if _raw else '—'
                         _tipo_h     = _det.get('Tipo', 'Envío WA')
                         _notas_h    = _det.get('Notas', '')
+                        _msg_h      = str(_det.get('Mensaje', '') or '')
                         # Si es envío WA con nota de plantilla y ya tiene resultado registrado → nota limpia
                         if _tipo_h != 'Gestión' and _notas_h.startswith('WA masivo'):
                             _notas_h = ''
+                        _msg_h_safe = _html_utils.escape(_msg_h)
+                        _msg_h_short = _msg_h_safe if len(_msg_h_safe) <= 90 else (_msg_h_safe[:87] + '...')
+                        _notas_h_safe = _html_utils.escape(_notas_h)
                         _hora_h_raw = _det.get('Hora', '')
                         if _hora_h_raw and len(_hora_h_raw) <= 5:
                             _hora_h = datetime.now().strftime('%d/%m/%Y ') + _hora_h_raw
@@ -1443,7 +1473,10 @@ def render_tab(df_filtered, config):
                             f'<td style="padding:9px 12px;color:#64748b;font-size:0.82rem;'
                             f'font-style:{"normal" if _notas_h else "italic"};'
                             f'max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" '
-                            f'title="{_notas_h}">{_notas_h or "—"}</td>'
+                            f'title="{_notas_h_safe}">{_notas_h_safe or "—"}</td>'
+                            f'<td style="padding:9px 12px;color:#334155;font-size:0.80rem;'
+                            f'max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" '
+                            f'title="{_msg_h_safe}">{_msg_h_short or "—"}</td>'
                             f'</tr>'
                         )
 
@@ -1468,7 +1501,7 @@ def render_tab(df_filtered, config):
                         '</style>'
                         '<table class="seg-tbl"><thead><tr>'
                         '<th>#</th><th>Código</th><th>Cliente</th><th>Teléfono</th>'
-                        '<th>Saldo Real</th><th>Enviado</th><th>Tipo</th><th>Resultado</th><th>Notas</th>'
+                        '<th>Saldo Real</th><th>Enviado</th><th>Tipo</th><th>Resultado</th><th>Notas</th><th>Mensaje WA</th>'
                         f'</tr></thead><tbody>{_html_rows}</tbody></table>'
                     )
                     # components.html usa sandbox=allow-same-origin → JS puede clickear
