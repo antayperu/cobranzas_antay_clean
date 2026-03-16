@@ -282,6 +282,14 @@ def render_tab(df_filtered, config):
             valid_wa_opts = set(client_options)
             st.session_state["wa_sel_key"] = [x for x in st.session_state["wa_sel_key"] if x in valid_wa_opts]
 
+            # RC-FEAT-037: Pre-selección al venir de "Reintentar" en Seguimiento Post-Envío
+            _reintentar_cod = st.session_state.pop('wa_reintentar_cod', None)
+            if _reintentar_cod:
+                _match_lbl = next((lbl for lbl, cod in client_map.items() if cod == _reintentar_cod), None)
+                if _match_lbl and _match_lbl in valid_wa_opts:
+                    st.session_state["wa_sel_key"] = [_match_lbl]
+                    st.info(f"📌 Cliente pre-seleccionado desde Seguimiento: **{_match_lbl.split(' (')[0]}**")
+
             def select_all_wa_callback():
                 st.session_state["wa_sel_key"] = client_options
 
@@ -1219,6 +1227,7 @@ def render_tab(df_filtered, config):
                     st.markdown("**Historial de gestiones registradas**")
 
                     _html_rows = ''
+                    _sin_respuesta_clientes = []  # RC-FEAT-037: reenviar internamente
                     for _ri, (_i, _det) in enumerate(_rows_saved):
                         _cod_h      = _det.get('CodCliente', '')
                         _row_key_h  = _det.get('RowKey', _cod_h)
@@ -1252,15 +1261,19 @@ def render_tab(df_filtered, config):
                                 _res_clean = _res_clean[len(_pfx):]
                                 break
                         _ftxt, _fbg = _RES_COLOR.get(_res_clean, ('#374151', '#f1f5f9'))
-                        # #6 Badge "Reintentar" — visual only, NO link externo
-                        # (un link wa.me saltaría fuera de la app y la gestión NO quedaría grabada)
+                        # #6 Badge visual "Sin respuesta" — el reenvío real se hace con botón Streamlit
+                        # abajo de la tabla para garantizar tracking en Supabase
                         _reintentar_html = (
-                            '&nbsp;<span style="font-size:0.72rem;color:#0e7490;cursor:default;" '
-                            'title="Para reenviar con registro: usa el bot\u00f3n Enviar WA del lote '
-                            'y selecciona este cliente en el siguiente ciclo de env\u00edo.">'  
-                            '\u21a9 Reenviar en lote</span>'
+                            '&nbsp;<span style="font-size:0.72rem;background:#e0f2fe;color:#0369a1;'
+                            'border-radius:3px;padding:2px 6px;cursor:default;" '
+                            'title="Usa el bot\u00f3n \"Reenviar\" debajo de la tabla para '
+                            'ir directo a Enviar Mensajes con este cliente pre-seleccionado.">'
+                            '\u21a9 Reenviar</span>'
                             if _res_clean == 'Sin respuesta' else ''
                         )
+                        # Acumular para botones reales de reenvío
+                        if _res_clean == 'Sin respuesta':
+                            _sin_respuesta_clientes.append((_cod_h, _cli_h))
                         # #4 Tipo como ícono con tooltip — reduce ruido visual
                         _tipo_icon  = '📋' if _tipo_h == 'Gestión' else '📤'
                         _tipo_title = 'Gestión manual del cobrador' if _tipo_h == 'Gestión' else 'Envío masivo WA'
@@ -1310,6 +1323,25 @@ def render_tab(df_filtered, config):
                         f'</tr></thead><tbody>{_html_rows}</tbody></table>',
                         unsafe_allow_html=True
                     )
+
+                    # RC-FEAT-037: Botones reales de reenvío para clientes Sin respuesta
+                    # Un clic navega al sub-tab "Enviar Mensajes" y pre-selecciona el cliente
+                    if _sin_respuesta_clientes:
+                        st.markdown("")
+                        st.markdown("**📤 Sin respuesta — Reenviar desde la app:**")
+                        _btn_cols = st.columns(min(len(_sin_respuesta_clientes), 3))
+                        for _bi, (_bcod, _bcli) in enumerate(_sin_respuesta_clientes):
+                            _bcli_short = _bcli[:28] + '…' if len(_bcli) > 28 else _bcli
+                            if _btn_cols[_bi % 3].button(
+                                f"📤 {_bcli_short}",
+                                key=f"reintentar_btn_{_bcod}",
+                                help=f"Ir a 'Enviar Mensajes' con {_bcli} pre-seleccionado. "
+                                     f"El envío quedará registrado en Supabase.",
+                                use_container_width=True,
+                            ):
+                                st.session_state['wa_reintentar_cod'] = _bcod
+                                st.session_state['wa_subtab_idx'] = 0
+                                st.rerun()
 
                 st.markdown("")
                 # Botones de pie
