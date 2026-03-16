@@ -1096,7 +1096,7 @@ def render_tab(df_filtered, config):
             _kpi_html = f"""
             {_kpi_css}
             <div class="kpi-grid">
-              <div class="kpi-card kpi-blue"><div class="kpi-val">{_total_env}</div><div class="kpi-lbl">Mensajes enviados</div></div>
+              <div class="kpi-card kpi-blue"><div class="kpi-val">{_total_env}</div><div class="kpi-lbl">Clientes contactados</div></div>
               <div class="kpi-card kpi-green"><div class="kpi-val">{_con_gestion}</div><div class="kpi-lbl">{_efec_lbl}</div><div class="kpi-sub">{_efec_sub}</div></div>
               <div class="kpi-card kpi-orange"><div class="kpi-val">{_pend_resp}</div><div class="kpi-lbl">Pendientes de gestión</div></div>
               <div class="kpi-card kpi-red"><div class="kpi-val">{_sin_contacto}</div><div class="kpi-lbl">Sin contacto</div></div>
