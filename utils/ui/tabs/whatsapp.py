@@ -1281,15 +1281,10 @@ def render_tab(df_filtered, config):
                                 _res_clean = _res_clean[len(_pfx):]
                                 break
                         _ftxt, _fbg = _RES_COLOR.get(_res_clean, ('#374151', '#f1f5f9'))
-                        # "↩ Reintentar" — JS onclick via window.parent (sandbox allow-same-origin)
-                        # navega al sub-tab "📤 Enviar Mensajes" sin salir de la app
-                        _onclick = (
-                            "window.parent.document"
-                            ".querySelectorAll('[data-testid=\"stRadio\"] label')"
-                            ".forEach(function(l){if(l.innerText.indexOf('Enviar')>-1)l.click()});"
-                        )
+                        # "↩ Reintentar" — llama goEnviar() definido en <script> del iframe
+                        # (sin comillas anidadas → no rompe el atributo onclick)
                         _reintentar_html = (
-                            f'&nbsp;<a href="#" onclick="{_onclick}return false;" '
+                            '&nbsp;<a href="#" onclick="goEnviar();return false;" '
                             'style="font-size:0.72rem;background:#e0f2fe;color:#0369a1;'
                             'border-radius:3px;padding:2px 6px;text-decoration:none;cursor:pointer;'
                             'white-space:nowrap;" '
@@ -1325,6 +1320,16 @@ def render_tab(df_filtered, config):
                         )
 
                     _tbl_html = (
+                        '<script>'
+                        # goEnviar: busca el radio label que contiene "Enviar" y lo clickea
+                        # window.parent funciona porque components.html tiene sandbox=allow-same-origin
+                        'function goEnviar(){'
+                        '  var doc=window.parent.document;'
+                        '  doc.querySelectorAll("[data-testid=\'stRadio\'] label").forEach(function(l){'
+                        '    if(l.innerText.indexOf("Enviar")>-1)l.click();'
+                        '  });'
+                        '}'
+                        '</script>'
                         '<style>'
                         'body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}'
                         '.seg-tbl{width:100%;border-collapse:collapse;font-size:0.875rem;}'
