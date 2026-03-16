@@ -1002,12 +1002,18 @@ def render_tab(df_filtered, config):
             if _monto_usd: _monto_parts.append(f"$ {_monto_usd:,.0f}")
             _monto_fmt = " + ".join(_monto_parts) if _monto_parts else "—"
 
+            # KPI efectividad: % de enviados con gestión registrada (#3)
+            _efectividad_pct = round(_con_gestion / _total_env * 100) if _total_env > 0 else 0
+            _efec_lbl = f"Con gestión registrada"
+            _efec_sub = f"{_efectividad_pct}% efectividad"
+
             _kpi_css = """
             <style>
             .kpi-grid{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
             .kpi-card{flex:1;min-width:120px;border-radius:10px;padding:18px 12px;text-align:center;color:#fff;}
             .kpi-card .kpi-val{font-size:2.2rem;font-weight:700;line-height:1.1;}
             .kpi-card .kpi-lbl{font-size:0.78rem;margin-top:4px;opacity:.9;}
+            .kpi-card .kpi-sub{font-size:0.72rem;margin-top:3px;opacity:.75;font-style:italic;}
             .kpi-blue{background:#1a4f8a;} .kpi-green{background:#1e7e34;}
             .kpi-orange{background:#d97706;} .kpi-red{background:#b91c1c;} .kpi-teal{background:#0e7490;}
             </style>
@@ -1016,7 +1022,7 @@ def render_tab(df_filtered, config):
             {_kpi_css}
             <div class="kpi-grid">
               <div class="kpi-card kpi-blue"><div class="kpi-val">{_total_env}</div><div class="kpi-lbl">Mensajes enviados</div></div>
-              <div class="kpi-card kpi-green"><div class="kpi-val">{_con_gestion}</div><div class="kpi-lbl">Con gestión registrada</div></div>
+              <div class="kpi-card kpi-green"><div class="kpi-val">{_con_gestion}</div><div class="kpi-lbl">{_efec_lbl}</div><div class="kpi-sub">{_efec_sub}</div></div>
               <div class="kpi-card kpi-orange"><div class="kpi-val">{_pend_resp}</div><div class="kpi-lbl">Pendientes de gestión</div></div>
               <div class="kpi-card kpi-red"><div class="kpi-val">{_sin_contacto}</div><div class="kpi-lbl">Sin contacto</div></div>
               <div class="kpi-card kpi-teal"><div class="kpi-val" style="font-size:1.5rem;">{_monto_fmt}</div><div class="kpi-lbl">💰 Monto gestionado</div></div>
@@ -1062,12 +1068,31 @@ def render_tab(df_filtered, config):
                 _cids_gestion_manual = {
                     d.get('CodCliente', '') for d in _details_sesion if d.get('Tipo') == 'Gestión'
                 }
-                _rows_pending = [
-                    (i, d) for i, d in enumerate(_details_sesion)
-                    if d.get('Tipo', '') != 'Gestión'                    # WA o sin tipo (sesión)
-                    and d.get('CodCliente', '') not in _cids_gestion_manual  # sin gestión manual aún
-                    and not _resultados_guard.get(d.get('RowKey', d.get('CodCliente', '')))  # no guardado en sesión
-                ]
+                # #1 Ordenar pendientes por saldo mayor → menor para priorizar deudas grandes
+                def _parse_saldo(d):
+                    _s = d.get('DeudaS', '') or ''
+                    _dol = d.get('DeudaD', '') or ''
+                    import re as _re2
+                    _tot = 0.0
+                    for _m in _re2.findall(r'[\d,\.]+', _s): 
+                        try: _tot += float(_m.replace(',',''))
+                        except: pass
+                    for _m in _re2.findall(r'[\d,\.]+', _dol):
+                        try: _tot += float(_m.replace(',','')) * 3.7  # tipo cambio aprox para ordenar
+                        except: pass
+                    if not _tot:  # fallback a campo Deuda
+                        try: _tot = float(str(d.get('Deuda','') or '0').replace(',',''))
+                        except: pass
+                    return _tot
+
+                _rows_pending = sorted(
+                    [(i, d) for i, d in enumerate(_details_sesion)
+                     if d.get('Tipo', '') != 'Gestión'
+                     and d.get('CodCliente', '') not in _cids_gestion_manual
+                     and not _resultados_guard.get(d.get('RowKey', d.get('CodCliente', '')))],
+                    key=lambda x: _parse_saldo(x[1]),
+                    reverse=True  # mayor saldo primero
+                )
                 _rows_saved = [
                     (i, d) for i, d in enumerate(_details_sesion)
                     if d.get('Tipo') == 'Gestión'                         # solo gestiones manuales
@@ -1199,8 +1224,15 @@ def render_tab(df_filtered, config):
                                 _res_clean = _res_clean[len(_pfx):]
                                 break
                         _ftxt, _fbg = _RES_COLOR.get(_res_clean, ('#374151', '#f1f5f9'))
-                        _tbg  = '#dbeafe' if _tipo_h == 'Envío WA' else '#dcfce7'
-                        _ttxt = '#1e40af' if _tipo_h == 'Envío WA' else '#166534'
+                        # #4 Tipo como ícono con tooltip — reduce ruido visual
+                        _tipo_icon  = '📋' if _tipo_h == 'Gestión' else '📤'
+                        _tipo_title = 'Gestión manual del cobrador' if _tipo_h == 'Gestión' else 'Envío masivo WA'
+                        # #2 Teléfono como link wa.me — un clic abre el chat
+                        _tel_clean_h = (_tel_h or '').replace('+', '').replace(' ', '')
+                        _tel_cell_h  = (f'<a href="https://wa.me/{_tel_clean_h}" target="_blank" '
+                                        f'title="Abrir chat en WhatsApp" '
+                                        f'style="color:#0e7490;text-decoration:none;">'
+                                        f'{_tel_h} 💬</a>') if _tel_clean_h else '—'
                         _row_bg = '#ffffff' if _ri % 2 == 0 else '#f9fafb'
                         _html_rows += (
                             f'<tr style="background:{_row_bg}">'
@@ -1208,17 +1240,18 @@ def render_tab(df_filtered, config):
                             f'<td style="padding:9px 8px;"><span style="background:#f1f5f9;border-radius:3px;'
                             f'padding:2px 6px;font-family:monospace;font-size:0.76rem;">{_cod_h}</span></td>'
                             f'<td style="padding:9px 12px;font-weight:600;color:#0f172a;">{_cli_h}</td>'
-                            f'<td style="padding:9px 8px;color:#475569;">{_tel_h}</td>'
+                            f'<td style="padding:9px 8px;">{_tel_cell_h}</td>'
                             f'<td style="padding:9px 8px;color:#0f172a;font-weight:500;">{_deu_h}</td>'
                             f'<td style="padding:9px 8px;color:#64748b;font-size:0.82rem;white-space:nowrap;">{_hora_h}</td>'
-                            f'<td style="padding:9px 8px;"><span style="background:{_tbg};color:{_ttxt};'
-                            f'border-radius:4px;padding:2px 8px;font-size:0.73rem;font-weight:600;'
-                            f'white-space:nowrap;">{_tipo_h}</span></td>'
+                            f'<td style="padding:9px 8px;text-align:center;" title="{_tipo_title}">'
+                            f'<span style="font-size:1rem;">{_tipo_icon}</span></td>'
                             f'<td style="padding:9px 8px;"><span style="background:{_fbg};color:{_ftxt};'
                             f'border-radius:4px;padding:3px 8px;font-size:0.80rem;font-weight:500;'
                             f'white-space:nowrap;">{_res_clean}</span></td>'
                             f'<td style="padding:9px 12px;color:#64748b;font-size:0.82rem;'
-                            f'font-style:{"normal" if _notas_h else "italic"};">{_notas_h or "—"}</td>'
+                            f'font-style:{"normal" if _notas_h else "italic"};'
+                            f'max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" '
+                            f'title="{_notas_h}">{_notas_h or "—"}</td>'
                             f'</tr>'
                         )
 
