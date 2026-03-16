@@ -1191,6 +1191,46 @@ def render_tab(df_filtered, config):
                         unsafe_allow_html=True
                     )
                     st.markdown("**Registrar resultado de gestión**")
+
+                    # ── Acción masiva ─────────────────────────────────────────
+                    _n_pend = len(_rows_pending)
+                    with st.container():
+                        st.markdown(
+                            '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;'
+                            'padding:12px 16px;margin-bottom:12px;">'
+                            '<span style="font-size:0.82rem;font-weight:700;color:#0369a1;">⚡ Acción masiva</span>'
+                            '</div>',
+                            unsafe_allow_html=True
+                        )
+                        _am_c1, _am_c2, _am_c3 = st.columns([2, 1, 1])
+                        _am_c1.markdown(
+                            f"<span style='font-size:0.88rem;color:#334155;'>"
+                            f"Aplicar a los <b>{_n_pend}</b> pendientes:</span>",
+                            unsafe_allow_html=True
+                        )
+                        _am_resultado = _am_c2.selectbox(
+                            "accion_masiva_res",
+                            options=[o for o in _OPCIONES_RESULTADO if o != "⏳ Sin registrar"],
+                            key="seg_accion_masiva_res",
+                            label_visibility="collapsed",
+                        )
+                        if _am_c3.button(
+                            f"✅ Aplicar a todos ({_n_pend})",
+                            key="seg_btn_accion_masiva",
+                            type="primary",
+                            use_container_width=True,
+                        ):
+                            for _ai, _ad in _rows_pending:
+                                _ak = _ad.get('RowKey', _ad.get('CodCliente', ''))
+                                st.session_state[f"seg_res_{_ai}_{_ak}"] = _am_resultado
+                            st.toast(
+                                f"✅ '{_am_resultado}' aplicado a {_n_pend} clientes. "
+                                "Ajusta excepciones y luego pulsa «Guardar todos».",
+                                icon="⚡"
+                            )
+                            st.rerun()
+                    # ── Fin acción masiva ────────────────────────────────────
+
                     _COL_P = [0.4, 1.2, 2.8, 1.5, 1.5, 2.5, 2, 1.5]
                     _hdr_p = st.columns(_COL_P)
                     for _hp, _ht in zip(_hdr_p, ["#", "Código", "Cliente", "Saldo Real", "Enviado",
