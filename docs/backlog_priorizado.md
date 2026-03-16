@@ -1,9 +1,9 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-03-15
-Version actual: v1.7.3 (fix seguimiento post-envío WA)
+Ultima actualizacion: 2026-03-16
+Version actual: v1.8.0 (TIER 2 completado — RC-FEAT-026/034 + RC-BUG-032/033 + context engineering)
 Estado migracion Supabase: Completada. Todas las fases MIG-000 a MIG-009 + SUPABASE-002 + CONFIG-001 cerradas.
-Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). RC-BUG-030 cerrado 2026-03-15. TIER 2 pendiente.
+Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). TIER 2 completado 2026-03-16. TIER 3 pendiente.
 
 ---
 
@@ -132,16 +132,23 @@ Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). RC-BUG-03
   - Fix: deduplicar `CodCliente` en cálculo (un cliente tiene fila Envío + fila Gestión)
 - Criterios de aceptación definidos y documentados en `RETOMAR_SESION.md`
 
-### Pendiente — TIER 2 (Próximo Sprint)
-- RC-FEAT-026: Panel de envío WA de prueba en Tab Configuración (smoke test sin datos reales)
-  - Smoke test completo del panel post-envío (RC-FEAT-019) en staging
-  - Testing de acuerdos de pago (RC-FEAT-021) en staging
+### Completados — TIER 2 (Sprint 2026-03-16) ✅
+- RC-FEAT-026: Panel de envío WA de prueba en Config Tab — `config_tab.py` SECCIÓN 8 ✅
+- RC-BUG-032: Notas vacías en historial post-rerun (causa raíz: `notas` faltaba en SELECT Supabase) ✅
+- RC-BUG-033: Saldo sin moneda en tablas historial y pendientes (usa `DeudaS`/`DeudaD`) ✅
+- RC-FEAT-034: 9 mejoras UX panel Seguimiento Post-Envío WA ✅
+  - Orden por saldo desc, link wa.me, % efectividad, ícono tipo, tooltip notas
+  - Barra progreso ciclo, color semántico saldo, badge ↩ Reintentar, tooltip guardar todos
+- RC-DOCS-001: Context engineering — copilot-instructions.md, 5 skills, FRD v2.0 PDF ✅
+
+### Pendiente — TIER 2 (sin iniciar)
 - RC-FEAT-027: Selección automática de plantilla por Aging
 - RC-FEAT-028: KPIs Expandidos de Efectividad de Cobranza
 
 ### Pendiente — TIER 3 (Features futuras)
 - RC-FEAT-029: Registro de Pagos en Tiempo Real (sin esperar ERP)
 - RC-FEAT-030: Dashboard de Efectividad de Cobranza (analytics 7/15/30 días)
+- RC-FEAT-035: Link historial CRM completo del cliente desde panel WA Seguimiento Post-Envío
 
 ---
 
@@ -401,18 +408,18 @@ La migracion se considera cerrada cuando:
 ## 7. Sprint TIER 2 — CRM WhatsApp Avanzado (Pendiente v1.8.x / v1.9.x)
 
 ### CRM-010: Panel WA de Prueba en Tab Configuración (RC-FEAT-026)
-- Estado: Pendiente ⏳
+- Estado: Done ✅ — commit `d8a342a` (2026-03-16)
 - Esfuerzo: 1 punto (~1 hora)
 - Prioridad: P1
 - Dependencias: Smoke Test TIER 2 en staging
 - Descripción: Panel en Tab Configuración para enviar un WA de prueba sin necesitar datos reales. Input de teléfono (default +51921566036), textarea de mensaje, botón "Enviar prueba". Llama a `send_whatsapp_messages_direct()` con contacto ficticio.
-- Archivo: `utils/ui/tabs/config_tab.py` — sección WA, después del panel de sesión activa
+- Archivo: `utils/ui/tabs/config_tab.py` — SECCIÓN 8 (entre WA dispositivo y Opciones Avanzadas)
 - Criterios de Aceptación:
-  - [ ] Input teléfono con valor por defecto configurable
-  - [ ] Textarea para mensaje libre
-  - [ ] Botón "Enviar WA de prueba"
-  - [ ] Toast verde en éxito / mensaje claro en error
-  - [ ] NO requiere ciclo cargado ni df_final activo
+  - [x] Input teléfono con valor por defecto configurable
+  - [x] Textarea para mensaje libre
+  - [x] Botón "Enviar WA de prueba"
+  - [x] Toast verde en éxito / mensaje claro en error
+  - [x] NO requiere ciclo cargado ni df_final activo
 
 ---
 
@@ -458,10 +465,57 @@ La migracion se considera cerrada cuando:
 
 ---
 
+## 7.1. Sprint TIER 2 — Bugs y UX (2026-03-16) ✅ COMPLETADO
+
+### RC-BUG-032: Notas vacías en historial post-rerun
+- Estado: Done ✅ — commits `bd9f264` + `4cd9cac`
+- Causa raíz: columna `notas` faltaba en SELECT de `get_wa_gestiones_by_cycle` en `db_manager.py`
+- Fix 1: persistir nota en `session_state['last_wa_send_results']['details']` antes del `st.rerun()`
+- Fix 2 (raíz): agregar `notas` al `.select()` en `db_manager.py`
+
+### RC-BUG-033: Saldo sin moneda en tablas
+- Estado: Done ✅ — commits `1f69034` + `da4b6b3`
+- Causa: Se usaba `_det.get('Deuda', '')` (número raw sin prefijo de moneda)
+- Fix: Usar `DeudaS` + `DeudaD` ya formateados (`S/ X.XX` / `$ X.XX`) con fallback
+- Afectado: tabla historial y tabla pendientes en `whatsapp.py`
+
+### RC-FEAT-034: 9 mejoras UX panel Seguimiento Post-Envío WA
+- Estado: Done ✅ — commits `cb4c9b6` + `6e65376`
+- Archivo: `utils/ui/tabs/whatsapp.py`
+- Mejoras implementadas:
+  1. Orden por saldo descendente en tabla pendientes (`_parse_saldo_sort()`)
+  2. Teléfono como link `wa.me/{número}` con ícono 💬
+  3. KPI % efectividad (`_con_gestion / _total_env * 100`) en panel de métricas
+  4. Tipo de gestión como ícono (📋 Gestión / 📤 Envío WA) con tooltip
+  5. Tooltip notas largas truncadas (`max-width:200px;overflow:hidden;text-overflow:ellipsis`)
+  6. Barra de progreso del ciclo (`_pct_ciclo = len(_rows_saved)/total * 100`)
+  7. Color semántico del saldo en pendientes (rojo ≥5000, naranja ≥1000, gris <1000)
+  8. Badge ↩ Reintentar si resultado = 'Sin respuesta'
+  9. Tooltip descriptivo mejorado en botón "Guardar todos"
+- Mejora #10 (link historial CRM) → diferida a TIER 3 como RC-FEAT-035
+
+---
+
 ## 8. Sprint TIER 3 — Analytics y Cierre de Ciclo (Features futuras v2.x)
 
 > Origen: Propuesta CRM WhatsApp v1.0 (2025). Documento de propuesta ahora obsoleto — estas features
 > fueron aprobadas y se documentan aquí como roadmap. Prerequisito: TIER 2 completado.
+
+### CRM-015: Link Historial CRM Completo del Cliente desde Panel WA (RC-FEAT-035)
+- Estado: Backlog futuro 📋
+- Esfuerzo: 2 puntos (~2 horas)
+- Prioridad: P3
+- Dependencias: RC-FEAT-019 (Panel post-envío) — COMPLETADO; RC-FEAT-034 (mejoras UX WA) — COMPLETADO
+- Descripción: Desde la tabla de historial de gestiones WA, agregar un link/botón por fila que navegue al historial CRM completo del cliente. Requiere deep-link vía `st.session_state` del `cliente_id` hacia Tab CRM Gestiones filtrado por ese cliente.
+- Archivo: `utils/ui/tabs/whatsapp.py` (columna nueva en tabla historial), `utils/ui/tabs/crm_gestiones.py` (recibir filtro por cliente_id desde session_state)
+- Criterios de Aceptación:
+  - [ ] Botón/link "Ver CRM" visible en cada fila del historial de gestiones WA
+  - [ ] Clic navega automáticamente a Tab CRM Gestiones
+  - [ ] Tab CRM Gestiones pre-filtra por el cliente seleccionado
+  - [ ] Filtro se limpia al cambiar de contexto manualmente
+  - [ ] Sin afectar SSOT ni df_final
+
+---
 
 ### CRM-013: Registro de Pagos en Tiempo Real (RC-FEAT-029)
 - Estado: Backlog futuro 📋
