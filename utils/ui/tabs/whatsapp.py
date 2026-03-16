@@ -1239,7 +1239,7 @@ def render_tab(df_filtered, config):
                                      f"letter-spacing:.04em;text-transform:uppercase;'>{_ht}</span>",
                                      unsafe_allow_html=True)
                     st.divider()
-                    for _i, _det in _rows_pending:
+                    for _ri, (_i, _det) in enumerate(_rows_pending):
                         _cod     = _det.get('CodCliente', '')
                         _row_key = _det.get('RowKey', _cod)
                         _cli     = _det.get('Cliente', '')
@@ -1261,7 +1261,7 @@ def render_tab(df_filtered, config):
                         else:
                             _hora = _hora_raw
                         _cols_p = st.columns(_COL_P)
-                        _cols_p[0].markdown(f"<span style='color:#94a3b8;font-size:0.82rem;'>{_i+1}</span>",
+                        _cols_p[0].markdown(f"<span style='color:#94a3b8;font-size:0.82rem;'>{_ri+1}</span>",
                                             unsafe_allow_html=True)
                         _cols_p[1].markdown(f"<code style='font-size:0.78rem;background:#f1f5f9;"
                                             f"padding:1px 5px;border-radius:3px;'>{_cod}</code>",
