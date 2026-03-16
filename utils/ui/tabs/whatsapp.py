@@ -412,39 +412,6 @@ def render_tab(df_filtered, config):
             )
             col_sel2.button("Seleccionar Todos", on_click=select_all_wa_callback)
 
-            # Mejora 4: vista previa compacta del mensaje con el primer cliente seleccionado
-            # (read-only, no toca lógica de envío)
-            if selected_labels:
-                _prev_lbl = selected_labels[0]
-                _prev_cod = client_map.get(_prev_lbl)
-                _prev_docs = df_filtered[df_filtered['COD CLIENTE'] == _prev_cod] if _prev_cod else pd.DataFrame()
-                if not _prev_docs.empty:
-                    _prev_empresa = _prev_docs['EMPRESA'].iloc[0]
-                    _prev_tel     = _prev_docs['TELÉFONO'].iloc[0]
-                    # Resolver variables básicas para la preview
-                    _prev_s = _prev_docs[_prev_docs['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
-                    _prev_d = _prev_docs[~_prev_docs['MONEDA'].astype(str).str.startswith('S', na=False)]['SALDO REAL'].sum()
-                    _prev_partes = ([f"S/ {_prev_s:,.2f}" ] if _prev_s > 0.01 else []) + \
-                                   ([f"$ {_prev_d:,.2f}"] if _prev_d > 0.01 else [])
-                    _prev_saldo  = " + ".join(_prev_partes) if _prev_partes else "S/ 0.00"
-                    try:
-                        _prev_venc = pd.to_datetime(_prev_docs['FECH VENC'], errors='coerce').dropna().min().strftime('%d/%m/%Y')
-                    except Exception:
-                        _prev_venc = "—"
-                    _prev_msg = (st.session_state.get('wa_template_editor', '')
-                                 .replace('{EMPRESA}', _prev_empresa)
-                                 .replace('{TOTAL_SALDO_REAL}', _prev_saldo)
-                                 .replace('{PROX_VENC}', _prev_venc)
-                                 .replace('{RESUMEN_DEUDA}', f"• Saldo: {_prev_saldo}")
-                                 .replace('{DETALLE_DOCS}', f"({len(_prev_docs)} documento(s))")
-                                 .replace('{TOTAL_SALDO_ORIGINAL}', _prev_saldo))
-                    with st.expander(
-                        f"👁 Vista previa — {_prev_empresa} · {_prev_tel}"
-                        + (f" +{len(selected_labels)-1} más" if len(selected_labels) > 1 else ""),
-                        expanded=False
-                    ):
-                        st.code(_prev_msg, language=None)
-            
             # ========== NUEVO: SELECTOR DE MODO DE ENVÍO v5.0 ==========
             st.markdown("---")
             st.markdown("### ⚙️ Configuración de Envío WhatsApp")
@@ -485,7 +452,8 @@ def render_tab(df_filtered, config):
             contacts_to_send = []
             
             if selected_labels:
-                st.markdown("##### Vista Previa")
+                _n_prev = len(selected_labels)
+                st.markdown(f"##### 👁 Vista Previa · {_n_prev} cliente{'s' if _n_prev > 1 else ''}")
                 
                 # SOLUCIÓN 1: Cargar logo en scope global (antes del loop)
                 # Esto garantiza que logo_b64 esté disponible tanto para preview como para envío
