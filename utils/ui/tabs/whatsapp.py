@@ -1252,22 +1252,24 @@ def render_tab(df_filtered, config):
                                 _res_clean = _res_clean[len(_pfx):]
                                 break
                         _ftxt, _fbg = _RES_COLOR.get(_res_clean, ('#374151', '#f1f5f9'))
-                        # #6 Badge "Reintentar" para Sin respuesta — precalculado fuera del f-string
+                        # #6 Badge "Reintentar" — visual only, NO link externo
+                        # (un link wa.me saltaría fuera de la app y la gestión NO quedaría grabada)
                         _reintentar_html = (
-                            '&nbsp;<a href="https://wa.me/" target="_blank" '
-                            'style="font-size:0.72rem;color:#0e7490;text-decoration:none;" '
-                            'title="Reenviar mensaje WA">\u21a9 Reintentar</a>'
+                            '&nbsp;<span style="font-size:0.72rem;color:#0e7490;cursor:default;" '
+                            'title="Para reenviar con registro: usa el bot\u00f3n Enviar WA del lote '
+                            'y selecciona este cliente en el siguiente ciclo de env\u00edo.">'  
+                            '\u21a9 Reenviar en lote</span>'
                             if _res_clean == 'Sin respuesta' else ''
                         )
                         # #4 Tipo como ícono con tooltip — reduce ruido visual
                         _tipo_icon  = '📋' if _tipo_h == 'Gestión' else '📤'
                         _tipo_title = 'Gestión manual del cobrador' if _tipo_h == 'Gestión' else 'Envío masivo WA'
-                        # #2 Teléfono como link wa.me — un clic abre el chat
+                        # #2 Teléfono — solo referencia visual, sin link externo
+                        # (wa.me sacaría al usuario de la app y la gestión NO quedaría grabada)
                         _tel_clean_h = (_tel_h or '').replace('+', '').replace(' ', '')
-                        _tel_cell_h  = (f'<a href="https://wa.me/{_tel_clean_h}" target="_blank" '
-                                        f'title="Abrir chat en WhatsApp" '
-                                        f'style="color:#0e7490;text-decoration:none;">'
-                                        f'{_tel_h} 💬</a>') if _tel_clean_h else '—'
+                        _tel_cell_h  = (f'<span style="color:#0e7490;font-size:0.85rem;" '
+                                        f'title="N\u00famero de referencia — env\u00edo desde la app registra la gesti\u00f3n">'
+                                        f'{_tel_h}</span>') if _tel_clean_h else '—'
                         _row_bg = '#ffffff' if _ri % 2 == 0 else '#f9fafb'
                         _html_rows += (
                             f'<tr style="background:{_row_bg}">'
