@@ -128,12 +128,18 @@ def render_tab(df_filtered, config):
       # Resumen del último envío (persiste tras el rerun)
       _wa_res_env = st.session_state.get('last_wa_send_results')
       if _wa_res_env:
-          with st.container(border=True):
-              st.markdown("#### 📊 Resumen del Último Envío")
+          _env_ok  = _wa_res_env.get('exitosos', 0)
+          _env_fail = _wa_res_env.get('fallidos', 0)
+          _env_tot  = _env_ok + _env_fail
+          with st.expander(
+              f"📊 Último envío — {_env_ok} enviados · {_env_fail} fallidos · {_env_tot} total  "
+              f"*(clic para ver detalle)*",
+              expanded=False
+          ):
               _rk1, _rk2, _rk3 = st.columns(3)
-              _rk1.metric("✅ Enviados", _wa_res_env.get('exitosos', 0))
-              _rk2.metric("❌ Fallidos", _wa_res_env.get('fallidos', 0))
-              _rk3.metric("📨 Total", _wa_res_env.get('exitosos', 0) + _wa_res_env.get('fallidos', 0))
+              _rk1.metric("✅ Enviados", _env_ok)
+              _rk2.metric("❌ Fallidos", _env_fail)
+              _rk3.metric("📨 Total", _env_tot)
               if _wa_res_env.get('details'):
                   _df_res_env = pd.DataFrame(_wa_res_env['details'])
                   _cols_env = [c for c in _df_res_env.columns if c != 'CodCliente']
