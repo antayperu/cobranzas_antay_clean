@@ -1297,7 +1297,7 @@ def render_tab(df_filtered, config):
                         _row_bg = '#ffffff' if _ri % 2 == 0 else '#f9fafb'
                         _html_rows += (
                             f'<tr style="background:{_row_bg}">'
-                            f'<td style="color:#94a3b8;text-align:center;padding:9px 8px;">{_i+1}</td>'
+                            f'<td style="color:#94a3b8;text-align:center;padding:9px 8px;">{_ri+1}</td>'
                             f'<td style="padding:9px 8px;"><span style="background:#f1f5f9;border-radius:3px;'
                             f'padding:2px 6px;font-family:monospace;font-size:0.76rem;">{_cod_h}</span></td>'
                             f'<td style="padding:9px 12px;font-weight:600;color:#0f172a;">{_cli_h}</td>'
