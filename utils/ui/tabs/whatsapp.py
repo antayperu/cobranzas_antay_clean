@@ -1220,21 +1220,48 @@ def render_tab(df_filtered, config):
                             else:
                                 st.warning("Selecciona un resultado antes de guardar.")
 
-                # ── Historial registrado (tabla HTML premium) ─────────────────
+                # ── Historial registrado — tabla con botones ↩ Reenviar reales ──────
                 if _rows_saved:
                     if _rows_pending:
                         st.markdown("---")
                     st.markdown("**Historial de gestiones registradas**")
 
-                    _html_rows = ''
-                    _sin_respuesta_clientes = []  # RC-FEAT-037: reenviar internamente
+                    # CSS: compactar padding de celdas y estilizar botón ↩ Reenviar como badge
+                    st.markdown(
+                        "<style>"
+                        # Reducir margin del párrafo dentro de cada celda markdown
+                        "div[data-testid='stMarkdownContainer'] p{margin:0!important;}"
+                        # Botón ↩ Reenviar: aspecto de badge pequeño azul
+                        ".reenv-btn>div>button{"
+                        "font-size:0.72rem!important;padding:1px 8px!important;"
+                        "height:22px!important;min-height:0!important;line-height:1.2!important;"
+                        "background:#e0f2fe!important;color:#0369a1!important;"
+                        "border:1px solid #bae6fd!important;border-radius:3px!important;"
+                        "margin-top:2px!important;font-weight:500!important;}"
+                        ".reenv-btn>div>button:hover{background:#bae6fd!important;}"
+                        "</style>",
+                        unsafe_allow_html=True
+                    )
+
+                    # ─── Fila de cabecera (mismas proporciones que filas de datos) ──
+                    _COL_W = [0.28, 0.62, 2.1, 1.0, 1.05, 1.1, 0.38, 1.85, 1.5]
+                    _HDR   = st.columns(_COL_W)
+                    _hdr_style = (
+                        "margin:0;padding:6px 6px 8px 6px;font-size:0.72rem;"
+                        "color:#64748b;font-weight:700;letter-spacing:.06em;"
+                        "text-transform:uppercase;border-bottom:2px solid #e2e8f0;"
+                    )
+                    for _hi, _hlbl in enumerate(['#','Código','Cliente','Teléfono',
+                                                 'Saldo Real','Enviado','Tipo','Resultado','Notas']):
+                        _HDR[_hi].markdown(f'<p style="{_hdr_style}">{_hlbl}</p>', unsafe_allow_html=True)
+
+                    # ─── Filas de datos ────────────────────────────────────────────
                     for _ri, (_i, _det) in enumerate(_rows_saved):
                         _cod_h      = _det.get('CodCliente', '')
                         _row_key_h  = _det.get('RowKey', _cod_h)
                         _cli_h      = _det.get('Cliente', '')
                         _tel_h      = _det.get('Teléfono', '')
-                        # Mostrar saldo con moneda — usar DeudaS/DeudaD si existen,
-                        # fallback a Deuda raw si no hay info de moneda
+                        # Saldo con moneda
                         _deu_s_h    = _det.get('DeudaS', '')
                         _deu_d_h    = _det.get('DeudaD', '')
                         if _deu_s_h or _deu_d_h:
@@ -1261,87 +1288,67 @@ def render_tab(df_filtered, config):
                                 _res_clean = _res_clean[len(_pfx):]
                                 break
                         _ftxt, _fbg = _RES_COLOR.get(_res_clean, ('#374151', '#f1f5f9'))
-                        # #6 Badge visual "Sin respuesta" — el reenvío real se hace con botón Streamlit
-                        # abajo de la tabla para garantizar tracking en Supabase
-                        _reintentar_html = (
-                            '&nbsp;<span style="font-size:0.72rem;background:#e0f2fe;color:#0369a1;'
-                            'border-radius:3px;padding:2px 6px;cursor:default;" '
-                            'title="Usa el bot\u00f3n \"Reenviar\" debajo de la tabla para '
-                            'ir directo a Enviar Mensajes con este cliente pre-seleccionado.">'
-                            '\u21a9 Reenviar</span>'
-                            if _res_clean == 'Sin respuesta' else ''
-                        )
-                        # Acumular para botones reales de reenvío
-                        if _res_clean == 'Sin respuesta':
-                            _sin_respuesta_clientes.append((_cod_h, _cli_h))
-                        # #4 Tipo como ícono con tooltip — reduce ruido visual
                         _tipo_icon  = '📋' if _tipo_h == 'Gestión' else '📤'
                         _tipo_title = 'Gestión manual del cobrador' if _tipo_h == 'Gestión' else 'Envío masivo WA'
-                        # #2 Teléfono — solo referencia visual, sin link externo
-                        # (wa.me sacaría al usuario de la app y la gestión NO quedaría grabada)
-                        _tel_clean_h = (_tel_h or '').replace('+', '').replace(' ', '')
-                        _tel_cell_h  = (f'<span style="color:#0e7490;font-size:0.85rem;" '
-                                        f'title="N\u00famero de referencia — env\u00edo desde la app registra la gesti\u00f3n">'
-                                        f'{_tel_h}</span>') if _tel_clean_h else '—'
-                        _row_bg = '#ffffff' if _ri % 2 == 0 else '#f9fafb'
-                        _html_rows += (
-                            f'<tr style="background:{_row_bg}">'
-                            f'<td style="color:#94a3b8;text-align:center;padding:9px 8px;">{_i+1}</td>'
-                            f'<td style="padding:9px 8px;"><span style="background:#f1f5f9;border-radius:3px;'
-                            f'padding:2px 6px;font-family:monospace;font-size:0.76rem;">{_cod_h}</span></td>'
-                            f'<td style="padding:9px 12px;font-weight:600;color:#0f172a;">{_cli_h}</td>'
-                            f'<td style="padding:9px 8px;">{_tel_cell_h}</td>'
-                            f'<td style="padding:9px 8px;color:#0f172a;font-weight:500;">{_deu_h}</td>'
-                            f'<td style="padding:9px 8px;color:#64748b;font-size:0.82rem;white-space:nowrap;">{_hora_h}</td>'
-                            f'<td style="padding:9px 8px;text-align:center;" title="{_tipo_title}">'
-                            f'<span style="font-size:1rem;">{_tipo_icon}</span></td>'
-                            # #6 Badge "Reintentar" para Sin respuesta
-                            f'<td style="padding:9px 8px;">'
-                            f'<span style="background:{_fbg};color:{_ftxt};'
-                            f'border-radius:4px;padding:3px 8px;font-size:0.80rem;font-weight:500;'
-                            f'white-space:nowrap;">{_res_clean}</span>'
-                            f'{_reintentar_html}'
-                            f'</td>'
-                            f'<td style="padding:9px 12px;color:#64748b;font-size:0.82rem;'
-                            f'font-style:{"normal" if _notas_h else "italic"};'
-                            f'max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" '
-                            f'title="{_notas_h}">{_notas_h or "—"}</td>'
-                            f'</tr>'
-                        )
-
-                    st.markdown(
-                        f'<style>'
-                        f'.seg-tbl{{width:100%;border-collapse:collapse;font-size:0.875rem;}}'
-                        f'.seg-tbl th{{background:#f8fafc;color:#64748b;font-weight:700;font-size:0.72rem;'
-                        f'letter-spacing:.06em;text-transform:uppercase;padding:10px 8px;text-align:left;'
-                        f'border-bottom:2px solid #e2e8f0;white-space:nowrap;}}'
-                        f'.seg-tbl td{{border-bottom:1px solid #f1f5f9;vertical-align:middle;}}'
-                        f'</style>'
-                        f'<table class="seg-tbl"><thead><tr>'
-                        f'<th>#</th><th>Código</th><th>Cliente</th><th>Teléfono</th>'
-                        f'<th>Saldo Real</th><th>Enviado</th><th>Tipo</th><th>Resultado</th><th>Notas</th>'
-                        f'</tr></thead><tbody>{_html_rows}</tbody></table>',
-                        unsafe_allow_html=True
-                    )
-
-                    # RC-FEAT-037: Botones reales de reenvío para clientes Sin respuesta
-                    # Un clic navega al sub-tab "Enviar Mensajes" y pre-selecciona el cliente
-                    if _sin_respuesta_clientes:
-                        st.markdown("")
-                        st.markdown("**📤 Sin respuesta — Reenviar desde la app:**")
-                        _btn_cols = st.columns(min(len(_sin_respuesta_clientes), 3))
-                        for _bi, (_bcod, _bcli) in enumerate(_sin_respuesta_clientes):
-                            _bcli_short = _bcli[:28] + '…' if len(_bcli) > 28 else _bcli
-                            if _btn_cols[_bi % 3].button(
-                                f"📤 {_bcli_short}",
-                                key=f"reintentar_btn_{_bcod}",
-                                help=f"Ir a 'Enviar Mensajes' con {_bcli} pre-seleccionado. "
-                                     f"El envío quedará registrado en Supabase.",
-                                use_container_width=True,
-                            ):
-                                st.session_state['wa_reintentar_cod'] = _bcod
-                                st.session_state['wa_subtab_idx'] = 0
-                                st.rerun()
+                        _notas_trunc = (_notas_h[:30] + '…') if len(_notas_h) > 30 else (_notas_h or '—')
+                        _border = 'border-bottom:1px solid #f1f5f9;'
+                        _pad    = 'padding:8px 6px;'
+                        _rc = st.columns(_COL_W)
+                        _rc[0].markdown(
+                            f'<p style="margin:0;{_pad}{_border}color:#94a3b8;font-size:0.875rem;">{_i+1}</p>',
+                            unsafe_allow_html=True)
+                        _rc[1].markdown(
+                            f'<p style="margin:0;{_pad}{_border}">'
+                            f'<code style="background:#f1f5f9;border-radius:3px;padding:2px 5px;font-size:0.76rem;">'
+                            f'{_cod_h}</code></p>',
+                            unsafe_allow_html=True)
+                        _rc[2].markdown(
+                            f'<p style="margin:0;{_pad}{_border}font-weight:600;color:#0f172a;font-size:0.875rem;">'
+                            f'{_cli_h}</p>',
+                            unsafe_allow_html=True)
+                        _rc[3].markdown(
+                            f'<p style="margin:0;{_pad}{_border}color:#374151;font-size:0.85rem;">'
+                            f'{_tel_h or "—"}</p>',
+                            unsafe_allow_html=True)
+                        _rc[4].markdown(
+                            f'<p style="margin:0;{_pad}{_border}color:#0f172a;font-weight:500;">{_deu_h}</p>',
+                            unsafe_allow_html=True)
+                        _rc[5].markdown(
+                            f'<p style="margin:0;{_pad}{_border}color:#64748b;font-size:0.82rem;white-space:nowrap;">'
+                            f'{_hora_h}</p>',
+                            unsafe_allow_html=True)
+                        _rc[6].markdown(
+                            f'<p style="margin:0;{_pad}{_border}text-align:center;" title="{_tipo_title}">'
+                            f'{_tipo_icon}</p>',
+                            unsafe_allow_html=True)
+                        # Resultado — badge + botón ↩ Reenviar real solo para "Sin respuesta"
+                        with _rc[7]:
+                            st.markdown(
+                                f'<p style="margin:0;padding:6px 6px 2px 6px;">'
+                                f'<span style="background:{_fbg};color:{_ftxt};border-radius:4px;'
+                                f'padding:3px 8px;font-size:0.80rem;font-weight:500;white-space:nowrap;">'
+                                f'{_res_clean}</span></p>',
+                                unsafe_allow_html=True)
+                            if _res_clean == 'Sin respuesta':
+                                # Wrapper con clase CSS para estilo badge
+                                st.markdown('<div class="reenv-btn">', unsafe_allow_html=True)
+                                if st.button(
+                                    "↩ Reenviar",
+                                    key=f"reenv_{_row_key_h}_{_ri}",
+                                    help=(
+                                        f"Ir a '📤 Enviar Mensajes' con {_cli_h} ya "
+                                        f"pre-seleccionado. El envío queda registrado en Supabase."
+                                    ),
+                                ):
+                                    st.session_state['wa_reintentar_cod'] = _cod_h
+                                    st.session_state['wa_subtab_idx'] = 0
+                                    st.rerun()
+                                st.markdown('</div>', unsafe_allow_html=True)
+                        _rc[8].markdown(
+                            f'<p style="margin:0;{_pad}{_border}color:#64748b;font-size:0.82rem;'
+                            f'font-style:{"normal" if _notas_h else "italic"};" title="{_notas_h}">'
+                            f'{_notas_trunc}</p>',
+                            unsafe_allow_html=True)
 
                 st.markdown("")
                 # Botones de pie
