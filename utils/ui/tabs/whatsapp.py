@@ -947,7 +947,8 @@ def render_tab(df_filtered, config):
                     _source_fb = _meta_fb.get('source', '') if isinstance(_meta_fb, dict) else ''
                     _tipo_fb   = 'Gestión' if _source_fb else 'Envío WA'
                     # Solo añadir filas de "Envío WA" si ese cliente no viene ya del lote de sesión.
-                    # Las filas de "Gestión" siempre se añaden (son registros del cobrador).
+                    # Recalcular _cids_sesion después de cada append para evitar duplicar el mismo
+                    # cliente que aparezca en múltiples lotes históricos de Supabase.
                     if _tipo_fb == 'Envío WA' and _cid in _cids_sesion:
                         # El lote de sesión ya lo tiene — solo actualizamos resultados si hay gestión
                         pass
@@ -981,6 +982,7 @@ def render_tab(df_filtered, config):
                             'RowKey': _row_key_fb, 'Tipo': _tipo_fb, 'Notas': _notas_fb,
                             'DeudaS': _deuda_s_fb, 'DeudaD': _deuda_d_fb,
                         })
+                        _cids_sesion.add(_cid)  # evita duplicar cliente si aparece en otro lote histórico
                     # Gestiones manuales → marcar como ya guardadas
                     if _tipo_fb == 'Gestión':
                         _meta = _g.get('metadata') or {}
