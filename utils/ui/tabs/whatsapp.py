@@ -1168,10 +1168,15 @@ def render_tab(df_filtered, config):
                     key=lambda x: _parse_saldo(x[1]),
                     reverse=True  # mayor saldo primero
                 )
+                # Clientes con Gestión formal en Supabase → excluir su entrada de Envío WA (evita duplicados)
+                _cids_with_gestion = {d.get('CodCliente', '') for d in _details_sesion if d.get('Tipo') == 'Gestión'}
                 _rows_saved = [
                     (i, d) for i, d in enumerate(_details_sesion)
-                    if d.get('Tipo') == 'Gestión'                         # solo gestiones manuales
-                    or _resultados_guard.get(d.get('RowKey', d.get('CodCliente', '')))  # o guardado en sesión
+                    if d.get('Tipo') == 'Gestión'                         # gestiones del cobrador
+                    or (
+                        _resultados_guard.get(d.get('RowKey', d.get('CodCliente', '')))
+                        and d.get('CodCliente', '') not in _cids_with_gestion  # sin Gestión formal aún
+                    )
                 ]
 
                 # ── Pendientes (requieren acción del cobrador) ────────────────
@@ -1363,6 +1368,9 @@ def render_tab(df_filtered, config):
                                 _deu_h = str(_raw) if _raw else '—'
                         _tipo_h     = _det.get('Tipo', 'Envío WA')
                         _notas_h    = _det.get('Notas', '')
+                        # Si es envío WA con nota de plantilla y ya tiene resultado registrado → nota limpia
+                        if _tipo_h != 'Gestión' and _notas_h.startswith('WA masivo'):
+                            _notas_h = ''
                         _hora_h_raw = _det.get('Hora', '')
                         if _hora_h_raw and len(_hora_h_raw) <= 5:
                             _hora_h = datetime.now().strftime('%d/%m/%Y ') + _hora_h_raw
