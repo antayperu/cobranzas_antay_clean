@@ -1017,10 +1017,10 @@ def render_tab(df_filtered, config):
             if not _df_gest.empty and 'resultado' in _df_gest.columns:
                 _mask_envio    = _df_gest.apply(_es_envio_masivo_kpi, axis=1)
                 _mask_gestion  = ~_mask_envio
-                _total_env     = int(_mask_envio.sum())
-                _con_gestion   = int(_mask_gestion.sum())
                 _cids_enviados = set(_df_gest[_mask_envio]['cliente_id'].astype(str))
                 _cids_gestion  = set(_df_gest[_mask_gestion]['cliente_id'].astype(str))
+                _total_env     = len(_cids_enviados)          # clientes únicos con envío WA
+                _con_gestion   = len(_cids_gestion)           # clientes únicos con gestión registrada
                 _pend_resp     = len(_cids_enviados - _cids_gestion)
                 _sin_contacto  = int((_df_gest[_mask_gestion]['resultado'] == 'SIN_RESPUESTA').sum())
             else:
