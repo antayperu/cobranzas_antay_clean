@@ -997,6 +997,13 @@ def render_tab(df_filtered, config):
                             pass
                         _notas_fb   = str(_g.get('notas', '') or '')
                         _msg_fb     = ''
+                        # RC-BUG-049: metadata viene como STRING JSON desde Supabase, hay que parsear.
+                        if isinstance(_meta_fb, str):
+                            try:
+                                import json as _json_parse
+                                _meta_fb = _json_parse.loads(_meta_fb)
+                            except Exception:
+                                _meta_fb = {}
                         if isinstance(_meta_fb, dict):
                             _msg_fb = str(_meta_fb.get('mensaje_enviado', '') or '')
                         _row_key_fb = f"{_cid}_{_idx}"
