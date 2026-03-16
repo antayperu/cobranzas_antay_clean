@@ -46,7 +46,11 @@ import streamlit.components.v1 as components
 # ... (rest of imports)
 
 # Cargar Configuración Global
-CONFIG = sm.load_settings()
+# Se guarda en session_state para que save_settings() + st.rerun() reflejen
+# los cambios sin necesidad de reiniciar la app completa.
+if 'app_config' not in st.session_state:
+    st.session_state['app_config'] = sm.load_settings()
+CONFIG = st.session_state['app_config']
 
 # --- RC-UX-PREMIUM: Page Layout Wide & Corporate Title ---
 st.set_page_config(
@@ -286,8 +290,14 @@ if wizard_action == "PROCESS_TRIGGERED":
                             "cycle_timestamp": cycle_id,
                         },
                     )
-                    if ok_cloud:
-                        st.toast("Sesion guardada en la nube", icon="☁️")
+                    if not ok_cloud:
+                        st.session_state['data_ready'] = False
+                        st.session_state['df_final'] = pd.DataFrame()
+                        st.error("No se pudo guardar el ciclo en Supabase. Operacion bloqueada.")
+                        st.caption(msg_cloud or "Persistencia de ciclo fallida en cloud.")
+                        st.stop()
+
+                    st.toast("Sesion guardada en la nube", icon="☁️")
 
                     st.success("✅ Datos procesados exitosamente")
                     st.rerun()

@@ -451,7 +451,7 @@ def get_wa_gestiones_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
     try:
         res = _safe_execute(
             client.table("gestiones")
-            .select("cliente_id, resultado, fecha, created_at, metadata")
+            .select("cliente_id, resultado, notas, fecha, created_at, metadata")
             .eq("tipo_gestion", "WHATSAPP")
             .eq("cycle_id", str(cycle_id).strip())
             .order("created_at", desc=False)

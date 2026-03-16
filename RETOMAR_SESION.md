@@ -1,12 +1,135 @@
-# PROMPT PARA RETOMAR SESIÓN - ReporteCobranzas v1.5.2
+# RETOMAR SESIÓN - ReporteCobranzas
 
-**Fecha de pausa:** 2026-01-30 00:15  
+**Fecha de pausa:** 2026-03-15  
 **Proyecto:** ReporteCobranzas - Antay Perú  
-**Versión en desarrollo:** v1.5.2-fullscreen-tracking-fix
+**Versión actual:** v1.7.3 (fix seguimiento post-envío WA)
 
 ---
 
-## PROMPT PARA NUEVO CHAT
+## INSTRUCCIÓN PARA EL NUEVO CHAT
+
+Adjunta este archivo al inicio del chat y escribe:
+
+> **"Retomemos. Lee el RETOMAR_SESION.md adjunto y confirmame el punto de retoma."**
+
+---
+
+## ESTADO DEL REPOSITORIO
+
+- **Rama activa local:** `dev` (commit `58ca367`)
+- **`main` / `origin/main`:** sincronizado (ramas actualizadas al cierre de sesión)
+- **Ramas remotas:** solo `main` y `dev`
+- **Tag producción:** `v1.6.0` (TIER 1 — 141/141 tests)
+
+---
+
+## AMBIENTES
+
+| Ambiente | URL | Puerto | Supabase |
+|----------|-----|--------|----------|
+| PROD | localhost:8501 | 8501 | proyecto PROD |
+| STAGING | localhost:8502 | 8502 | `hrnqngndnohkkegtzgjg.supabase.co` |
+
+**Arrancar staging:**
+```powershell
+cd c:\dev\ReporteCobranzas
+$env:SUPABASE_URL="https://hrnqngndnohkkegtzgjg.supabase.co"
+$env:SUPABASE_SERVICE_ROLE_KEY="<ver .env.staging>"
+$env:NOTION_TOKEN="<ver .env.staging>"
+streamlit run app.py --server.port 8502
+```
+
+---
+
+## LO QUE SE HIZO HOY (2026-03-15)
+
+### RC-BUG-030: Fix Sub-tab Seguimiento Post-Envío ✅ (commit `58ca367`)
+- **Tab persistencia**: `st.tabs` → `st.radio` por **índice** (`wa_subtab_idx`)
+  - Causa raíz: el label cambia con emoji 🔴, lo que rompía el match de string y reseteaba al tab 0
+  - Fix: persistir índice entero, inmune a cambios de label
+- **Monto multimoneda**: guarda `DeudaS`/`DeudaD` explícitos en `wa_details` al enviar
+  - Fallback Supabase: recalcula `DeudaS`/`DeudaD` desde `df_filtered` por moneda
+  - Deduplicación por `CodCliente`: evita doble conteo cuando un cliente tiene fila Envío WA + fila Gestión
+- **Resultado esperado**: `S/ 623 + $ 374` (no el doble)
+
+### Criterios de aceptación definidos
+- Mensajes enviados = filas sin `metadata.source` (envío automático)
+- Con gestión = filas con `metadata.source` (cobrador registró)
+- Pendientes = clientes con envío WA sin gestión manual aún
+- Tabla: si cliente tiene Envío WA + Gestión → solo se muestra la Gestión
+- Monto: cada `CodCliente` se cuenta una sola vez
+
+---
+
+## PRÓXIMOS PASOS (EN ORDEN)
+
+### 1. TIER 2 — Smoke test completo en staging (localhost:8502)
+Cargar archivos Excel y validar:
+- [ ] Panel post-envío WA (RC-FEAT-019) — registrar resultado, verificar KPIs y monto
+- [ ] Módulo Acuerdos de Pago (RC-FEAT-021) — crear acuerdo con cuotas
+- [ ] Bandeja Pendientes (RC-FEAT-022) — verificar alertas automáticas
+- [ ] Banner "🧪 AMBIENTE DE PRUEBAS" visible en sidebar
+
+### 2. RC-FEAT-026: Panel envío WA de prueba en Tab Configuración
+- Smoke test sin datos reales para validar plantillas y conexión WA
+
+### 3. Merge dev → main cuando staging esté verde
+
+### 3. RC-FEAT-026 — Panel envío WA de prueba (feature branch)
+```powershell
+git checkout dev
+git checkout -b feature/wa-test-send
+```
+- Archivo: `utils/ui/tabs/config_tab.py`
+- Ubicación: dentro de **Section 7** (WhatsApp), después del panel de sesión activa
+- Funcionalidad: input teléfono (default `+51921566036`), textarea mensaje, botón enviar
+- Llama a: `send_whatsapp_messages_direct()` con contact_data ficticio
+- Flujo: feature → dev → smoke test staging → merge main → PROD
+
+---
+
+## LO COMPLETADO EN ESTA SESIÓN (2026-03-13/14)
+
+### TIER 1 CRM WhatsApp — v1.6.0 (141/141 tests ✅)
+- RC-FEAT-019: Panel resultado post-envío WA
+- RC-FEAT-020: Biblioteca 7 plantillas WA
+- RC-FEAT-021: Módulo acuerdos de pago con cuotas
+- RC-FEAT-022: Bandeja pendientes del día
+- RC-FEAT-023: Trazabilidad completa (reconcile + resumen tablas)
+
+### Hotfixes post-TIER1
+- RC-BUG-024/025: Fix SQL Supabase (CREATE POLICY + insert_acuerdo_pago)
+- RC-BUG-026: Campos ESTADO en blanco al restaurar → fillna PENDIENTE
+- RC-BUG-027: Selectbox plantilla WA resetea en rerun → key fija
+- RC-BUG-028: Variable {PROX_VENC} faltante en plantillas
+
+### Mejoras CRM
+- RC-FEAT-024: Tabs persisten al preparar nuevo ciclo
+- RC-FEAT-025: Auto-restore último ciclo al abrir app
+- RC-BUG-029: Fix Cambiar ciclo sobreescrito por auto-restore
+
+### Infraestructura
+- Banner STAGING/PROD en sidebar (RC-UX-013) — gitflow completo
+- Ambiente staging configurado (Supabase + .env.staging)
+- Repo limpio: master eliminado, 5 feature branches eliminadas
+- Gitflow Antay formalizado: `feature/* → dev → staging → main → PROD`
+- Backlog, TICKETS_ANTAY.md y PDF propuesta actualizados
+
+---
+
+## GITFLOW ANTAY (RECORDATORIO)
+
+```
+1. git checkout dev
+2. git checkout -b feature/nombre-feature
+3. [desarrollar + commit]
+4. git checkout dev && git merge feature/nombre --no-ff
+5. [smoke test en staging localhost:8502]
+6. git checkout main && git merge dev --no-ff
+7. git push origin main && git push origin dev
+8. git branch -d feature/nombre
+```
+
 
 ```
 Hola Antigravity,

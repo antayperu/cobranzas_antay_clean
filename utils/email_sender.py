@@ -683,7 +683,11 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                         server.starttls()
                         server.ehlo()
                 
-                server.login(smtp_config['user'], smtp_config['password'])
+                user = str(smtp_config.get('user', '')).strip()
+                password = str(smtp_config.get('password', '')).replace(' ', '').strip()
+                if not user or not password:
+                    raise ValueError("Credenciales SMTP vacías: define usuario y contraseña/app-password.")
+                server.login(user, password)
                 stats['log'].append(f"✅ [RunID:{run_id}] Conexión SMTP Exitosa.")
             except smtplib.SMTPAuthenticationError:
                 err_auth = "❌ Error de Autenticación (535). Si usas Gmail con 2FA, NECESITAS una 'Contraseña de Aplicación'. Tu clave normal de Google no funcionará."
@@ -1096,7 +1100,15 @@ def test_smtp_connectivity(smtp_config):
             
         # 3. Login
         try:
-            server.login(smtp_config['user'], smtp_config['password'])
+            user = str(smtp_config.get('user', '')).strip()
+            password = str(smtp_config.get('password', '')).replace(' ', '').strip()
+            if not user or not password:
+                return {
+                    'ok': False,
+                    'msg': "Faltan credenciales SMTP (usuario/contraseña). Guarda SMTP o define SMTP_USER/SMTP_PASSWORD en el entorno.",
+                    'log': log,
+                }
+            server.login(user, password)
             log.append("✅ [Auth] Autenticación Exitosa.")
             server.quit()
             return {'ok': True, 'msg': "Conexión y credenciales válidas.", 'log': log}
