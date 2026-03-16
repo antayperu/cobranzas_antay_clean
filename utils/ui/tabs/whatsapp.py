@@ -905,13 +905,26 @@ def render_tab(df_filtered, config):
                             'Notas': f"WA masivo | {c.get('TOTAL_SALDO_REAL', '')} | Tel: {c.get('telefono', '')}",
                             'Mensaje': str(c.get('mensaje', '') or ''),
                         })
-                    st.session_state['last_wa_send_results'] = {
+                    # RC-BUG-052: Mantener historial de envíos en lugar de sobrescribir
+                    # Esto permite múltiples reenvíos en el mismo ciclo
+                    _new_send_result = {
                         'exitosos': results['exitosos'],
                         'fallidos': results['fallidos'],
                         'details': wa_details,
                         'cycle_id': current_cycle_id,
                         'resultados_registrados': {},
                     }
+                    
+                    # Inicializar historial si no existe
+                    if 'wa_send_history' not in st.session_state:
+                        st.session_state['wa_send_history'] = []
+                    
+                    # Agregar nuevo envío al historial
+                    st.session_state['wa_send_history'].append(_new_send_result)
+                    
+                    # Mantener también referencia al último para compatibilidad
+                    st.session_state['last_wa_send_results'] = _new_send_result
+                    
                     if current_wa_batch_id:
                         st.session_state['last_wa_batch_id'] = current_wa_batch_id
                     st.rerun()
@@ -929,12 +942,30 @@ def render_tab(df_filtered, config):
     # ══════════════════════════════════════════════════════════════════════════
     if _en_seguimiento:
         _cycle_id_actual = st.session_state.get('cycle_id', '')
-        _wa_res_sesion   = st.session_state.get('last_wa_send_results')
-
-        # Obtener datos del último envío en sesión para la tabla interactiva
+        
+        # RC-BUG-052: Consolidar historial de envíos para permitir múltiples reenvíos
+        # Obtener todos los envíos del ciclo actual, no solo el último
+        _wa_send_history = st.session_state.get('wa_send_history', [])
+        _all_details_consolidated = []
+        _resultados_consolidados = {}
+        
+        # Consolidar detalles de TODOS los envíos del ciclo actual
+        for _send_result in _wa_send_history:
+            if _send_result.get('cycle_id') == _cycle_id_actual:
+                _all_details_consolidated.extend(_send_result.get('details', []))
+                # Consolidar también los resultados registrados
+                _resultados_consolidados.update(_send_result.get('resultados_registrados', {}))
+        
+        # Si no hay historial, usar el último para compatibilidad
+        if not _all_details_consolidated:
+            _wa_res_sesion = st.session_state.get('last_wa_send_results')
+            _all_details_consolidated = list(_wa_res_sesion.get('details', [])) if _wa_res_sesion else []
+            _resultados_consolidados = _wa_res_sesion.get('resultados_registrados', {}) if _wa_res_sesion else {}
+        
+        # Obtener datos consolidados para la tabla interactiva
         # RC-BUG-048: list() crea una COPIA local, no una referencia al objeto en session_state.
         # Sin esto, cada rerun iba acumulando filas de Supabase sobre el mismo objeto → duplicados.
-        _details_sesion = list(_wa_res_sesion.get('details', [])) if _wa_res_sesion else []
+        _details_sesion = list(_all_details_consolidated)
         _cycle_id_lote  = _wa_res_sesion.get('cycle_id', _cycle_id_actual) if _wa_res_sesion else _cycle_id_actual
 
         if not _details_sesion and not _cycle_id_actual:
@@ -1170,7 +1201,8 @@ def render_tab(df_filtered, config):
                     "Fallo envío":        ("#7f1d1d", "#fef2f2"),
                 }
 
-                _resultados_guard = _wa_res_sesion.get('resultados_registrados', {}) if _wa_res_sesion else {}
+                # RC-BUG-052: Usar resultados consolidados en lugar de solo del último envío
+                _resultados_guard = _resultados_consolidados.copy()
 
                 # ── Separar filas según Tipo ────────────────────────────────────
                 # Pendientes = Envío WA SIN gestión posterior del cobrador
@@ -1394,15 +1426,24 @@ def render_tab(df_filtered, config):
                                 )
                                 if _ok:
                                     _resultados_guard[_row_key] = _sel
+                                    
+                                    # RC-BUG-052: Actualizar el historial de envíos, no solo el último
+                                    _wa_send_history = st.session_state.get('wa_send_history', [])
+                                    for _send_result in _wa_send_history:
+                                        if _send_result.get('cycle_id') == _cycle_id_lote:
+                                            # Persistir nota en todos los detalles del historial
+                                            for _d in _send_result.get('details', []):
+                                                if _d.get('RowKey') == _row_key:
+                                                    _d['Notas'] = _nota if _nota else f"Resultado: {_sel}"
+                                            # Actualizar resultados registrados
+                                            _send_result['resultados_registrados'] = _resultados_guard
+                                    
+                                    # También mantener actualizado el último para compatibilidad
+                                    _wa_res_sesion = st.session_state.get('last_wa_send_results')
                                     if _wa_res_sesion:
-                                        # RC-BUG-032: persistir nota en session_state para que
-                                        # el historial la muestre tras st.rerun()
-                                        for _d in _wa_res_sesion.get('details', []):
-                                            if _d.get('RowKey') == _row_key:
-                                                _d['Notas'] = _nota if _nota else f"Resultado: {_sel}"
-                                                break
                                         _wa_res_sesion['resultados_registrados'] = _resultados_guard
                                         st.session_state['last_wa_send_results'] = _wa_res_sesion
+                                    
                                     st.toast(f"Guardado: {_cli}", icon="✅")
                                     st.rerun()
                                 else:
@@ -1558,11 +1599,11 @@ def render_tab(df_filtered, config):
                         _res_norm2 = _RESULTADO_MAP.get(_sel2, "PENDIENTE")
                         # RC-BUG-051: Recuperar timestamp original del envío para consistencia de fecha
                         _hora_iso2 = None
-                        if _wa_res_sesion:
-                            for _d in _wa_res_sesion.get('details', []):
-                                if _d.get('RowKey') == _row_key2 or _d.get('CodCliente') == _cod2:
-                                    _hora_iso2 = _d.get('HoraISO')
-                                    break
+                        # RC-BUG-052: Buscar en TODO el historial consolidado, no solo el último envío
+                        for _d in _all_details_consolidated:
+                            if _d.get('RowKey') == _row_key2 or _d.get('CodCliente') == _cod2:
+                                _hora_iso2 = _d.get('HoraISO')
+                                break
                         _ok2, _ = dbm.insert_gestion(
                             cliente_id=_cod2, tipo_gestion='WHATSAPP',
                             resultado=_res_norm2,
@@ -1574,6 +1615,15 @@ def render_tab(df_filtered, config):
                         if _ok2:
                             _resultados_guard[_row_key2] = _sel2
                             _guardados_tot += 1
+                    
+                    # RC-BUG-052: Actualizar el historial completo de envíos
+                    _wa_send_history = st.session_state.get('wa_send_history', [])
+                    for _send_result in _wa_send_history:
+                        if _send_result.get('cycle_id') == _cycle_id_lote:
+                            _send_result['resultados_registrados'] = _resultados_guard
+                    
+                    # También actualizar el último para compatibilidad
+                    _wa_res_sesion = st.session_state.get('last_wa_send_results')
                     if _wa_res_sesion:
                         _wa_res_sesion['resultados_registrados'] = _resultados_guard
                         st.session_state['last_wa_send_results'] = _wa_res_sesion
