@@ -1089,7 +1089,16 @@ def render_tab(df_filtered, config):
                         _cod     = _det.get('CodCliente', '')
                         _row_key = _det.get('RowKey', _cod)
                         _cli     = _det.get('Cliente', '')
-                        _deu     = _det.get('Deuda', '')
+                        _deu_s_p = _det.get('DeudaS', '')
+                        _deu_d_p = _det.get('DeudaD', '')
+                        if _deu_s_p or _deu_d_p:
+                            _deu = ' + '.join([p for p in [_deu_s_p, _deu_d_p] if p])
+                        else:
+                            _raw_p = _det.get('Deuda', '')
+                            try:
+                                _deu = f"S/ {float(_raw_p):,.2f}" if _raw_p else '—'
+                            except (ValueError, TypeError):
+                                _deu = str(_raw_p) if _raw_p else '—'
                         _hora_raw = _det.get('Hora', '')
                         if _hora_raw and len(_hora_raw) <= 5:   # solo HH:MM
                             _hora = datetime.now().strftime('%d/%m/%Y ') + _hora_raw
