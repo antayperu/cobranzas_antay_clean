@@ -1288,8 +1288,8 @@ def render_tab(df_filtered, config):
                             'style="font-size:0.72rem;background:#e0f2fe;color:#0369a1;'
                             'border-radius:3px;padding:2px 6px;text-decoration:none;cursor:pointer;'
                             'white-space:nowrap;" '
-                            'title="Ir a Enviar Mensajes para reenviar con registro en Supabase">'
-                            '&#8617; Reintentar</a>'
+                            'title="Reintentar: ir a Enviar Mensajes con este cliente">'
+                            '&#8617;</a>'
                             if _res_clean == 'Sin respuesta' else ''
                         )
                         _tipo_icon  = '📋' if _tipo_h == 'Gestión' else '📤'
