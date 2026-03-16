@@ -1101,6 +1101,20 @@ def render_tab(df_filtered, config):
 
                 # ── Pendientes (requieren acción del cobrador) ────────────────
                 if _rows_pending:
+                    # #8 Barra de progreso del ciclo
+                    _total_ciclo  = len(_rows_pending) + len(_rows_saved)
+                    _pct_ciclo    = int(len(_rows_saved) / _total_ciclo * 100) if _total_ciclo else 0
+                    st.markdown(
+                        f'<div style="margin-bottom:10px;">' 
+                        f'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+                        f'<span style="font-size:0.78rem;color:#475569;font-weight:600;">Progreso del ciclo</span>'
+                        f'<span style="font-size:0.78rem;color:#475569;">{len(_rows_saved)} de {_total_ciclo} gestionados · {_pct_ciclo}%</span>'
+                        f'</div>'
+                        f'<div style="background:#e2e8f0;border-radius:999px;height:8px;">'
+                        f'<div style="background:#1e7e34;width:{_pct_ciclo}%;height:8px;border-radius:999px;transition:width 0.4s ease;"></div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True
+                    )
                     st.markdown("**Registrar resultado de gestión**")
                     _COL_P = [0.4, 1.2, 2.8, 1.5, 1.5, 2.5, 2, 1.5]
                     _hdr_p = st.columns(_COL_P)
@@ -1139,8 +1153,22 @@ def render_tab(df_filtered, config):
                                             unsafe_allow_html=True)
                         _cols_p[2].markdown(f"<span style='font-weight:600;color:#0f172a;'>{_cli}</span>",
                                             unsafe_allow_html=True)
-                        _cols_p[3].markdown(f"<span style='color:#374151;'>{_deu}</span>",
-                                            unsafe_allow_html=True)
+                        # #7 Color semántico en saldo — rojo para deuda alta, verde para baja
+                        import re as _re_saldo
+                        _saldo_num = 0.0
+                        for _sm in _re_saldo.findall(r'[\d,\.]+', _deu):
+                            try: _saldo_num += float(_sm.replace(',', ''))
+                            except: pass
+                        if _saldo_num >= 5000:
+                            _saldo_color = '#b91c1c'   # rojo — deuda alta
+                        elif _saldo_num >= 1000:
+                            _saldo_color = '#d97706'   # naranja — deuda media
+                        else:
+                            _saldo_color = '#374151'   # gris — deuda baja
+                        _cols_p[3].markdown(
+                            f"<span style='color:{_saldo_color};font-weight:600;'>{_deu}</span>",
+                            unsafe_allow_html=True
+                        )
                         _cols_p[4].markdown(f"<span style='font-size:0.82rem;color:#64748b;'>{_hora}</span>",
                                             unsafe_allow_html=True)
                         _sel = _cols_p[5].selectbox(
@@ -1224,6 +1252,13 @@ def render_tab(df_filtered, config):
                                 _res_clean = _res_clean[len(_pfx):]
                                 break
                         _ftxt, _fbg = _RES_COLOR.get(_res_clean, ('#374151', '#f1f5f9'))
+                        # #6 Badge "Reintentar" para Sin respuesta — precalculado fuera del f-string
+                        _reintentar_html = (
+                            '&nbsp;<a href="https://wa.me/" target="_blank" '
+                            'style="font-size:0.72rem;color:#0e7490;text-decoration:none;" '
+                            'title="Reenviar mensaje WA">\u21a9 Reintentar</a>'
+                            if _res_clean == 'Sin respuesta' else ''
+                        )
                         # #4 Tipo como ícono con tooltip — reduce ruido visual
                         _tipo_icon  = '📋' if _tipo_h == 'Gestión' else '📤'
                         _tipo_title = 'Gestión manual del cobrador' if _tipo_h == 'Gestión' else 'Envío masivo WA'
@@ -1245,9 +1280,13 @@ def render_tab(df_filtered, config):
                             f'<td style="padding:9px 8px;color:#64748b;font-size:0.82rem;white-space:nowrap;">{_hora_h}</td>'
                             f'<td style="padding:9px 8px;text-align:center;" title="{_tipo_title}">'
                             f'<span style="font-size:1rem;">{_tipo_icon}</span></td>'
-                            f'<td style="padding:9px 8px;"><span style="background:{_fbg};color:{_ftxt};'
+                            # #6 Badge "Reintentar" para Sin respuesta
+                            f'<td style="padding:9px 8px;">'
+                            f'<span style="background:{_fbg};color:{_ftxt};'
                             f'border-radius:4px;padding:3px 8px;font-size:0.80rem;font-weight:500;'
-                            f'white-space:nowrap;">{_res_clean}</span></td>'
+                            f'white-space:nowrap;">{_res_clean}</span>'
+                            f'{_reintentar_html}'
+                            f'</td>'
                             f'<td style="padding:9px 12px;color:#64748b;font-size:0.82rem;'
                             f'font-style:{"normal" if _notas_h else "italic"};'
                             f'max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" '
@@ -1281,9 +1320,14 @@ def render_tab(df_filtered, config):
                     mime="text/csv",
                     use_container_width=True,
                 )
+                # #9 Tooltip mejorado en "Guardar todos"
                 if _col_save.button(
                     "Guardar todos los resultados", type="primary", use_container_width=True,
-                    help="Guarda en Supabase todos los desplegables de 'Resultado' que aún no hayan sido guardados individualmente."
+                    help=(
+                        "Guarda en Supabase los resultados seleccionados en los desplegables de la sección "
+                        "'Registrar resultado de gestión'. Solo guarda filas con resultado distinto a "
+                        "'⏳ Sin registrar'. Las gestiones ya guardadas individualmente no se duplican."
+                    )
                 ):
                     _guardados_tot = 0
                     for _i2, _det2 in enumerate(_details_sesion):
