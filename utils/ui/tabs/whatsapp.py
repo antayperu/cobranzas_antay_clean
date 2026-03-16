@@ -1138,10 +1138,34 @@ def render_tab(df_filtered, config):
                 _resultados_guard = _wa_res_sesion.get('resultados_registrados', {}) if _wa_res_sesion else {}
 
                 # ── Separar filas según Tipo ────────────────────────────────────
-                # Pendientes = Envío WA sin gestión manual del cobrador aún
-                # Historial  = Gestiones manuales ya registradas por el cobrador
+                # Pendientes = Envío WA SIN gestión posterior del cobrador
+                # Regla: si el último WA enviado es más reciente que la última gestión → pendiente
+                def _parse_hora_dt(h):
+                    if not h:
+                        return datetime.min
+                    for _fmt in ['%d/%m/%Y %H:%M', '%d/%m/%Y %H:%M:%S', '%Y-%m-%d %H:%M:%S']:
+                        try:
+                            return datetime.strptime(h, _fmt)
+                        except Exception:
+                            pass
+                    return datetime.min
+
+                _ultima_gestion: dict = {}   # CodCliente → datetime de última Gestión
+                _ultimo_envio:   dict = {}   # CodCliente → datetime de último Envío WA
+                for _d_ts in _details_sesion:
+                    _cid_ts = _d_ts.get('CodCliente', '')
+                    _h_ts   = _parse_hora_dt(_d_ts.get('Hora', ''))
+                    if _d_ts.get('Tipo') == 'Gestión':
+                        if _cid_ts not in _ultima_gestion or _h_ts > _ultima_gestion[_cid_ts]:
+                            _ultima_gestion[_cid_ts] = _h_ts
+                    else:
+                        if _cid_ts not in _ultimo_envio or _h_ts > _ultimo_envio[_cid_ts]:
+                            _ultimo_envio[_cid_ts] = _h_ts
+
+                # Gestionado = última gestión >= último envío WA (no hay envío posterior sin gestionar)
                 _cids_gestion_manual = {
-                    d.get('CodCliente', '') for d in _details_sesion if d.get('Tipo') == 'Gestión'
+                    _cid_ts for _cid_ts, _g_t in _ultima_gestion.items()
+                    if _g_t >= _ultimo_envio.get(_cid_ts, datetime.min)
                 }
                 # #1 Ordenar pendientes por saldo mayor → menor para priorizar deudas grandes
                 def _parse_saldo(d):
