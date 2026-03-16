@@ -918,22 +918,23 @@ def render_tab(df_filtered, config):
         if not _details_sesion and not _cycle_id_actual:
             st.info("📭 No hay ciclo activo ni envíos registrados. Carga un archivo y envía mensajes para ver el seguimiento.")
         else:
-            # ── Leer Supabase ─────────────────────────────────────────────────
+            # ── Leer Supabase — siempre, para incluir lotes anteriores del ciclo ──
             _gestiones_wa  = dbm.get_wa_gestiones_by_cycle(_cycle_id_actual) if _cycle_id_actual else []
             _df_gest       = pd.DataFrame(_gestiones_wa) if _gestiones_wa else pd.DataFrame()
 
-            # ── Fallback: reconstruir lista de clientes desde Supabase + df_filtered
-            # si no hay datos de sesión (p.ej. se recargó la página)
+            # ── Merge: añadir a _details_sesion los clientes del ciclo en Supabase
+            # que no estén ya presentes (evita duplicados del lote actual en sesión).
+            # Esto permite ver TODOS los lotes del mismo cycle_id sin recargar.
             _RESULTADO_DISPLAY_MAP = {
                 'EXITOSO':      '✅ Acordó pagar',
                 'PENDIENTE':    '🤝 Prometió pagar',
                 'SIN_RESPUESTA':'📵 Sin respuesta',
                 'REPROGRAMADO': '🔴 Derivar a Legal',
             }
-            if not _details_sesion and not _df_gest.empty:
-                _resultados_supabase = {}
-                # Mostrar TODOS los registros de Supabase (un cliente puede tener varios:
-                # uno por el envío masivo y otro por la gestión manual del cobrador)
+            _resultados_supabase = {}
+            if not _df_gest.empty:
+                # CodClientes ya presentes en la sesión actual (lote recién enviado)
+                _cids_sesion = {str(d.get('CodCliente', '')) for d in _details_sesion}
                 _df_gest_sorted = _df_gest.copy()
                 if 'created_at' in _df_gest_sorted.columns:
                     _df_gest_sorted['created_at'] = pd.to_datetime(_df_gest_sorted['created_at'], errors='coerce')
@@ -942,58 +943,63 @@ def render_tab(df_filtered, config):
                     _cid = str(_g.get('cliente_id', ''))
                     if not _cid:
                         continue
-                    _empresa, _tel, _saldo = _cid, '', ''
-                    _deuda_s_fb, _deuda_d_fb = '', ''
-                    if not df_filtered.empty and 'COD CLIENTE' in df_filtered.columns:
-                        _filas = df_filtered[df_filtered['COD CLIENTE'].astype(str) == _cid]
-                        if not _filas.empty:
-                            _r = _filas.iloc[0]
-                            _empresa = str(_r.get('EMPRESA', _cid))
-                            _tel     = str(_r.get('TELÉFONO', ''))
-                            _saldo   = str(_r.get('SALDO REAL', ''))
-                            # Calcular montos por moneda para el KPI multimoneda
-                            if 'MONEDA' in _filas.columns and 'SALDO REAL' in _filas.columns:
-                                _df_sol_fb = _filas[_filas['MONEDA'].astype(str).str.startswith('S', na=False)]
-                                _df_dol_fb = _filas[~_filas['MONEDA'].astype(str).str.startswith('S', na=False)]
-                                _sum_s_fb  = float(_df_sol_fb['SALDO REAL'].sum()) if len(_df_sol_fb) > 0 else 0.0
-                                _sum_d_fb  = float(_df_dol_fb['SALDO REAL'].sum()) if len(_df_dol_fb) > 0 else 0.0
-                                if _sum_s_fb > 0: _deuda_s_fb = f"S/ {_sum_s_fb:,.2f}"
-                                if _sum_d_fb > 0: _deuda_d_fb = f"$ {_sum_d_fb:,.2f}"
-                    _fecha_hora_g = ''
-                    try:
-                        _fecha_hora_g = pd.to_datetime(_g.get('created_at', '')).strftime('%d/%m/%Y %H:%M')
-                    except Exception:
-                        pass
-                    # Tipo: 'Gestión' si fue registrado manualmente, 'Envío WA' si fue el envío masivo
                     _meta_fb   = _g.get('metadata') or {}
                     _source_fb = _meta_fb.get('source', '') if isinstance(_meta_fb, dict) else ''
                     _tipo_fb   = 'Gestión' if _source_fb else 'Envío WA'
-                    _notas_fb  = str(_g.get('notas', '') or '')
-                    # RowKey único por fila (cliente puede aparecer múltiples veces)
-                    _row_key_fb = f"{_cid}_{_idx}"
-                    _details_sesion.append({
-                        'Cliente': _empresa, 'CodCliente': _cid,
-                        'Teléfono': _tel, 'Deuda': _saldo, 'Hora': _fecha_hora_g,
-                        'RowKey': _row_key_fb, 'Tipo': _tipo_fb, 'Notas': _notas_fb,
-                        'DeudaS': _deuda_s_fb, 'DeudaD': _deuda_d_fb,
-                    })
-                    # ── Marcar como guardado SOLO las gestiones manuales del cobrador ──
-                    # Las filas de Envío WA NUNCA van al historial: el cobrador debe registrar el resultado
+                    # Solo añadir filas de "Envío WA" si ese cliente no viene ya del lote de sesión.
+                    # Las filas de "Gestión" siempre se añaden (son registros del cobrador).
+                    if _tipo_fb == 'Envío WA' and _cid in _cids_sesion:
+                        # El lote de sesión ya lo tiene — solo actualizamos resultados si hay gestión
+                        pass
+                    else:
+                        _empresa, _tel, _saldo = _cid, '', ''
+                        _deuda_s_fb, _deuda_d_fb = '', ''
+                        if not df_filtered.empty and 'COD CLIENTE' in df_filtered.columns:
+                            _filas = df_filtered[df_filtered['COD CLIENTE'].astype(str) == _cid]
+                            if not _filas.empty:
+                                _r = _filas.iloc[0]
+                                _empresa = str(_r.get('EMPRESA', _cid))
+                                _tel     = str(_r.get('TELÉFONO', ''))
+                                _saldo   = str(_r.get('SALDO REAL', ''))
+                                if 'MONEDA' in _filas.columns and 'SALDO REAL' in _filas.columns:
+                                    _df_sol_fb = _filas[_filas['MONEDA'].astype(str).str.startswith('S', na=False)]
+                                    _df_dol_fb = _filas[~_filas['MONEDA'].astype(str).str.startswith('S', na=False)]
+                                    _sum_s_fb  = float(_df_sol_fb['SALDO REAL'].sum()) if len(_df_sol_fb) > 0 else 0.0
+                                    _sum_d_fb  = float(_df_dol_fb['SALDO REAL'].sum()) if len(_df_dol_fb) > 0 else 0.0
+                                    if _sum_s_fb > 0: _deuda_s_fb = f"S/ {_sum_s_fb:,.2f}"
+                                    if _sum_d_fb > 0: _deuda_d_fb = f"$ {_sum_d_fb:,.2f}"
+                        _fecha_hora_g = ''
+                        try:
+                            _fecha_hora_g = pd.to_datetime(_g.get('created_at', '')).strftime('%d/%m/%Y %H:%M')
+                        except Exception:
+                            pass
+                        _notas_fb   = str(_g.get('notas', '') or '')
+                        _row_key_fb = f"{_cid}_{_idx}"
+                        _details_sesion.append({
+                            'Cliente': _empresa, 'CodCliente': _cid,
+                            'Teléfono': _tel, 'Deuda': _saldo, 'Hora': _fecha_hora_g,
+                            'RowKey': _row_key_fb, 'Tipo': _tipo_fb, 'Notas': _notas_fb,
+                            'DeudaS': _deuda_s_fb, 'DeudaD': _deuda_d_fb,
+                        })
+                    # Gestiones manuales → marcar como ya guardadas
                     if _tipo_fb == 'Gestión':
                         _meta = _g.get('metadata') or {}
                         _opcion = _meta.get('opcion_gestor', '') if isinstance(_meta, dict) else ''
                         if not _opcion:
                             _opcion = _RESULTADO_DISPLAY_MAP.get(str(_g.get('resultado', '')), '')
                         if _opcion:
-                            _resultados_supabase[_row_key_fb] = _opcion
-                    # Envío WA: NO se agrega a _resultados_supabase  → queda como pendiente para el cobrador
-                # Inyectar en session_state para que el resto del código los trate como "ya guardados"
-                if not _wa_res_sesion:
-                    _wa_res_sesion = {'details': _details_sesion, 'cycle_id': _cycle_id_actual,
-                                      'resultados_registrados': _resultados_supabase}
-                    st.session_state['last_wa_send_results'] = _wa_res_sesion
-                else:
-                    _wa_res_sesion['resultados_registrados'] = _resultados_supabase
+                            _rk_g = f"{_cid}_{_idx}"
+                            _resultados_supabase[_rk_g] = _opcion
+            # Sincronizar session_state
+            if not _wa_res_sesion:
+                _wa_res_sesion = {'details': _details_sesion, 'cycle_id': _cycle_id_actual,
+                                  'resultados_registrados': _resultados_supabase}
+                st.session_state['last_wa_send_results'] = _wa_res_sesion
+            else:
+                _wa_res_sesion['resultados_registrados'] = {
+                    **_resultados_supabase,
+                    **_wa_res_sesion.get('resultados_registrados', {}),
+                }
 
             # ── KPIs coloreados ───────────────────────────────────────────────
             # "Enviados"        = registros de Envío WA (metadata sin source)
