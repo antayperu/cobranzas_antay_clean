@@ -150,6 +150,45 @@ Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). TIER 2 co
 - RC-FEAT-030: Dashboard de Efectividad de Cobranza (analytics 7/15/30 días)
 - RC-FEAT-035: Link historial CRM completo del cliente desde panel WA Seguimiento Post-Envío
 
+### Pendiente — TIER 3 (Mejoras arquitectónicas — Filosofía Class Worldwide)
+
+#### RC-FEAT-036: Tabla separada `wa_mensajes_enviados` para auditoría de mensajes
+- Estado: Pendiente
+- Prioridad: P1 Alto (Arquitectura)
+- Esfuerzo: 5 puntos (1-2 días)
+- Descripción: Extraer mensajes del campo JSON metadata → tabla independiente. Violación de estándar: datos críticos de auditoría NO deben vivir en JSON. Afecta escalabilidad (búsquedas, índices, reportes).
+- Beneficios: Auditoría sin parseo JSON, búsquedas rápidas, escalable Fortune 500
+- Tabla propuesta:
+  ```sql
+  CREATE TABLE wa_mensajes_enviados (
+    id UUID PK, gestion_id UUID FK, cliente_id TEXT FK, 
+    template_label, template_texto, mensaje_exacto_enviado,
+    telefono_destino, batch_id, send_mode, created_at
+  );
+  ```
+
+#### RC-FEAT-037: Catálogo editable de resultados gestión WA
+- Estado: Pendiente
+- Prioridad: P1 Alto (Flexibilidad de producto)
+- Esfuerzo: 3 puntos (1-2 días)
+- Descripción: Mover resultados hardcodeados (EXITOSO, PENDIENTE, SIN_RESPUESTA, REPROGRAMADO) a tabla `catalogo_resultado_gestion` editable. Hoy es imposible agregar nuevos resultado sin cambiar código Python.
+- Beneficios: Flexible sin redeploy, auditable (quién/cuándo cambió), multiidioma, escalable
+- Panel en Configuración: CRUD (crear/editar/borrar) resultados desde UI
+- Tabla propuesta:
+  ```sql
+  CREATE TABLE catalogo_resultado_gestion (
+    id UUID PK, codigo_resultado TEXT UNIQUE, label_ui, descripción,
+    color_badge, activo, orden, created_at
+  );
+  ```
+
+#### RC-BUG-050: Join mensaje a fila gestión en historial
+- Estado: Pendiente / Diferido
+- Prioridad: P2 Medio
+- Esfuerzo: 2 puntos (2-3 horas)
+- Dependencia: RC-FEAT-036 (requiere tabla wa_mensajes_enviados)
+- Descripción: Columna "Mensaje WA" solo se llena si fila es Envío. Si hay gestión manual posterior, mensaje no se muestra. Requiere JOIN: gestiones ← wa_mensajes_enviados.
+
 ---
 
 ## 1. Prioridad Critica (Sprint Actual)

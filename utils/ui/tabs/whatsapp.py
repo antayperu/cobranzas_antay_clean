@@ -6,7 +6,7 @@ import base64
 import os
 import streamlit.components.v1 as components
 import utils.storage_manager as storage_mgr
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 # RC-FEAT-020: Biblioteca de 7 Plantillas WA
 WA_PLANTILLAS_BIBLIOTECA = {
@@ -128,12 +128,18 @@ def render_tab(df_filtered, config):
       # Resumen del último envío (persiste tras el rerun)
       _wa_res_env = st.session_state.get('last_wa_send_results')
       if _wa_res_env:
-          with st.container(border=True):
-              st.markdown("#### 📊 Resumen del Último Envío")
+          _env_ok  = _wa_res_env.get('exitosos', 0)
+          _env_fail = _wa_res_env.get('fallidos', 0)
+          _env_tot  = _env_ok + _env_fail
+          with st.expander(
+              f"📊 Último envío — {_env_ok} enviados · {_env_fail} fallidos · {_env_tot} total  "
+              f"*(clic para ver detalle)*",
+              expanded=False
+          ):
               _rk1, _rk2, _rk3 = st.columns(3)
-              _rk1.metric("✅ Enviados", _wa_res_env.get('exitosos', 0))
-              _rk2.metric("❌ Fallidos", _wa_res_env.get('fallidos', 0))
-              _rk3.metric("📨 Total", _wa_res_env.get('exitosos', 0) + _wa_res_env.get('fallidos', 0))
+              _rk1.metric("✅ Enviados", _env_ok)
+              _rk2.metric("❌ Fallidos", _env_fail)
+              _rk3.metric("📨 Total", _env_tot)
               if _wa_res_env.get('details'):
                   _df_res_env = pd.DataFrame(_wa_res_env['details'])
                   _cols_env = [c for c in _df_res_env.columns if c != 'CodCliente']
@@ -145,39 +151,36 @@ def render_tab(df_filtered, config):
           st.divider()
 
       if not df_filtered.empty:
-        c1, c2 = st.columns([1, 1])
+        c1, c2 = st.columns([55, 45])
         
         with c1:
-            st.markdown("##### Configurar Plantilla")
+            st.markdown("##### 📋 ¿A quién enviar?")
 
-            # Datos dinámicos de la empresa desde Identidad Corporativa
+        with c2:
+            st.markdown("##### ✉️ ¿Qué y cuándo enviar?")
+
+            # ── Datos empresa + plantilla (computación, siempre disponible) ──────────────
             _empresa  = config.get('company_name', 'DACTA S.A.C.')
             _ruc      = config.get('company_ruc', '20375779448')
-            _telefono = config.get('phone_contact', '+51 998 080 797')
+            _telefono_emp = config.get('phone_contact', '+51 998 080 797')
 
             def _aplicar_firma(texto):
                 """Reemplaza datos hardcodeados por los de Identidad Corporativa."""
                 return (texto
                     .replace("DACTA S.A.C.", _empresa)
                     .replace("RUC: 20375779448", f"RUC: {_ruc}")
-                    .replace("+51 998 080 797", _telefono))
+                    .replace("+51 998 080 797", _telefono_emp))
 
             _biblioteca_dinamica = {
                 nombre: _aplicar_firma(texto)
                 for nombre, texto in WA_PLANTILLAS_BIBLIOTECA.items()
             }
-
-            # Plantilla guardada — también pasa por _aplicar_firma para
-            # actualizar firmas viejas si el usuario cambió los datos de empresa.
             _default_saved = _aplicar_firma(
                 config.get('whatsapp_template', list(_biblioteca_dinamica.values())[0])
             )
-
-            # Inicializar editor en sesión nueva
             if 'wa_template_editor' not in st.session_state:
                 st.session_state['wa_template_editor'] = _default_saved
 
-            # ── Auto-cargar al cambiar el selectbox (ANTES de renderizar widgets) ──
             _opciones_lib = [_NOMBRE_PLANTILLA_PERSONALIZADA] + list(_biblioteca_dinamica.keys())
             _sel_lib_actual = st.session_state.get('wa_sel_lib', _NOMBRE_PLANTILLA_PERSONALIZADA)
             _sel_lib_prev   = st.session_state.get('_wa_sel_lib_prev', _sel_lib_actual)
@@ -187,41 +190,37 @@ def render_tab(df_filtered, config):
                 elif _sel_lib_actual in _biblioteca_dinamica:
                     st.session_state['wa_template_editor'] = _biblioteca_dinamica[_sel_lib_actual]
             st.session_state['_wa_sel_lib_prev'] = _sel_lib_actual
+            template = st.session_state.get('wa_template_editor', _default_saved)
 
-            # ── Selectbox biblioteca ───────────────────────────────────────────
-            st.selectbox(
-                "📚 Cargar desde biblioteca",
-                options=_opciones_lib,
-                key="wa_sel_lib",
-                help="Selecciona una plantilla para cargarla en el editor.",
-            )
+            _sel_lib_label = _sel_lib_actual
+            with st.expander(f"✏️ Plantilla · {_sel_lib_label}", expanded=False):
+                st.selectbox(
+                    "📚 Cargar desde biblioteca",
+                    options=_opciones_lib,
+                    key="wa_sel_lib",
+                    help="Selecciona una plantilla para cargarla en el editor.",
+                )
+                template = st.text_area(
+                    "Plantilla del Mensaje",
+                    height=280,
+                    key="wa_template_editor",
+                )
+                if st.button("💾 Guardar como Plantilla Predeterminada", type="primary", use_container_width=True):
+                    new_config = config.copy()
+                    new_config['whatsapp_template'] = template
+                    if sm.save_settings(new_config):
+                        config['whatsapp_template'] = template
+                        st.toast("✅ Plantilla guardada. Persistirá al recargar la app.", icon="💾")
+                    else:
+                        st.error("❌ No se pudo guardar la plantilla.")
+                st.caption("Variables: `{EMPRESA}`, `{RESUMEN_DEUDA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`, `{PROX_VENC}`")
 
-            # ── Editor ────────────────────────────────────────────────────────
-            template = st.text_area(
-                "Plantilla del Mensaje",
-                height=280,
-                key="wa_template_editor",
-            )
+            # modo de envío fijado silenciosamente (texto plano estable)
+            send_mode_value = "texto"
 
-            # ── Guardar ───────────────────────────────────────────────────────
-            if st.button("💾 Guardar como Plantilla Predeterminada", type="primary", use_container_width=True):
-                new_config = config.copy()
-                new_config['whatsapp_template'] = template
-                if sm.save_settings(new_config):
-                    config['whatsapp_template'] = template
-                    st.toast("✅ Plantilla guardada. Persistirá al recargar la app.", icon="💾")
-                else:
-                    st.error("❌ No se pudo guardar la plantilla.")
-
-            st.caption("Variables: `{EMPRESA}`, `{RESUMEN_DEUDA}`, `{DETALLE_DOCS}`, `{TOTAL_SALDO_REAL}`, `{TOTAL_SALDO_ORIGINAL}`, `{PROX_VENC}`")
-
-        with c2:
-            st.markdown("##### Enviar Mensajes")
-            
-            # Selección de Clientes (Basado en lo filtrado)
-            # Agrupar datos por cliente para la lista de selección
-            # RC-FEAT-WA-FILTER: incluir clientes con detracción pendiente aunque saldo real sea 0
-            # (mismo criterio que tab Email: SALDO REAL > 0.01 OR DETR_PENDIENTE > 0.01)
+        # ── Bloque QUIÉN — dentro de c1 ───────────────────────────────────────────────
+        with c1:
+            # Selección de Clientes
             df_wa_view = df_filtered.copy()
             df_wa_view['DETR_PENDIENTE_AMOUNT'] = df_wa_view.apply(
                 lambda x: float(x['DETRACCIÓN']) if str(x['ESTADO DETRACCION']).upper().strip() == 'PENDIENTE' else 0.0,
@@ -235,7 +234,7 @@ def render_tab(df_filtered, config):
                 (client_group['DETR_PENDIENTE_AMOUNT'] > 0.01)
             ]
 
-            # --- RC-FEAT-WA-UX: KPIs + "Ocultar ya enviados hoy" (estándar con Email tab) ---
+            # KPIs + toggle
             today_str_wa = date.today().strftime('%Y-%m-%d')
             df_ssot = st.session_state.get('df_final', pd.DataFrame())
             if not df_ssot.empty and 'ESTADO_WHATSAPP' in df_ssot.columns and 'FECHA_ULTIMO_WA' in df_ssot.columns:
@@ -257,10 +256,25 @@ def render_tab(df_filtered, config):
 
             pendientes_wa = len(client_group)
             c_wa_s1.metric("⏳ Pendientes WA", pendientes_wa)
-            c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count)
+            if clientes_wa_hoy_count > 0 and not df_ssot.empty and 'FECHA_ULTIMO_WA' in df_ssot.columns:
+                try:
+                    _ultimas = pd.to_datetime(
+                        df_ssot[mask_wa_env & mask_wa_hoy]['FECHA_ULTIMO_WA'], errors='coerce'
+                    ).dropna()
+                    if not _ultimas.empty:
+                        _delta_h = (datetime.now() - _ultimas.max().to_pydatetime()).total_seconds() / 3600
+                        _hace_str = f"{int(_delta_h)}h" if _delta_h >= 1 else f"{int(_delta_h*60)}min"
+                        c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count, delta=f"hace {_hace_str}",
+                                       delta_color="off")
+                    else:
+                        c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count)
+                except Exception:
+                    c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count)
+            else:
+                c_wa_s2.metric("📱 Enviados Hoy WA", clientes_wa_hoy_count)
             st.markdown("---")
 
-            # Crear lista de opciones formateada
+            # Crear lista de opciones
             client_options = []
             client_map = {}
             for idx, row in client_group.iterrows():
@@ -274,13 +288,99 @@ def render_tab(df_filtered, config):
                     label = f"{row['EMPRESA']} (Deuda: S/ {saldo:,.2f})"
                 client_options.append(label)
                 client_map[label] = row['COD CLIENTE']
-            
-            # Multiselect con session_state (igual que Email tab para consistencia)
+
             if "wa_sel_key" not in st.session_state:
                 st.session_state["wa_sel_key"] = []
-            # Limpiar selección si las opciones cambiaron (evita crash de Streamlit)
             valid_wa_opts = set(client_options)
             st.session_state["wa_sel_key"] = [x for x in st.session_state["wa_sel_key"] if x in valid_wa_opts]
+
+            # Pre-selección por Reintentar
+            _reintentar_cod = st.session_state.pop('wa_reintentar_cod', None)
+            if _reintentar_cod:
+                _match_lbl = next((lbl for lbl, cod in client_map.items() if cod == _reintentar_cod), None)
+                if _match_lbl and _match_lbl in valid_wa_opts:
+                    st.session_state["wa_sel_key"] = [_match_lbl]
+                    st.info(f"📌 Cliente pre-seleccionado: **{_match_lbl.split(' (')[0]}**")
+
+            # Banner sin-respuesta
+            _last_res_data = st.session_state.get('last_wa_send_results', {})
+            if _last_res_data:
+                _last_rg = _last_res_data.get('resultados_registrados', {})
+                _sin_resp_labels = []
+                for _d_sr in _last_res_data.get('details', []):
+                    _rk_sr = _d_sr.get('RowKey', _d_sr.get('CodCliente', ''))
+                    _r_sr = _last_rg.get(_rk_sr, '')
+                    for _p in ['✅ ', '🤝 ', '📵 ', '🔴 ', '💬 ', '⏳ ']:
+                        if _r_sr.startswith(_p): _r_sr = _r_sr[len(_p):]; break
+                    if _r_sr == 'Sin respuesta':
+                        _lbl_sr = next((l for l, c in client_map.items() if c == _d_sr.get('CodCliente', '')), None)
+                        if _lbl_sr and _lbl_sr in valid_wa_opts:
+                            _sin_resp_labels.append(_lbl_sr)
+                if _sin_resp_labels:
+                    _ya_sel = set(st.session_state.get('wa_sel_key', []))
+                    _nuevos_sr = [l for l in _sin_resp_labels if l not in _ya_sel]
+                    if _nuevos_sr:
+                        _bc1, _bc2 = st.columns([5, 1])
+                        _bc1.info(f"↩ {len(_nuevos_sr)} cliente(s) sin respuesta del último lote disponibles para reenvío.")
+                        if _bc2.button("↩ Seleccionar", key="sel_sin_resp_banner", use_container_width=True):
+                            st.session_state['wa_sel_key'] = list(_ya_sel | set(_sin_resp_labels))
+                            st.rerun()
+
+            # Filtro rápido por segmento — selectbox compacto
+            _aging_col = next((c for c in df_ssot.columns if 'AGING' in c.upper() or 'DIAS' in c.upper() or 'DÍAS' in c.upper()), None)
+            _FILTRO_OPTS = [
+                "— Todos —",
+                "🔴 Mora crítica (+60d)",
+                "⚫ Sin contacto WA",
+                "↩ Sin respuesta último lote",
+            ]
+            _filtro_sel = st.selectbox(
+                "Filtro rápido",
+                options=_FILTRO_OPTS,
+                index=0,
+                key="wa_filtro_rapido",
+                help="Aplica un preset de selección rápida sobre el multiselect",
+            )
+            if _filtro_sel != "— Todos —":
+                _preset_cods: list = []
+                if _filtro_sel == "🔴 Mora crítica (+60d)":
+                    for _lbl_m, _cod_m in client_map.items():
+                        if not df_ssot.empty and _aging_col:
+                            _dias_mora = df_ssot[df_ssot['COD CLIENTE'] == _cod_m][_aging_col]
+                            if not _dias_mora.empty and pd.to_numeric(_dias_mora, errors='coerce').max() > 60:
+                                _preset_cods.append(_lbl_m)
+                        else:
+                            _row_m = client_group[client_group['COD CLIENTE'] == _cod_m]
+                            if not _row_m.empty and _row_m['SALDO REAL'].values[0] >= 5000:
+                                _preset_cods.append(_lbl_m)
+                elif _filtro_sel == "⚫ Sin contacto WA":
+                    for _lbl_sc, _cod_sc in client_map.items():
+                        if not df_ssot.empty and 'ESTADO_WHATSAPP' in df_ssot.columns:
+                            _est = df_ssot[df_ssot['COD CLIENTE'] == _cod_sc]['ESTADO_WHATSAPP']
+                            if _est.empty or _est.iloc[0] in ('PENDIENTE', '', None):
+                                _preset_cods.append(_lbl_sc)
+                        else:
+                            _preset_cods.append(_lbl_sc)
+                elif _filtro_sel == "↩ Sin respuesta último lote":
+                    _lr = st.session_state.get('last_wa_send_results', {})
+                    if _lr:
+                        _lrg = _lr.get('resultados_registrados', {})
+                        for _d_c in _lr.get('details', []):
+                            _rk_c = _d_c.get('RowKey', _d_c.get('CodCliente', ''))
+                            _r_c = _lrg.get(_rk_c, '')
+                            for _p in ['✅ ', '🤝 ', '📵 ', '🔴 ', '💬 ', '⏳ ']:
+                                if _r_c.startswith(_p): _r_c = _r_c[len(_p):]; break
+                            if _r_c == 'Sin respuesta':
+                                _lbl_c = next((l for l, c in client_map.items() if c == _d_c.get('CodCliente', '')), None)
+                                if _lbl_c and _lbl_c in valid_wa_opts:
+                                    _preset_cods.append(_lbl_c)
+                if _preset_cods and set(_preset_cods) != set(st.session_state.get('wa_sel_key', [])):
+                    st.session_state['wa_sel_key'] = _preset_cods
+                    st.session_state['wa_filtro_rapido'] = "— Todos —"
+                    st.rerun()
+                elif not _preset_cods:
+                    st.toast("No hay clientes para ese filtro en la vista actual", icon="ℹ️")
+                    st.session_state['wa_filtro_rapido'] = "— Todos —"
 
             def select_all_wa_callback():
                 st.session_state["wa_sel_key"] = client_options
@@ -293,49 +393,13 @@ def render_tab(df_filtered, config):
             )
             col_sel2.button("Seleccionar Todos", on_click=select_all_wa_callback)
 
-            st.info(f"Se generarán enlaces para **{len(selected_labels)}** clientes seleccionados.")
-            
-            # ========== NUEVO: SELECTOR DE MODO DE ENVÍO v5.0 ==========
-            st.markdown("---")
-            st.markdown("### ⚙️ Configuración de Envío WhatsApp")
-            
-            # Información general
-            st.info("💡 **v5.0 Pro Upgrade**: Elige cómo enviar tus notificaciones de cobranza")
-            
-            # Selector de modo simplificado
-            send_mode_options = [
-                ("texto", "📝 Solo Texto (Estable)", "Mensaje de texto plano sin archivos adjuntos")
-            ]
-            
-            send_mode_index = st.radio(
-                "**Modo de Envío:**",
-                range(len(send_mode_options)),
-                format_func=lambda x: send_mode_options[x][1],
-                index=0,  # Default: Texto
-                help="Elige cómo se enviarán los mensajes a tus clientes"
-            )
-            
-            # Bloque informativo de mantenimiento
-            st.info("ℹ️ **Nota:** Los modos *Tarjeta Ejecutiva* y *PDF* se encuentran en mantenimiento por actualización a v5.0. Estarán disponibles próximamente.")
-            send_mode_value = send_mode_options[send_mode_index][0]
-            
-            # Mostrar descripción del modo seleccionado con colores
-            selected_description = send_mode_options[send_mode_index][2]
-            if send_mode_value == "texto":
-                st.warning(f"💬 {selected_description}")
-            elif send_mode_value == "imagen_ejecutiva":
-                st.success(f"🎴 {selected_description}")
-            else:
-                st.info(f"📊 {selected_description}")
-            
-            # ========== FIN SELECTOR DE MODO ==========
-            
             # BOTON PROCESAR
             # --- LÓGICA DE GENERACIÓN DE MENSAJES (PREVIEW) ---
             contacts_to_send = []
             
             if selected_labels:
-                st.markdown("##### Vista Previa")
+                _n_prev = len(selected_labels)
+                st.markdown(f"##### 👁 Vista Previa · {_n_prev} cliente{'s' if _n_prev > 1 else ''}")
                 
                 # SOLUCIÓN 1: Cargar logo en scope global (antes del loop)
                 # Esto garantiza que logo_b64 esté disponible tanto para preview como para envío
@@ -669,11 +733,16 @@ def render_tab(df_filtered, config):
                     st.session_state['last_wa_batch_id'] = None
                     st.rerun()
 
-            # BOTON ENVIAR WHATSAPP
+            # BOTON ENVIAR — Mejora 2: label dinámico con conteo y estado
             if not _wa_session_active:
                 st.warning("⚠️ Conecta un dispositivo en **Configuración → WhatsApp** para habilitar el envío.")
-            if st.button("Enviar Mensajes por WhatsApp", type="primary",
-                         disabled=is_wa_processed or not _wa_session_active):
+            _n_sel = len(contacts_to_send)
+            _btn_label = (
+                f"📤 Enviar a {_n_sel} cliente{'s' if _n_sel != 1 else ''}"
+                if _n_sel > 0 else "📤 Selecciona clientes para enviar"
+            )
+            if st.button(_btn_label, type="primary", use_container_width=True,
+                         disabled=is_wa_processed or not _wa_session_active or _n_sel == 0):
                 # --- DEDUPLICACIÓN DE SEGURIDAD ---
                 # Aseguramos que no se envíen mensajes dobles si hubo duplicados en la lista UI
                 seen_keys = set()
@@ -755,74 +824,113 @@ def render_tab(df_filtered, config):
                 status_placeholder.info("⏳ Preparando envío...")
                 
                 try:
-                    results = send_whatsapp_messages_direct(
-                        contacts=contacts_to_send, 
-                        message=template, 
-                        speed="Normal (Recomendado)",
-                        progress_callback=progress_callback,
-                        send_mode=send_mode_value,  # NUEVO v5.0: Modo de envío
-                        branding_config=config,      # NUEVO v5.0: Configuración de branding
-                        logo_path=logo_path          # NUEVO v5.0: Ruta al logo
-                    )
-                    
-                    # --- RC-FEAT-018: Persistir envíos en gestiones (Supabase) ---
-                    now_wa = datetime.now()
-                    resultado_lote = 'EXITOSO' if results['exitosos'] > 0 else 'FALLIDO'
-                    persisted_wa = 0
+                    # --- RC-FEAT-018: Persistir en Supabase DURANTE el envío (no al final) ---
+                    # El callback se llama inmediatamente después de cada cliente.
+                    # Si se corta la luz a mitad del envío, los clientes ya procesados
+                    # quedan registrados correctamente en Supabase.
+                    now_wa         = datetime.now()             # hora Perú — display y sesión
+                    now_wa_utc     = datetime.now(timezone.utc) # UTC real — Supabase
                     current_cycle_id = st.session_state.get('cycle_id', 'default_cycle')
-                    for contact in contacts_to_send:
-                        cod = str(contact.get('cod_cliente', '')).strip()
-                        if not cod:
-                            continue
+                    _fecha_utc_str = now_wa_utc.isoformat()
+                    _persisted_wa  = [0]  # lista mutable para contar desde el closure
+
+                    def _on_client_sent(cod_cliente, resultado, contact_data):
+                        """Graba en Supabase inmediatamente al terminar el envío de cada cliente."""
+                        if not cod_cliente:
+                            return
+                        _meta = {
+                            'origen': 'wa_envio_masivo',
+                            'template_label': st.session_state.get('wa_sel_lib', _sel_lib_actual),
+                            'template_text': str(template or ''),
+                            'mensaje_enviado': str(contact_data.get('mensaje', '') or ''),
+                            'telefono_destino': str(contact_data.get('telefono', '') or ''),
+                            'send_mode': str(send_mode_value or 'texto'),
+                        }
+                        if current_wa_batch_id:
+                            _meta['batch_id'] = current_wa_batch_id
                         ok, _ = dbm.insert_gestion(
-                            cliente_id=cod,
+                            cliente_id=cod_cliente,
                             tipo_gestion='WHATSAPP',
-                            resultado=resultado_lote,
-                            notas=f"WA masivo | {contact.get('TOTAL_SALDO_REAL', '')} | Tel: {contact.get('telefono', '')}",
-                            fecha=now_wa.isoformat(),
+                            resultado=resultado,
+                            notas=f"WA masivo | {contact_data.get('TOTAL_SALDO_REAL', '')} | Tel: {contact_data.get('telefono', '')}",
+                            fecha=_fecha_utc_str,
                             cycle_id=current_cycle_id,
-                            metadata_extra={},
+                            metadata_extra=_meta,
                         )
                         if ok:
-                            persisted_wa += 1
+                            _persisted_wa[0] += 1
+
+                    results = send_whatsapp_messages_direct(
+                        contacts=contacts_to_send,
+                        message=template,
+                        speed="Normal (Recomendado)",
+                        progress_callback=progress_callback,
+                        send_mode=send_mode_value,
+                        branding_config=config,
+                        logo_path=logo_path,
+                        on_client_sent=_on_client_sent,  # graba en Supabase cliente a cliente
+                    )
 
                     # Actualizar df_final en session_state con tracking WA
                     if 'df_final' in st.session_state and not st.session_state['df_final'].empty:
                         cods_enviados = {str(c.get('cod_cliente', '')).strip() for c in contacts_to_send}
-                        wa_ts = now_wa.strftime('%Y-%m-%d %H:%M:%S')
+                        wa_ts_display = now_wa.strftime('%Y-%m-%d %H:%M:%S')      # hora Perú — pantalla
+                        wa_ts_utc_str = now_wa_utc.strftime('%Y-%m-%dT%H:%M:%S+00:00')  # UTC — Supabase
                         mask_wa = st.session_state['df_final']['COD CLIENTE'].astype(str).str.strip().isin(cods_enviados)
                         if 'ESTADO_WHATSAPP' in st.session_state['df_final'].columns:
                             st.session_state['df_final'].loc[mask_wa, 'ESTADO_WHATSAPP'] = 'ENVIADO'
                         if 'FECHA_ULTIMO_WA' in st.session_state['df_final'].columns:
-                            st.session_state['df_final'].loc[mask_wa, 'FECHA_ULTIMO_WA'] = wa_ts
+                            st.session_state['df_final'].loc[mask_wa, 'FECHA_ULTIMO_WA'] = wa_ts_display
 
                     # SSOT: Sincronizar estado_whatsapp en documentos_ciclo (Supabase)
                     if cods_enviados:
                         dbm.update_estado_whatsapp_in_cycle(
                             cycle_id=st.session_state.get('cycle_id'),
                             cliente_ids=list(cods_enviados),
-                            fecha=wa_ts,
+                            fecha=wa_ts_utc_str,  # UTC real para integridad en Supabase
                         )
 
                     # --- RC-FEAT-WA-UX: Guardar resultados + rerun (igual que Email tab) ---
                     wa_details = []
                     for c in contacts_to_send:
+                        _cod_c = str(c.get('cod_cliente', '')).strip()
                         wa_details.append({
                             'Cliente': c['nombre_cliente'],
-                            'CodCliente': str(c.get('cod_cliente', '')).strip(),
+                            'CodCliente': _cod_c,
                             'Teléfono': c['telefono'],
-                            'Estado': '✅ Enviado' if resultado_lote == 'EXITOSO' else '❌ Fallido',
+                            'Estado': '✅ Enviado' if results.get('resultados_por_cliente', {}).get(_cod_c, 'FALLIDO') == 'EXITOSO' else '❌ Fallido',
                             'Deuda': c.get('TOTAL_SALDO_REAL', ''),
                             'DeudaS': c.get('TOTAL_SALDO_S', ''),  # "S/ 623.00"
                             'DeudaD': c.get('TOTAL_SALDO_D', ''),  # "$ 373.94"
+                            # RC-BUG-047: registrar hora/tipo/rowkey para que el cálculo
+                            # "último envío" vs "última gestión" funcione en casos de reenvío.
+                            'Hora': now_wa.strftime('%d/%m/%Y %H:%M'),
+                            'HoraISO': now_wa.isoformat(),  # RC-BUG-051: timestamp para gestiones posteriores
+                            'Tipo': 'Envío WA',
+                            'RowKey': f"{_cod_c}_{now_wa.strftime('%Y%m%d%H%M%S')}_envio",
+                            'Notas': f"WA masivo | {c.get('TOTAL_SALDO_REAL', '')} | Tel: {c.get('telefono', '')}",
+                            'Mensaje': str(c.get('mensaje', '') or ''),
                         })
-                    st.session_state['last_wa_send_results'] = {
+                    # RC-BUG-052: Mantener historial de envíos en lugar de sobrescribir
+                    # Esto permite múltiples reenvíos en el mismo ciclo
+                    _new_send_result = {
                         'exitosos': results['exitosos'],
                         'fallidos': results['fallidos'],
                         'details': wa_details,
                         'cycle_id': current_cycle_id,
                         'resultados_registrados': {},
                     }
+                    
+                    # Inicializar historial si no existe
+                    if 'wa_send_history' not in st.session_state:
+                        st.session_state['wa_send_history'] = []
+                    
+                    # Agregar nuevo envío al historial
+                    st.session_state['wa_send_history'].append(_new_send_result)
+                    
+                    # Mantener también referencia al último para compatibilidad
+                    st.session_state['last_wa_send_results'] = _new_send_result
+                    
                     if current_wa_batch_id:
                         st.session_state['last_wa_batch_id'] = current_wa_batch_id
                     st.rerun()
@@ -840,31 +948,61 @@ def render_tab(df_filtered, config):
     # ══════════════════════════════════════════════════════════════════════════
     if _en_seguimiento:
         _cycle_id_actual = st.session_state.get('cycle_id', '')
-        _wa_res_sesion   = st.session_state.get('last_wa_send_results')
+        
+        # RC-BUG-052: Consolidar historial de envíos para permitir múltiples reenvíos
+        # Obtener todos los envíos del ciclo actual, no solo el último
+        _wa_send_history = st.session_state.get('wa_send_history', [])
+        _all_details_consolidated = []
+        _resultados_consolidados = {}
+        
+        # Consolidar detalles de TODOS los envíos del ciclo actual
+        for _send_result in _wa_send_history:
+            if _send_result.get('cycle_id') == _cycle_id_actual:
+                _all_details_consolidated.extend(_send_result.get('details', []))
+                # Consolidar también los resultados registrados
+                _resultados_consolidados.update(_send_result.get('resultados_registrados', {}))
+        
+        # _wa_res_sesion siempre disponible (RC-BUG-053: evita UnboundLocalError en línea 969
+        # cuando _all_details_consolidated ya viene poblado desde wa_send_history)
+        _wa_res_sesion = st.session_state.get('last_wa_send_results')
 
-        # Obtener datos del último envío en sesión para la tabla interactiva
-        _details_sesion = _wa_res_sesion.get('details', []) if _wa_res_sesion else []
+        # Si no hay historial, usar el último para compatibilidad
+        if not _all_details_consolidated:
+            _all_details_consolidated = list(_wa_res_sesion.get('details', [])) if _wa_res_sesion else []
+            _resultados_consolidados = _wa_res_sesion.get('resultados_registrados', {}) if _wa_res_sesion else {}
+
+        # Obtener datos consolidados para la tabla interactiva
+        # RC-BUG-048: list() crea una COPIA local, no una referencia al objeto en session_state.
+        # Sin esto, cada rerun iba acumulando filas de Supabase sobre el mismo objeto → duplicados.
+        _details_sesion = list(_all_details_consolidated)
         _cycle_id_lote  = _wa_res_sesion.get('cycle_id', _cycle_id_actual) if _wa_res_sesion else _cycle_id_actual
 
         if not _details_sesion and not _cycle_id_actual:
             st.info("📭 No hay ciclo activo ni envíos registrados. Carga un archivo y envía mensajes para ver el seguimiento.")
         else:
-            # ── Leer Supabase ─────────────────────────────────────────────────
+            # ── Leer Supabase — siempre, para incluir lotes anteriores del ciclo ──
             _gestiones_wa  = dbm.get_wa_gestiones_by_cycle(_cycle_id_actual) if _cycle_id_actual else []
             _df_gest       = pd.DataFrame(_gestiones_wa) if _gestiones_wa else pd.DataFrame()
 
-            # ── Fallback: reconstruir lista de clientes desde Supabase + df_filtered
-            # si no hay datos de sesión (p.ej. se recargó la página)
+            # ── Merge: añadir a _details_sesion los clientes del ciclo en Supabase
+            # que no estén ya presentes (evita duplicados del lote actual en sesión).
+            # Esto permite ver TODOS los lotes del mismo cycle_id sin recargar.
             _RESULTADO_DISPLAY_MAP = {
                 'EXITOSO':      '✅ Acordó pagar',
                 'PENDIENTE':    '🤝 Prometió pagar',
                 'SIN_RESPUESTA':'📵 Sin respuesta',
                 'REPROGRAMADO': '🔴 Derivar a Legal',
             }
-            if not _details_sesion and not _df_gest.empty:
-                _resultados_supabase = {}
-                # Mostrar TODOS los registros de Supabase (un cliente puede tener varios:
-                # uno por el envío masivo y otro por la gestión manual del cobrador)
+            _resultados_supabase = {}
+            if not _df_gest.empty:
+                # Deduplicación por tipo:
+                # - 'Envío WA': deduplicar por (CodCliente, Tipo) — solo 1 entrada por cliente
+                #   (la sesión ya tiene el envío; Supabase no debe duplicarlo)
+                # - 'Gestión': deduplicar por RowKey individual — un cliente puede tener
+                #   MÚLTIPLES gestiones (una por cada envío WA), todas deben mostrarse en historial
+                _cids_sesion   = {str(d.get('CodCliente', '')) for d in _details_sesion}
+                _pairs_sesion  = {(str(d.get('CodCliente', '')), d.get('Tipo', '')) for d in _details_sesion}
+                _rowkeys_sesion = {d.get('RowKey', '') for d in _details_sesion}
                 _df_gest_sorted = _df_gest.copy()
                 if 'created_at' in _df_gest_sorted.columns:
                     _df_gest_sorted['created_at'] = pd.to_datetime(_df_gest_sorted['created_at'], errors='coerce')
@@ -873,58 +1011,97 @@ def render_tab(df_filtered, config):
                     _cid = str(_g.get('cliente_id', ''))
                     if not _cid:
                         continue
-                    _empresa, _tel, _saldo = _cid, '', ''
-                    _deuda_s_fb, _deuda_d_fb = '', ''
-                    if not df_filtered.empty and 'COD CLIENTE' in df_filtered.columns:
-                        _filas = df_filtered[df_filtered['COD CLIENTE'].astype(str) == _cid]
-                        if not _filas.empty:
-                            _r = _filas.iloc[0]
-                            _empresa = str(_r.get('EMPRESA', _cid))
-                            _tel     = str(_r.get('TELÉFONO', ''))
-                            _saldo   = str(_r.get('SALDO REAL', ''))
-                            # Calcular montos por moneda para el KPI multimoneda
-                            if 'MONEDA' in _filas.columns and 'SALDO REAL' in _filas.columns:
-                                _df_sol_fb = _filas[_filas['MONEDA'].astype(str).str.startswith('S', na=False)]
-                                _df_dol_fb = _filas[~_filas['MONEDA'].astype(str).str.startswith('S', na=False)]
-                                _sum_s_fb  = float(_df_sol_fb['SALDO REAL'].sum()) if len(_df_sol_fb) > 0 else 0.0
-                                _sum_d_fb  = float(_df_dol_fb['SALDO REAL'].sum()) if len(_df_dol_fb) > 0 else 0.0
-                                if _sum_s_fb > 0: _deuda_s_fb = f"S/ {_sum_s_fb:,.2f}"
-                                if _sum_d_fb > 0: _deuda_d_fb = f"$ {_sum_d_fb:,.2f}"
-                    _fecha_hora_g = ''
-                    try:
-                        _fecha_hora_g = pd.to_datetime(_g.get('created_at', '')).strftime('%d/%m/%Y %H:%M')
-                    except Exception:
-                        pass
-                    # Tipo: 'Gestión' si fue registrado manualmente, 'Envío WA' si fue el envío masivo
                     _meta_fb   = _g.get('metadata') or {}
+                    # RC-BUG-049 aplicado ANTES del type determination:
+                    # metadata puede llegar como string JSON desde Supabase → parsear aquí
+                    # para que la detección de 'source' (y por tanto _tipo_fb) sea correcta.
+                    if isinstance(_meta_fb, str):
+                        try:
+                            import json as _json_pre
+                            _meta_fb = _json_pre.loads(_meta_fb)
+                        except Exception:
+                            _meta_fb = {}
                     _source_fb = _meta_fb.get('source', '') if isinstance(_meta_fb, dict) else ''
                     _tipo_fb   = 'Gestión' if _source_fb else 'Envío WA'
-                    _notas_fb  = str(_g.get('notas', '') or '')
-                    # RowKey único por fila (cliente puede aparecer múltiples veces)
                     _row_key_fb = f"{_cid}_{_idx}"
-                    _details_sesion.append({
-                        'Cliente': _empresa, 'CodCliente': _cid,
-                        'Teléfono': _tel, 'Deuda': _saldo, 'Hora': _fecha_hora_g,
-                        'RowKey': _row_key_fb, 'Tipo': _tipo_fb, 'Notas': _notas_fb,
-                        'DeudaS': _deuda_s_fb, 'DeudaD': _deuda_d_fb,
-                    })
-                    # ── Marcar como guardado SOLO las gestiones manuales del cobrador ──
-                    # Las filas de Envío WA NUNCA van al historial: el cobrador debe registrar el resultado
+                    # Regla de deduplicación:
+                    # - Envío WA: bloquear por (CodCliente, Tipo) — la sesión ya tiene el envío
+                    # - Gestión: bloquear por RowKey individual — un cliente puede tener
+                    #   MÚLTIPLES gestiones (una por cada envío), todas deben mostrarse
+                    _ya_existe = (
+                        _row_key_fb in _rowkeys_sesion
+                        if _tipo_fb == 'Gestión'
+                        else (_cid, _tipo_fb) in _pairs_sesion
+                    )
+                    if _ya_existe:
+                        pass
+                    else:
+                        _empresa, _tel, _saldo = _cid, '', ''
+                        _deuda_s_fb, _deuda_d_fb = '', ''
+                        if not df_filtered.empty and 'COD CLIENTE' in df_filtered.columns:
+                            _filas = df_filtered[df_filtered['COD CLIENTE'].astype(str) == _cid]
+                            if not _filas.empty:
+                                _r = _filas.iloc[0]
+                                _empresa = str(_r.get('EMPRESA', _cid))
+                                _tel     = str(_r.get('TELÉFONO', ''))
+                                _saldo   = str(_r.get('SALDO REAL', ''))
+                                if 'MONEDA' in _filas.columns and 'SALDO REAL' in _filas.columns:
+                                    _df_sol_fb = _filas[_filas['MONEDA'].astype(str).str.startswith('S', na=False)]
+                                    _df_dol_fb = _filas[~_filas['MONEDA'].astype(str).str.startswith('S', na=False)]
+                                    _sum_s_fb  = float(_df_sol_fb['SALDO REAL'].sum()) if len(_df_sol_fb) > 0 else 0.0
+                                    _sum_d_fb  = float(_df_dol_fb['SALDO REAL'].sum()) if len(_df_dol_fb) > 0 else 0.0
+                                    if _sum_s_fb > 0: _deuda_s_fb = f"S/ {_sum_s_fb:,.2f}"
+                                    if _sum_d_fb > 0: _deuda_d_fb = f"$ {_sum_d_fb:,.2f}"
+                        _fecha_hora_g = ''
+                        try:
+                            # Convertir UTC → hora Perú (UTC-5, sin horario de verano)
+                            # para que sea comparable con los timestamps de sesión (también hora Perú)
+                            _dt_utc = pd.to_datetime(_g.get('created_at', ''), utc=True)
+                            _dt_peru = _dt_utc - pd.Timedelta(hours=5)
+                            _fecha_hora_g = _dt_peru.strftime('%d/%m/%Y %H:%M')
+                        except Exception:
+                            pass
+                        _notas_fb   = str(_g.get('notas', '') or '')
+                        _msg_fb     = ''
+                        # RC-BUG-049: metadata viene como STRING JSON desde Supabase, hay que parsear.
+                        if isinstance(_meta_fb, str):
+                            try:
+                                import json as _json_parse
+                                _meta_fb = _json_parse.loads(_meta_fb)
+                            except Exception:
+                                _meta_fb = {}
+                        if isinstance(_meta_fb, dict):
+                            _msg_fb = str(_meta_fb.get('mensaje_enviado', '') or '')
+                        _details_sesion.append({
+                            'Cliente': _empresa, 'CodCliente': _cid,
+                            'Teléfono': _tel, 'Deuda': _saldo, 'Hora': _fecha_hora_g,
+                            'RowKey': _row_key_fb, 'Tipo': _tipo_fb, 'Notas': _notas_fb,
+                            'DeudaS': _deuda_s_fb, 'DeudaD': _deuda_d_fb,
+                            'Mensaje': _msg_fb,
+                        })
+                        _cids_sesion.add(_cid)
+                        _rowkeys_sesion.add(_row_key_fb)
+                        if _tipo_fb != 'Gestión':
+                            _pairs_sesion.add((_cid, _tipo_fb))
+                    # Gestiones manuales → marcar como ya guardadas
                     if _tipo_fb == 'Gestión':
                         _meta = _g.get('metadata') or {}
                         _opcion = _meta.get('opcion_gestor', '') if isinstance(_meta, dict) else ''
                         if not _opcion:
                             _opcion = _RESULTADO_DISPLAY_MAP.get(str(_g.get('resultado', '')), '')
                         if _opcion:
-                            _resultados_supabase[_row_key_fb] = _opcion
-                    # Envío WA: NO se agrega a _resultados_supabase  → queda como pendiente para el cobrador
-                # Inyectar en session_state para que el resto del código los trate como "ya guardados"
-                if not _wa_res_sesion:
-                    _wa_res_sesion = {'details': _details_sesion, 'cycle_id': _cycle_id_actual,
-                                      'resultados_registrados': _resultados_supabase}
-                    st.session_state['last_wa_send_results'] = _wa_res_sesion
-                else:
-                    _wa_res_sesion['resultados_registrados'] = _resultados_supabase
+                            _rk_g = f"{_cid}_{_idx}"
+                            _resultados_supabase[_rk_g] = _opcion
+            # Sincronizar session_state
+            if not _wa_res_sesion:
+                _wa_res_sesion = {'details': _details_sesion, 'cycle_id': _cycle_id_actual,
+                                  'resultados_registrados': _resultados_supabase}
+                st.session_state['last_wa_send_results'] = _wa_res_sesion
+            else:
+                _wa_res_sesion['resultados_registrados'] = {
+                    **_resultados_supabase,
+                    **_wa_res_sesion.get('resultados_registrados', {}),
+                }
 
             # ── KPIs coloreados ───────────────────────────────────────────────
             # "Enviados"        = registros de Envío WA (metadata sin source)
@@ -942,10 +1119,10 @@ def render_tab(df_filtered, config):
             if not _df_gest.empty and 'resultado' in _df_gest.columns:
                 _mask_envio    = _df_gest.apply(_es_envio_masivo_kpi, axis=1)
                 _mask_gestion  = ~_mask_envio
-                _total_env     = int(_mask_envio.sum())
-                _con_gestion   = int(_mask_gestion.sum())
                 _cids_enviados = set(_df_gest[_mask_envio]['cliente_id'].astype(str))
                 _cids_gestion  = set(_df_gest[_mask_gestion]['cliente_id'].astype(str))
+                _total_env     = len(_cids_enviados)          # clientes únicos con envío WA
+                _con_gestion   = len(_cids_gestion)           # clientes únicos con gestión registrada
                 _pend_resp     = len(_cids_enviados - _cids_gestion)
                 _sin_contacto  = int((_df_gest[_mask_gestion]['resultado'] == 'SIN_RESPUESTA').sum())
             else:
@@ -1021,7 +1198,7 @@ def render_tab(df_filtered, config):
             _kpi_html = f"""
             {_kpi_css}
             <div class="kpi-grid">
-              <div class="kpi-card kpi-blue"><div class="kpi-val">{_total_env}</div><div class="kpi-lbl">Mensajes enviados</div></div>
+              <div class="kpi-card kpi-blue"><div class="kpi-val">{_total_env}</div><div class="kpi-lbl">Clientes contactados</div></div>
               <div class="kpi-card kpi-green"><div class="kpi-val">{_con_gestion}</div><div class="kpi-lbl">{_efec_lbl}</div><div class="kpi-sub">{_efec_sub}</div></div>
               <div class="kpi-card kpi-orange"><div class="kpi-val">{_pend_resp}</div><div class="kpi-lbl">Pendientes de gestión</div></div>
               <div class="kpi-card kpi-red"><div class="kpi-val">{_sin_contacto}</div><div class="kpi-lbl">Sin contacto</div></div>
@@ -1060,13 +1237,38 @@ def render_tab(df_filtered, config):
                     "Fallo envío":        ("#7f1d1d", "#fef2f2"),
                 }
 
-                _resultados_guard = _wa_res_sesion.get('resultados_registrados', {}) if _wa_res_sesion else {}
+                # RC-BUG-052: Usar resultados consolidados en lugar de solo del último envío
+                _resultados_guard = _resultados_consolidados.copy()
 
                 # ── Separar filas según Tipo ────────────────────────────────────
-                # Pendientes = Envío WA sin gestión manual del cobrador aún
-                # Historial  = Gestiones manuales ya registradas por el cobrador
+                # Pendientes = Envío WA SIN gestión posterior del cobrador
+                # Regla: si el último WA enviado es más reciente que la última gestión → pendiente
+                def _parse_hora_dt(h):
+                    if not h:
+                        return datetime.min
+                    for _fmt in ['%d/%m/%Y %H:%M', '%d/%m/%Y %H:%M:%S', '%Y-%m-%d %H:%M:%S']:
+                        try:
+                            return datetime.strptime(h, _fmt)
+                        except Exception:
+                            pass
+                    return datetime.min
+
+                _ultima_gestion: dict = {}   # CodCliente → datetime de última Gestión
+                _ultimo_envio:   dict = {}   # CodCliente → datetime de último Envío WA
+                for _d_ts in _details_sesion:
+                    _cid_ts = _d_ts.get('CodCliente', '')
+                    _h_ts   = _parse_hora_dt(_d_ts.get('Hora', ''))
+                    if _d_ts.get('Tipo') == 'Gestión':
+                        if _cid_ts not in _ultima_gestion or _h_ts > _ultima_gestion[_cid_ts]:
+                            _ultima_gestion[_cid_ts] = _h_ts
+                    else:
+                        if _cid_ts not in _ultimo_envio or _h_ts > _ultimo_envio[_cid_ts]:
+                            _ultimo_envio[_cid_ts] = _h_ts
+
+                # Gestionado = última gestión >= último envío WA (no hay envío posterior sin gestionar)
                 _cids_gestion_manual = {
-                    d.get('CodCliente', '') for d in _details_sesion if d.get('Tipo') == 'Gestión'
+                    _cid_ts for _cid_ts, _g_t in _ultima_gestion.items()
+                    if _g_t >= _ultimo_envio.get(_cid_ts, datetime.min)
                 }
                 # #1 Ordenar pendientes por saldo mayor → menor para priorizar deudas grandes
                 def _parse_saldo(d):
@@ -1093,10 +1295,15 @@ def render_tab(df_filtered, config):
                     key=lambda x: _parse_saldo(x[1]),
                     reverse=True  # mayor saldo primero
                 )
+                # Clientes con Gestión formal en Supabase → excluir su entrada de Envío WA (evita duplicados)
+                _cids_with_gestion = {d.get('CodCliente', '') for d in _details_sesion if d.get('Tipo') == 'Gestión'}
                 _rows_saved = [
                     (i, d) for i, d in enumerate(_details_sesion)
-                    if d.get('Tipo') == 'Gestión'                         # solo gestiones manuales
-                    or _resultados_guard.get(d.get('RowKey', d.get('CodCliente', '')))  # o guardado en sesión
+                    if d.get('Tipo') == 'Gestión'                         # gestiones del cobrador
+                    or (
+                        _resultados_guard.get(d.get('RowKey', d.get('CodCliente', '')))
+                        and d.get('CodCliente', '') not in _cids_with_gestion  # sin Gestión formal aún
+                    )
                 ]
 
                 # ── Pendientes (requieren acción del cobrador) ────────────────
@@ -1116,15 +1323,64 @@ def render_tab(df_filtered, config):
                         unsafe_allow_html=True
                     )
                     st.markdown("**Registrar resultado de gestión**")
-                    _COL_P = [0.4, 1.2, 2.8, 1.5, 1.5, 2.5, 2, 1.5]
+
+                    # ── Acción masiva ─────────────────────────────────────────
+                    _n_pend = len(_rows_pending)
+                    # Mapa chk_key → (_ai, _ad, _ak) para aplicar resultado
+                    _chk_det_map = {}
+                    for _ai, _ad in _rows_pending:
+                        _ak = _ad.get('RowKey', _ad.get('CodCliente', ''))
+                        _chk_det_map[f"seg_chk_{_ai}_{_ak}"] = (_ai, _ad, _ak)
+                    _chk_keys = list(_chk_det_map.keys())
+                    st.session_state['_seg_pending_chk_keys'] = _chk_keys
+                    _n_sel_am = sum(1 for _k in _chk_keys if st.session_state.get(_k, False))
+
+                    def _seg_sel_all_toggle():
+                        _v = st.session_state.get('seg_chk_all', False)
+                        for _k in st.session_state.get('_seg_pending_chk_keys', []):
+                            st.session_state[_k] = _v
+
+                    _am_lbl_col, _am_res_col, _am_btn_col = st.columns([3, 2.5, 2])
+                    _am_lbl_col.markdown(
+                        f'<span style="font-size:0.82rem;font-weight:700;color:#0369a1;">⚡ Acción masiva</span>'
+                        f'<span style="font-size:0.78rem;color:#94a3b8;margin-left:6px;">'
+                        f'— Marca filas y asigna resultado · <b>{_n_sel_am}</b> seleccionado(s)</span>',
+                        unsafe_allow_html=True
+                    )
+                    _am_resultado = _am_res_col.selectbox(
+                        "Resultado masivo",
+                        options=[o for o in _OPCIONES_RESULTADO if o != "⏳ Sin registrar"],
+                        key="seg_accion_masiva_res",
+                        label_visibility="collapsed",
+                    )
+                    if _am_btn_col.button(
+                        f"✅ Aplicar a marcados ({_n_sel_am})",
+                        key="seg_btn_am_aplicar",
+                        type="primary",
+                        disabled=(_n_sel_am == 0),
+                        use_container_width=True,
+                    ):
+                        for _k, (_ai_am, _ad_am, _ak_am) in _chk_det_map.items():
+                            if st.session_state.get(_k, False):
+                                st.session_state[f"seg_res_{_ai_am}_{_ak_am}"] = _am_resultado
+                                st.session_state[_k] = False
+                        st.session_state.pop('seg_chk_all', None)
+                        st.toast(f"⚡ '{_am_resultado}' aplicado a {_n_sel_am} clientes.", icon="✅")
+                        st.rerun()
+                    # ── Fin acción masiva ────────────────────────────────────
+
+                    _COL_P = [0.4, 0.4, 1.2, 2.8, 1.5, 1.5, 2.5, 2, 1.5]
                     _hdr_p = st.columns(_COL_P)
-                    for _hp, _ht in zip(_hdr_p, ["#", "Código", "Cliente", "Saldo Real", "Enviado",
-                                                  "Resultado", "Notas", "Acción"]):
+                    _hdr_p[0].checkbox("", key="seg_chk_all",
+                                       on_change=_seg_sel_all_toggle,
+                                       label_visibility="collapsed")
+                    for _hp, _ht in zip(_hdr_p[1:], ["#", "Código", "Cliente", "Saldo Real", "Enviado",
+                                                      "Resultado", "Notas", "Acción"]):
                         _hp.markdown(f"<span style='font-size:0.75rem;color:#64748b;font-weight:700;"
                                      f"letter-spacing:.04em;text-transform:uppercase;'>{_ht}</span>",
                                      unsafe_allow_html=True)
                     st.divider()
-                    for _i, _det in _rows_pending:
+                    for _ri, (_i, _det) in enumerate(_rows_pending):
                         _cod     = _det.get('CodCliente', '')
                         _row_key = _det.get('RowKey', _cod)
                         _cli     = _det.get('Cliente', '')
@@ -1146,12 +1402,14 @@ def render_tab(df_filtered, config):
                         else:
                             _hora = _hora_raw
                         _cols_p = st.columns(_COL_P)
-                        _cols_p[0].markdown(f"<span style='color:#94a3b8;font-size:0.82rem;'>{_i+1}</span>",
+                        _cols_p[0].checkbox("", key=f"seg_chk_{_i}_{_row_key}",
+                                            label_visibility="collapsed")
+                        _cols_p[1].markdown(f"<span style='color:#94a3b8;font-size:0.82rem;'>{_ri+1}</span>",
                                             unsafe_allow_html=True)
-                        _cols_p[1].markdown(f"<code style='font-size:0.78rem;background:#f1f5f9;"
+                        _cols_p[2].markdown(f"<code style='font-size:0.78rem;background:#f1f5f9;"
                                             f"padding:1px 5px;border-radius:3px;'>{_cod}</code>",
                                             unsafe_allow_html=True)
-                        _cols_p[2].markdown(f"<span style='font-weight:600;color:#0f172a;'>{_cli}</span>",
+                        _cols_p[3].markdown(f"<span style='font-weight:600;color:#0f172a;'>{_cli}</span>",
                                             unsafe_allow_html=True)
                         # #7 Color semántico en saldo — rojo para deuda alta, verde para baja
                         import re as _re_saldo
@@ -1165,25 +1423,25 @@ def render_tab(df_filtered, config):
                             _saldo_color = '#d97706'   # naranja — deuda media
                         else:
                             _saldo_color = '#374151'   # gris — deuda baja
-                        _cols_p[3].markdown(
+                        _cols_p[4].markdown(
                             f"<span style='color:{_saldo_color};font-weight:600;'>{_deu}</span>",
                             unsafe_allow_html=True
                         )
-                        _cols_p[4].markdown(f"<span style='font-size:0.82rem;color:#64748b;'>{_hora}</span>",
+                        _cols_p[5].markdown(f"<span style='font-size:0.82rem;color:#64748b;'>{_hora}</span>",
                                             unsafe_allow_html=True)
-                        _sel = _cols_p[5].selectbox(
+                        _sel = _cols_p[6].selectbox(
                             f"res_{_i}", _OPCIONES_RESULTADO,
                             key=f"seg_res_{_i}_{_row_key}",
                             label_visibility="collapsed",
                         )
-                        _nota = _cols_p[6].text_input(
+                        _nota = _cols_p[7].text_input(
                             f"nota_{_i}",
                             key=f"seg_nota_{_i}_{_row_key}",
                             placeholder="Agregar nota...",
                             label_visibility="collapsed",
                         )
                         _btn_t = "primary" if _sel == "Acordó pagar" else "secondary"
-                        if _cols_p[7].button("Guardar", key=f"seg_btn_{_i}_{_row_key}",
+                        if _cols_p[8].button("Guardar", key=f"seg_btn_{_i}_{_row_key}",
                                              type=_btn_t, use_container_width=True):
                             if _sel != "⏳ Sin registrar":
                                 _res_norm = _RESULTADO_MAP.get(_sel, "PENDIENTE")
@@ -1191,20 +1449,30 @@ def render_tab(df_filtered, config):
                                     cliente_id=_cod, tipo_gestion='WHATSAPP',
                                     resultado=_res_norm,
                                     notas=_nota if _nota else f"Resultado: {_sel}",
+                                    fecha=None,  # Supabase usa NOW() — hora real del momento del clic
                                     cycle_id=_cycle_id_lote,
                                     metadata_extra={'source': 'seguimiento_post_envio', 'opcion_gestor': _sel},
                                 )
                                 if _ok:
                                     _resultados_guard[_row_key] = _sel
+                                    
+                                    # RC-BUG-052: Actualizar el historial de envíos, no solo el último
+                                    _wa_send_history = st.session_state.get('wa_send_history', [])
+                                    for _send_result in _wa_send_history:
+                                        if _send_result.get('cycle_id') == _cycle_id_lote:
+                                            # Persistir nota en todos los detalles del historial
+                                            for _d in _send_result.get('details', []):
+                                                if _d.get('RowKey') == _row_key:
+                                                    _d['Notas'] = _nota if _nota else f"Resultado: {_sel}"
+                                            # Actualizar resultados registrados
+                                            _send_result['resultados_registrados'] = _resultados_guard
+                                    
+                                    # También mantener actualizado el último para compatibilidad
+                                    _wa_res_sesion = st.session_state.get('last_wa_send_results')
                                     if _wa_res_sesion:
-                                        # RC-BUG-032: persistir nota en session_state para que
-                                        # el historial la muestre tras st.rerun()
-                                        for _d in _wa_res_sesion.get('details', []):
-                                            if _d.get('RowKey') == _row_key:
-                                                _d['Notas'] = _nota if _nota else f"Resultado: {_sel}"
-                                                break
                                         _wa_res_sesion['resultados_registrados'] = _resultados_guard
                                         st.session_state['last_wa_send_results'] = _wa_res_sesion
+                                    
                                     st.toast(f"Guardado: {_cli}", icon="✅")
                                     st.rerun()
                                 else:
@@ -1212,20 +1480,19 @@ def render_tab(df_filtered, config):
                             else:
                                 st.warning("Selecciona un resultado antes de guardar.")
 
-                # ── Historial registrado (tabla HTML premium) ─────────────────
+                # ── Historial registrado (tabla HTML) ─────────────────────────
                 if _rows_saved:
                     if _rows_pending:
                         st.markdown("---")
                     st.markdown("**Historial de gestiones registradas**")
 
                     _html_rows = ''
+                    import html as _html_utils
                     for _ri, (_i, _det) in enumerate(_rows_saved):
                         _cod_h      = _det.get('CodCliente', '')
                         _row_key_h  = _det.get('RowKey', _cod_h)
                         _cli_h      = _det.get('Cliente', '')
                         _tel_h      = _det.get('Teléfono', '')
-                        # Mostrar saldo con moneda — usar DeudaS/DeudaD si existen,
-                        # fallback a Deuda raw si no hay info de moneda
                         _deu_s_h    = _det.get('DeudaS', '')
                         _deu_d_h    = _det.get('DeudaD', '')
                         if _deu_s_h or _deu_d_h:
@@ -1239,48 +1506,50 @@ def render_tab(df_filtered, config):
                                 _deu_h = str(_raw) if _raw else '—'
                         _tipo_h     = _det.get('Tipo', 'Envío WA')
                         _notas_h    = _det.get('Notas', '')
+                        _msg_h      = str(_det.get('Mensaje', '') or '')
+                        # Si es envío WA con nota de plantilla y ya tiene resultado registrado → nota limpia
+                        if _tipo_h != 'Gestión' and _notas_h.startswith('WA masivo'):
+                            _notas_h = ''
+                        _msg_h_safe = _html_utils.escape(_msg_h)
+                        _msg_h_short = _msg_h_safe if len(_msg_h_safe) <= 90 else (_msg_h_safe[:87] + '...')
+                        _notas_h_safe = _html_utils.escape(_notas_h)
                         _hora_h_raw = _det.get('Hora', '')
                         if _hora_h_raw and len(_hora_h_raw) <= 5:
                             _hora_h = datetime.now().strftime('%d/%m/%Y ') + _hora_h_raw
                         else:
                             _hora_h = _hora_h_raw
                         _res_h  = _resultados_guard.get(_row_key_h, '')
-                        # Normalizar resultado (puede tener emoji si vino de la sesión)
                         _res_clean = _res_h
                         for _pfx in ['✅ ', '🤝 ', '📵 ', '🔴 ', '💬 ', '⏳ ']:
                             if _res_clean.startswith(_pfx):
                                 _res_clean = _res_clean[len(_pfx):]
                                 break
                         _ftxt, _fbg = _RES_COLOR.get(_res_clean, ('#374151', '#f1f5f9'))
-                        # #6 Badge "Reintentar" para Sin respuesta — precalculado fuera del f-string
+                        # "↩ Reintentar" — llama goEnviar() definido en <script> del iframe
+                        # (sin comillas anidadas → no rompe el atributo onclick)
                         _reintentar_html = (
-                            '&nbsp;<a href="https://wa.me/" target="_blank" '
-                            'style="font-size:0.72rem;color:#0e7490;text-decoration:none;" '
-                            'title="Reenviar mensaje WA">\u21a9 Reintentar</a>'
+                            '&nbsp;<a href="#" onclick="goEnviar();return false;" '
+                            'style="font-size:0.72rem;background:#e0f2fe;color:#0369a1;'
+                            'border-radius:3px;padding:2px 6px;text-decoration:none;cursor:pointer;'
+                            'white-space:nowrap;" '
+                            'title="Reintentar: ir a Enviar Mensajes con este cliente">'
+                            '&#8617;</a>'
                             if _res_clean == 'Sin respuesta' else ''
                         )
-                        # #4 Tipo como ícono con tooltip — reduce ruido visual
                         _tipo_icon  = '📋' if _tipo_h == 'Gestión' else '📤'
                         _tipo_title = 'Gestión manual del cobrador' if _tipo_h == 'Gestión' else 'Envío masivo WA'
-                        # #2 Teléfono como link wa.me — un clic abre el chat
-                        _tel_clean_h = (_tel_h or '').replace('+', '').replace(' ', '')
-                        _tel_cell_h  = (f'<a href="https://wa.me/{_tel_clean_h}" target="_blank" '
-                                        f'title="Abrir chat en WhatsApp" '
-                                        f'style="color:#0e7490;text-decoration:none;">'
-                                        f'{_tel_h} 💬</a>') if _tel_clean_h else '—'
                         _row_bg = '#ffffff' if _ri % 2 == 0 else '#f9fafb'
                         _html_rows += (
                             f'<tr style="background:{_row_bg}">'
-                            f'<td style="color:#94a3b8;text-align:center;padding:9px 8px;">{_i+1}</td>'
+                            f'<td style="color:#94a3b8;text-align:center;padding:9px 8px;">{_ri+1}</td>'
                             f'<td style="padding:9px 8px;"><span style="background:#f1f5f9;border-radius:3px;'
                             f'padding:2px 6px;font-family:monospace;font-size:0.76rem;">{_cod_h}</span></td>'
                             f'<td style="padding:9px 12px;font-weight:600;color:#0f172a;">{_cli_h}</td>'
-                            f'<td style="padding:9px 8px;">{_tel_cell_h}</td>'
+                            f'<td style="padding:9px 8px;color:#374151;font-size:0.85rem;">{_tel_h or "—"}</td>'
                             f'<td style="padding:9px 8px;color:#0f172a;font-weight:500;">{_deu_h}</td>'
                             f'<td style="padding:9px 8px;color:#64748b;font-size:0.82rem;white-space:nowrap;">{_hora_h}</td>'
                             f'<td style="padding:9px 8px;text-align:center;" title="{_tipo_title}">'
                             f'<span style="font-size:1rem;">{_tipo_icon}</span></td>'
-                            # #6 Badge "Reintentar" para Sin respuesta
                             f'<td style="padding:9px 8px;">'
                             f'<span style="background:{_fbg};color:{_ftxt};'
                             f'border-radius:4px;padding:3px 8px;font-size:0.80rem;font-weight:500;'
@@ -1290,24 +1559,47 @@ def render_tab(df_filtered, config):
                             f'<td style="padding:9px 12px;color:#64748b;font-size:0.82rem;'
                             f'font-style:{"normal" if _notas_h else "italic"};'
                             f'max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" '
-                            f'title="{_notas_h}">{_notas_h or "—"}</td>'
+                            f'title="{_notas_h_safe}">{_notas_h_safe or "—"}</td>'
+                            f'<td style="padding:9px 12px;color:#334155;font-size:0.80rem;'
+                            f'max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" '
+                            f'title="{_msg_h_safe}">{_msg_h_short or "—"}</td>'
                             f'</tr>'
                         )
 
-                    st.markdown(
-                        f'<style>'
-                        f'.seg-tbl{{width:100%;border-collapse:collapse;font-size:0.875rem;}}'
-                        f'.seg-tbl th{{background:#f8fafc;color:#64748b;font-weight:700;font-size:0.72rem;'
-                        f'letter-spacing:.06em;text-transform:uppercase;padding:10px 8px;text-align:left;'
-                        f'border-bottom:2px solid #e2e8f0;white-space:nowrap;}}'
-                        f'.seg-tbl td{{border-bottom:1px solid #f1f5f9;vertical-align:middle;}}'
-                        f'</style>'
-                        f'<table class="seg-tbl"><thead><tr>'
-                        f'<th>#</th><th>Código</th><th>Cliente</th><th>Teléfono</th>'
-                        f'<th>Saldo Real</th><th>Enviado</th><th>Tipo</th><th>Resultado</th><th>Notas</th>'
-                        f'</tr></thead><tbody>{_html_rows}</tbody></table>',
-                        unsafe_allow_html=True
+                    _tbl_html = (
+                        '<script>'
+                        # goEnviar: busca el radio label que contiene "Enviar" y lo clickea
+                        # window.parent funciona porque components.html tiene sandbox=allow-same-origin
+                        'function goEnviar(){'
+                        '  var doc=window.parent.document;'
+                        '  doc.querySelectorAll("[data-testid=\'stRadio\'] label").forEach(function(l){'
+                        '    if(l.innerText.indexOf("Enviar")>-1)l.click();'
+                        '  });'
+                        '}'
+                        '</script>'
+                        '<style>'
+                        'body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}'
+                        '.tbl-wrapper{width:100%;max-height:460px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;}'
+                        '.seg-tbl{width:100%;border-collapse:collapse;font-size:0.875rem;}'
+                        '.seg-tbl thead th{position:sticky;top:0;z-index:2;background:#f8fafc;color:#64748b;'
+                        'font-weight:700;font-size:0.72rem;letter-spacing:.06em;text-transform:uppercase;'
+                        'padding:10px 8px;text-align:left;border-bottom:2px solid #e2e8f0;white-space:nowrap;}'
+                        '.seg-tbl td{border-bottom:1px solid #f1f5f9;vertical-align:middle;}'
+                        '</style>'
+                        '<div class="tbl-wrapper">'
+                        '<table class="seg-tbl"><thead><tr>'
+                        '<th>#</th><th>Código</th><th>Cliente</th><th>Teléfono</th>'
+                        '<th>Saldo Real</th><th>Enviado</th><th>Tipo</th><th>Resultado</th><th>Notas</th><th>Mensaje WA</th>'
+                        f'</tr></thead><tbody>{_html_rows}</tbody></table>'
+                        '</div>'
                     )
+                    # Altura del iframe: hasta 8 filas sin scroll externo; más filas → scroll interno en .tbl-wrapper
+                    _row_px   = 52
+                    _header_px = 44
+                    _max_rows_sin_scroll = 8
+                    _visible  = min(len(_rows_saved), _max_rows_sin_scroll)
+                    _tbl_height = max(100, _header_px + _visible * _row_px + 20)
+                    components.html(_tbl_html, height=_tbl_height, scrolling=False)
 
                 st.markdown("")
                 # Botones de pie
@@ -1344,12 +1636,22 @@ def render_tab(df_filtered, config):
                             cliente_id=_cod2, tipo_gestion='WHATSAPP',
                             resultado=_res_norm2,
                             notas=_nota2 if _nota2 else f"Resultado: {_sel2}",
+                            fecha=None,  # Supabase usa NOW() — hora real del momento del clic
                             cycle_id=_cycle_id_lote,
                             metadata_extra={'source': 'seguimiento_guardar_todos', 'opcion_gestor': _sel2},
                         )
                         if _ok2:
                             _resultados_guard[_row_key2] = _sel2
                             _guardados_tot += 1
+                    
+                    # RC-BUG-052: Actualizar el historial completo de envíos
+                    _wa_send_history = st.session_state.get('wa_send_history', [])
+                    for _send_result in _wa_send_history:
+                        if _send_result.get('cycle_id') == _cycle_id_lote:
+                            _send_result['resultados_registrados'] = _resultados_guard
+                    
+                    # También actualizar el último para compatibilidad
+                    _wa_res_sesion = st.session_state.get('last_wa_send_results')
                     if _wa_res_sesion:
                         _wa_res_sesion['resultados_registrados'] = _resultados_guard
                         st.session_state['last_wa_send_results'] = _wa_res_sesion
