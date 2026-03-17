@@ -807,13 +807,14 @@ def _check_modal_gone(page):
 
 
 def send_whatsapp_messages_direct(
-    contacts, 
-    message, 
-    speed="Normal (Recomendado)", 
+    contacts,
+    message,
+    speed="Normal (Recomendado)",
     progress_callback=None,
-    send_mode="texto",  # NUEVO: "texto", "imagen_ejecutiva", "imagen_pdf"
-    branding_config=None,  # NUEVO: Configuración de branding
-    logo_path=None  # NUEVO: Ruta al logo
+    send_mode="texto",
+    branding_config=None,
+    logo_path=None,
+    on_client_sent=None,  # callback(cod_cliente, resultado, contact) — se llama al terminar c/cliente
 ):
     """
     Envía mensajes de WhatsApp directamente usando Playwright desde Streamlit.
@@ -895,6 +896,7 @@ def send_whatsapp_messages_direct(
     fallidos = 0
     errores = []
     log_lines = []
+    resultados_por_cliente = {}  # cod_cliente → 'EXITOSO' | 'FALLIDO'
 
     def add_log(text):
         """Agrega línea al log y reporta progreso"""
@@ -1053,7 +1055,8 @@ def send_whatsapp_messages_direct(
             final_msg = contact['mensaje']
             nombre = contact['nombre']
             img_path = contact.get('image_path', None) # Path Local de Imagen
-            
+            _cod_cli = str(contact.get('cod_cliente', '') or '').strip() or str(i)
+
             # 0. Limpieza Preventiva del Portapapeles (Enterprise Standard)
             # Evita que residuos de iteraciones anteriores contaminen la actual
             try:
@@ -1062,10 +1065,13 @@ def send_whatsapp_messages_direct(
                 time.sleep(0.5) # Short sync wait
             except:
                 pass
-            
+
             if not phone:
                 add_log(f"[{i}/{len(processed_contacts)}] ⚠️ Salteando {nombre}: Sin teléfono")
                 fallidos += 1
+                resultados_por_cliente[_cod_cli] = 'FALLIDO'
+                if on_client_sent:
+                    on_client_sent(_cod_cli, 'FALLIDO', contact)
                 continue
 
             try:
@@ -1113,6 +1119,9 @@ def send_whatsapp_messages_direct(
                     add_log("    ❌ Número inválido detectado por WhatsApp")
                     errores.append(f"{nombre}: Número inválido")
                     fallidos += 1
+                    resultados_por_cliente[_cod_cli] = 'FALLIDO'
+                    if on_client_sent:
+                        on_client_sent(_cod_cli, 'FALLIDO', contact)
                     continue
                 except Exception as e_load:
                     raise Exception(f"Timeout cargando chat: {str(e_load)}")
@@ -1372,12 +1381,18 @@ def send_whatsapp_messages_direct(
                                 add_log(f"    ⚠️ Error adjuntando PDF: {error_msg}")
 
                         exitosos += 1
+                        resultados_por_cliente[_cod_cli] = 'EXITOSO'
+                        if on_client_sent:
+                            on_client_sent(_cod_cli, 'EXITOSO', contact)
 
                     except Exception as e_img:
                         err_msg = str(e_img).split('\n')[0]
                         add_log(f"    ❌ Falló envío de imagen: {err_msg}")
                         errores.append(f"{nombre}: Falló envío de imagen ({err_msg})")
                         fallidos += 1
+                        resultados_por_cliente[_cod_cli] = 'FALLIDO'
+                        if on_client_sent:
+                            on_client_sent(_cod_cli, 'FALLIDO', contact)
 
                 
                 # ENVÍO SOLO TEXTO (Fallback o Standard)
@@ -1402,11 +1417,17 @@ def send_whatsapp_messages_direct(
 
                         add_log("    ✅ Enviado (Texto)")
                         exitosos += 1
+                        resultados_por_cliente[_cod_cli] = 'EXITOSO'
+                        if on_client_sent:
+                            on_client_sent(_cod_cli, 'EXITOSO', contact)
                         time.sleep(2)
 
                     except Exception as e_txt:
                         add_log(f"    ❌ Error envío texto: {str(e_txt)}")
                         fallidos += 1
+                        resultados_por_cliente[_cod_cli] = 'FALLIDO'
+                        if on_client_sent:
+                            on_client_sent(_cod_cli, 'FALLIDO', contact)
                         errores.append(f"{nombre}: {str(e_txt)}")
 
                 # Delay entre mensajes
@@ -1417,6 +1438,9 @@ def send_whatsapp_messages_direct(
             except Exception as e:
                 add_log(f"    ❌ Error iteración: {str(e)}")
                 fallidos += 1
+                resultados_por_cliente[_cod_cli] = 'FALLIDO'
+                if on_client_sent:
+                    on_client_sent(_cod_cli, 'FALLIDO', contact)
         
         # Final
         if progress_callback:
@@ -1449,7 +1473,8 @@ def send_whatsapp_messages_direct(
                     add_log(f"    Warning: No se pudo eliminar {file_path}: {e}")
 
     return {
-        'exitosos': exitosos, 
-        'fallidos': fallidos, 
-        'log': "\n".join(log_lines)
+        'exitosos': exitosos,
+        'fallidos': fallidos,
+        'log': "\n".join(log_lines),
+        'resultados_por_cliente': resultados_por_cliente,  # cod_cliente → 'EXITOSO'|'FALLIDO'
     }

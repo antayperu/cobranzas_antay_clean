@@ -6,7 +6,7 @@ import base64
 import os
 import streamlit.components.v1 as components
 import utils.storage_manager as storage_mgr
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 # RC-FEAT-020: Biblioteca de 7 Plantillas WA
 WA_PLANTILLAS_BIBLIOTECA = {
@@ -824,64 +824,70 @@ def render_tab(df_filtered, config):
                 status_placeholder.info("⏳ Preparando envío...")
                 
                 try:
-                    results = send_whatsapp_messages_direct(
-                        contacts=contacts_to_send, 
-                        message=template, 
-                        speed="Normal (Recomendado)",
-                        progress_callback=progress_callback,
-                        send_mode=send_mode_value,  # NUEVO v5.0: Modo de envío
-                        branding_config=config,      # NUEVO v5.0: Configuración de branding
-                        logo_path=logo_path          # NUEVO v5.0: Ruta al logo
-                    )
-                    
-                    # --- RC-FEAT-018: Persistir envíos en gestiones (Supabase) ---
-                    now_wa = datetime.now()
-                    resultado_lote = 'EXITOSO' if results['exitosos'] > 0 else 'FALLIDO'
-                    persisted_wa = 0
+                    # --- RC-FEAT-018: Persistir en Supabase DURANTE el envío (no al final) ---
+                    # El callback se llama inmediatamente después de cada cliente.
+                    # Si se corta la luz a mitad del envío, los clientes ya procesados
+                    # quedan registrados correctamente en Supabase.
+                    now_wa         = datetime.now()             # hora Perú — display y sesión
+                    now_wa_utc     = datetime.now(timezone.utc) # UTC real — Supabase
                     current_cycle_id = st.session_state.get('cycle_id', 'default_cycle')
-                    for contact in contacts_to_send:
-                        cod = str(contact.get('cod_cliente', '')).strip()
-                        if not cod:
-                            continue
-                        # Evidencia de auditoría: conservar en metadata el mensaje exacto enviado.
-                        _meta_envio = {
+                    _fecha_utc_str = now_wa_utc.isoformat()
+                    _persisted_wa  = [0]  # lista mutable para contar desde el closure
+
+                    def _on_client_sent(cod_cliente, resultado, contact_data):
+                        """Graba en Supabase inmediatamente al terminar el envío de cada cliente."""
+                        if not cod_cliente:
+                            return
+                        _meta = {
                             'origen': 'wa_envio_masivo',
                             'template_label': st.session_state.get('wa_sel_lib', _sel_lib_actual),
                             'template_text': str(template or ''),
-                            'mensaje_enviado': str(contact.get('mensaje', '') or ''),
-                            'telefono_destino': str(contact.get('telefono', '') or ''),
+                            'mensaje_enviado': str(contact_data.get('mensaje', '') or ''),
+                            'telefono_destino': str(contact_data.get('telefono', '') or ''),
                             'send_mode': str(send_mode_value or 'texto'),
                         }
                         if current_wa_batch_id:
-                            _meta_envio['batch_id'] = current_wa_batch_id
+                            _meta['batch_id'] = current_wa_batch_id
                         ok, _ = dbm.insert_gestion(
-                            cliente_id=cod,
+                            cliente_id=cod_cliente,
                             tipo_gestion='WHATSAPP',
-                            resultado=resultado_lote,
-                            notas=f"WA masivo | {contact.get('TOTAL_SALDO_REAL', '')} | Tel: {contact.get('telefono', '')}",
-                            fecha=now_wa.isoformat(),
+                            resultado=resultado,
+                            notas=f"WA masivo | {contact_data.get('TOTAL_SALDO_REAL', '')} | Tel: {contact_data.get('telefono', '')}",
+                            fecha=_fecha_utc_str,
                             cycle_id=current_cycle_id,
-                            metadata_extra=_meta_envio,
+                            metadata_extra=_meta,
                         )
                         if ok:
-                            persisted_wa += 1
+                            _persisted_wa[0] += 1
+
+                    results = send_whatsapp_messages_direct(
+                        contacts=contacts_to_send,
+                        message=template,
+                        speed="Normal (Recomendado)",
+                        progress_callback=progress_callback,
+                        send_mode=send_mode_value,
+                        branding_config=config,
+                        logo_path=logo_path,
+                        on_client_sent=_on_client_sent,  # graba en Supabase cliente a cliente
+                    )
 
                     # Actualizar df_final en session_state con tracking WA
                     if 'df_final' in st.session_state and not st.session_state['df_final'].empty:
                         cods_enviados = {str(c.get('cod_cliente', '')).strip() for c in contacts_to_send}
-                        wa_ts = now_wa.strftime('%Y-%m-%d %H:%M:%S')
+                        wa_ts_display = now_wa.strftime('%Y-%m-%d %H:%M:%S')      # hora Perú — pantalla
+                        wa_ts_utc_str = now_wa_utc.strftime('%Y-%m-%dT%H:%M:%S+00:00')  # UTC — Supabase
                         mask_wa = st.session_state['df_final']['COD CLIENTE'].astype(str).str.strip().isin(cods_enviados)
                         if 'ESTADO_WHATSAPP' in st.session_state['df_final'].columns:
                             st.session_state['df_final'].loc[mask_wa, 'ESTADO_WHATSAPP'] = 'ENVIADO'
                         if 'FECHA_ULTIMO_WA' in st.session_state['df_final'].columns:
-                            st.session_state['df_final'].loc[mask_wa, 'FECHA_ULTIMO_WA'] = wa_ts
+                            st.session_state['df_final'].loc[mask_wa, 'FECHA_ULTIMO_WA'] = wa_ts_display
 
                     # SSOT: Sincronizar estado_whatsapp en documentos_ciclo (Supabase)
                     if cods_enviados:
                         dbm.update_estado_whatsapp_in_cycle(
                             cycle_id=st.session_state.get('cycle_id'),
                             cliente_ids=list(cods_enviados),
-                            fecha=wa_ts,
+                            fecha=wa_ts_utc_str,  # UTC real para integridad en Supabase
                         )
 
                     # --- RC-FEAT-WA-UX: Guardar resultados + rerun (igual que Email tab) ---
@@ -892,7 +898,7 @@ def render_tab(df_filtered, config):
                             'Cliente': c['nombre_cliente'],
                             'CodCliente': _cod_c,
                             'Teléfono': c['telefono'],
-                            'Estado': '✅ Enviado' if resultado_lote == 'EXITOSO' else '❌ Fallido',
+                            'Estado': '✅ Enviado' if results.get('resultados_por_cliente', {}).get(_cod_c, 'FALLIDO') == 'EXITOSO' else '❌ Fallido',
                             'Deuda': c.get('TOTAL_SALDO_REAL', ''),
                             'DeudaS': c.get('TOTAL_SALDO_S', ''),  # "S/ 623.00"
                             'DeudaD': c.get('TOTAL_SALDO_D', ''),  # "$ 373.94"
@@ -956,12 +962,15 @@ def render_tab(df_filtered, config):
                 # Consolidar también los resultados registrados
                 _resultados_consolidados.update(_send_result.get('resultados_registrados', {}))
         
+        # _wa_res_sesion siempre disponible (RC-BUG-053: evita UnboundLocalError en línea 969
+        # cuando _all_details_consolidated ya viene poblado desde wa_send_history)
+        _wa_res_sesion = st.session_state.get('last_wa_send_results')
+
         # Si no hay historial, usar el último para compatibilidad
         if not _all_details_consolidated:
-            _wa_res_sesion = st.session_state.get('last_wa_send_results')
             _all_details_consolidated = list(_wa_res_sesion.get('details', [])) if _wa_res_sesion else []
             _resultados_consolidados = _wa_res_sesion.get('resultados_registrados', {}) if _wa_res_sesion else {}
-        
+
         # Obtener datos consolidados para la tabla interactiva
         # RC-BUG-048: list() crea una COPIA local, no una referencia al objeto en session_state.
         # Sin esto, cada rerun iba acumulando filas de Supabase sobre el mismo objeto → duplicados.
@@ -986,8 +995,14 @@ def render_tab(df_filtered, config):
             }
             _resultados_supabase = {}
             if not _df_gest.empty:
-                # CodClientes ya presentes en la sesión actual (lote recién enviado)
-                _cids_sesion = {str(d.get('CodCliente', '')) for d in _details_sesion}
+                # Deduplicación por tipo:
+                # - 'Envío WA': deduplicar por (CodCliente, Tipo) — solo 1 entrada por cliente
+                #   (la sesión ya tiene el envío; Supabase no debe duplicarlo)
+                # - 'Gestión': deduplicar por RowKey individual — un cliente puede tener
+                #   MÚLTIPLES gestiones (una por cada envío WA), todas deben mostrarse en historial
+                _cids_sesion   = {str(d.get('CodCliente', '')) for d in _details_sesion}
+                _pairs_sesion  = {(str(d.get('CodCliente', '')), d.get('Tipo', '')) for d in _details_sesion}
+                _rowkeys_sesion = {d.get('RowKey', '') for d in _details_sesion}
                 _df_gest_sorted = _df_gest.copy()
                 if 'created_at' in _df_gest_sorted.columns:
                     _df_gest_sorted['created_at'] = pd.to_datetime(_df_gest_sorted['created_at'], errors='coerce')
@@ -997,13 +1012,28 @@ def render_tab(df_filtered, config):
                     if not _cid:
                         continue
                     _meta_fb   = _g.get('metadata') or {}
+                    # RC-BUG-049 aplicado ANTES del type determination:
+                    # metadata puede llegar como string JSON desde Supabase → parsear aquí
+                    # para que la detección de 'source' (y por tanto _tipo_fb) sea correcta.
+                    if isinstance(_meta_fb, str):
+                        try:
+                            import json as _json_pre
+                            _meta_fb = _json_pre.loads(_meta_fb)
+                        except Exception:
+                            _meta_fb = {}
                     _source_fb = _meta_fb.get('source', '') if isinstance(_meta_fb, dict) else ''
                     _tipo_fb   = 'Gestión' if _source_fb else 'Envío WA'
-                    # Solo añadir filas de "Envío WA" si ese cliente no viene ya del lote de sesión.
-                    # Recalcular _cids_sesion después de cada append para evitar duplicar el mismo
-                    # cliente que aparezca en múltiples lotes históricos de Supabase.
-                    if _tipo_fb == 'Envío WA' and _cid in _cids_sesion:
-                        # El lote de sesión ya lo tiene — solo actualizamos resultados si hay gestión
+                    _row_key_fb = f"{_cid}_{_idx}"
+                    # Regla de deduplicación:
+                    # - Envío WA: bloquear por (CodCliente, Tipo) — la sesión ya tiene el envío
+                    # - Gestión: bloquear por RowKey individual — un cliente puede tener
+                    #   MÚLTIPLES gestiones (una por cada envío), todas deben mostrarse
+                    _ya_existe = (
+                        _row_key_fb in _rowkeys_sesion
+                        if _tipo_fb == 'Gestión'
+                        else (_cid, _tipo_fb) in _pairs_sesion
+                    )
+                    if _ya_existe:
                         pass
                     else:
                         _empresa, _tel, _saldo = _cid, '', ''
@@ -1024,7 +1054,11 @@ def render_tab(df_filtered, config):
                                     if _sum_d_fb > 0: _deuda_d_fb = f"$ {_sum_d_fb:,.2f}"
                         _fecha_hora_g = ''
                         try:
-                            _fecha_hora_g = pd.to_datetime(_g.get('created_at', '')).strftime('%d/%m/%Y %H:%M')
+                            # Convertir UTC → hora Perú (UTC-5, sin horario de verano)
+                            # para que sea comparable con los timestamps de sesión (también hora Perú)
+                            _dt_utc = pd.to_datetime(_g.get('created_at', ''), utc=True)
+                            _dt_peru = _dt_utc - pd.Timedelta(hours=5)
+                            _fecha_hora_g = _dt_peru.strftime('%d/%m/%Y %H:%M')
                         except Exception:
                             pass
                         _notas_fb   = str(_g.get('notas', '') or '')
@@ -1038,7 +1072,6 @@ def render_tab(df_filtered, config):
                                 _meta_fb = {}
                         if isinstance(_meta_fb, dict):
                             _msg_fb = str(_meta_fb.get('mensaje_enviado', '') or '')
-                        _row_key_fb = f"{_cid}_{_idx}"
                         _details_sesion.append({
                             'Cliente': _empresa, 'CodCliente': _cid,
                             'Teléfono': _tel, 'Deuda': _saldo, 'Hora': _fecha_hora_g,
@@ -1046,7 +1079,10 @@ def render_tab(df_filtered, config):
                             'DeudaS': _deuda_s_fb, 'DeudaD': _deuda_d_fb,
                             'Mensaje': _msg_fb,
                         })
-                        _cids_sesion.add(_cid)  # evita duplicar cliente si aparece en otro lote histórico
+                        _cids_sesion.add(_cid)
+                        _rowkeys_sesion.add(_row_key_fb)
+                        if _tipo_fb != 'Gestión':
+                            _pairs_sesion.add((_cid, _tipo_fb))
                     # Gestiones manuales → marcar como ya guardadas
                     if _tipo_fb == 'Gestión':
                         _meta = _g.get('metadata') or {}
@@ -1409,18 +1445,11 @@ def render_tab(df_filtered, config):
                                              type=_btn_t, use_container_width=True):
                             if _sel != "⏳ Sin registrar":
                                 _res_norm = _RESULTADO_MAP.get(_sel, "PENDIENTE")
-                                # RC-BUG-051: Recuperar timestamp original del envío para consistencia de fecha
-                                _hora_iso = None
-                                if _wa_res_sesion:
-                                    for _d in _wa_res_sesion.get('details', []):
-                                        if _d.get('RowKey') == _row_key or _d.get('CodCliente') == _cod:
-                                            _hora_iso = _d.get('HoraISO')
-                                            break
                                 _ok, _ = dbm.insert_gestion(
                                     cliente_id=_cod, tipo_gestion='WHATSAPP',
                                     resultado=_res_norm,
                                     notas=_nota if _nota else f"Resultado: {_sel}",
-                                    fecha=_hora_iso,  # RC-BUG-051: fecha explícita del envío original
+                                    fecha=None,  # Supabase usa NOW() — hora real del momento del clic
                                     cycle_id=_cycle_id_lote,
                                     metadata_extra={'source': 'seguimiento_post_envio', 'opcion_gestor': _sel},
                                 )
@@ -1550,20 +1579,26 @@ def render_tab(df_filtered, config):
                         '</script>'
                         '<style>'
                         'body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}'
+                        '.tbl-wrapper{width:100%;max-height:460px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;}'
                         '.seg-tbl{width:100%;border-collapse:collapse;font-size:0.875rem;}'
-                        '.seg-tbl th{background:#f8fafc;color:#64748b;font-weight:700;font-size:0.72rem;'
-                        'letter-spacing:.06em;text-transform:uppercase;padding:10px 8px;text-align:left;'
-                        'border-bottom:2px solid #e2e8f0;white-space:nowrap;}'
+                        '.seg-tbl thead th{position:sticky;top:0;z-index:2;background:#f8fafc;color:#64748b;'
+                        'font-weight:700;font-size:0.72rem;letter-spacing:.06em;text-transform:uppercase;'
+                        'padding:10px 8px;text-align:left;border-bottom:2px solid #e2e8f0;white-space:nowrap;}'
                         '.seg-tbl td{border-bottom:1px solid #f1f5f9;vertical-align:middle;}'
                         '</style>'
+                        '<div class="tbl-wrapper">'
                         '<table class="seg-tbl"><thead><tr>'
                         '<th>#</th><th>Código</th><th>Cliente</th><th>Teléfono</th>'
                         '<th>Saldo Real</th><th>Enviado</th><th>Tipo</th><th>Resultado</th><th>Notas</th><th>Mensaje WA</th>'
                         f'</tr></thead><tbody>{_html_rows}</tbody></table>'
+                        '</div>'
                     )
-                    # components.html usa sandbox=allow-same-origin → JS puede clickear
-                    # el radio de sub-tabs en window.parent.document
-                    _tbl_height = max(80, 52 + len(_rows_saved) * 52)
+                    # Altura del iframe: hasta 8 filas sin scroll externo; más filas → scroll interno en .tbl-wrapper
+                    _row_px   = 52
+                    _header_px = 44
+                    _max_rows_sin_scroll = 8
+                    _visible  = min(len(_rows_saved), _max_rows_sin_scroll)
+                    _tbl_height = max(100, _header_px + _visible * _row_px + 20)
                     components.html(_tbl_html, height=_tbl_height, scrolling=False)
 
                 st.markdown("")
@@ -1597,18 +1632,11 @@ def render_tab(df_filtered, config):
                         if _sel2 == "⏳ Sin registrar":
                             continue
                         _res_norm2 = _RESULTADO_MAP.get(_sel2, "PENDIENTE")
-                        # RC-BUG-051: Recuperar timestamp original del envío para consistencia de fecha
-                        _hora_iso2 = None
-                        # RC-BUG-052: Buscar en TODO el historial consolidado, no solo el último envío
-                        for _d in _all_details_consolidated:
-                            if _d.get('RowKey') == _row_key2 or _d.get('CodCliente') == _cod2:
-                                _hora_iso2 = _d.get('HoraISO')
-                                break
                         _ok2, _ = dbm.insert_gestion(
                             cliente_id=_cod2, tipo_gestion='WHATSAPP',
                             resultado=_res_norm2,
                             notas=_nota2 if _nota2 else f"Resultado: {_sel2}",
-                            fecha=_hora_iso2,  # RC-BUG-051: fecha explícita del envío original
+                            fecha=None,  # Supabase usa NOW() — hora real del momento del clic
                             cycle_id=_cycle_id_lote,
                             metadata_extra={'source': 'seguimiento_guardar_todos', 'opcion_gestor': _sel2},
                         )
