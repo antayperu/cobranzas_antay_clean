@@ -358,13 +358,15 @@ def _normalize_status_code(status_code: Optional[str]) -> str:
 
 
 def _map_status_to_notification(status_code: str) -> Tuple[str, str, Optional[str], str]:
+    # tipo_notificacion = CANAL (EMAIL / WHATSAPP) — no el tipo de alerta.
+    # La prioridad/urgencia queda en los campos `estado` y `prioridad`.
     if status_code == "SENT":
-        return "INFO", "ENVIADO", _now_str(), "NORMAL"
+        return "EMAIL", "ENVIADO", _now_str(), "NORMAL"
     if status_code == "BLOCKED":
-        return "ALERTA", "PENDIENTE", None, "NORMAL"
+        return "EMAIL", "PENDIENTE", None, "NORMAL"
     if status_code in {"FAILED", "ERROR", "BOUNCE", "BOUNCED"}:
-        return "GESTION_FALLIDA", "PENDIENTE", None, "ALTA"
-    return "INFO", "PENDIENTE", None, "NORMAL"
+        return "EMAIL", "PENDIENTE", None, "ALTA"
+    return "EMAIL", "PENDIENTE", None, "NORMAL"
 
 
 def persist_notification_event(
@@ -451,7 +453,7 @@ def get_wa_gestiones_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
     try:
         res = _safe_execute(
             client.table("gestiones")
-            .select("cliente_id, resultado, notas, fecha, created_at, metadata")
+            .select("cliente_id, resultado, notas, fecha, created_at, metadata, tipo_registro")
             .eq("tipo_gestion", "WHATSAPP")
             .eq("cycle_id", str(cycle_id).strip())
             .order("created_at", desc=False)
@@ -1140,7 +1142,76 @@ def migrate_clientes_from_cartera_df(df_cartera: pd.DataFrame, batch_size: int =
 # ---------------------------------------------------------------------------
 
 GESTION_TIPOS_VALIDOS = {"EMAIL", "WHATSAPP", "LLAMADA", "VISITA", "NOTA", "OTRO"}
-GESTION_RESULTADOS_VALIDOS = {"EXITOSO", "FALLIDO", "PENDIENTE", "SIN_RESPUESTA", "REPROGRAMADO"}
+
+# Fallback estático — solo se usa si Supabase no está disponible o la tabla
+# catalogo_resultados aún no existe. La fuente de verdad es la BD.
+_RESULTADOS_FALLBACK = [
+    {"codigo": "EXITOSO",        "etiqueta": "Acordó pagar",            "icono": "✅", "color_scheme": "success", "es_legado": False, "orden": 1},
+    {"codigo": "PROMESA_PAGO",   "etiqueta": "Prometió pagar",          "icono": "🤝", "color_scheme": "info",    "es_legado": True,  "orden": 93},
+    {"codigo": "SOLICITO_PLAZO", "etiqueta": "Solicitó más plazo", "icono": "⏳", "color_scheme": "warning", "es_legado": False, "orden": 3},
+    {"codigo": "EN_NEGOCIACION", "etiqueta": "En negociación",     "icono": "💬", "color_scheme": "info",    "es_legado": False, "orden": 4},
+    {"codigo": "SIN_RESPUESTA",  "etiqueta": "Sin respuesta",      "icono": "📵", "color_scheme": "neutral", "es_legado": False, "orden": 5},
+    {"codigo": "ESCALAR_LEGAL",  "etiqueta": "Derivar a Legal",    "icono": "⚖️", "color_scheme": "danger",  "es_legado": False, "orden": 6},
+    {"codigo": "DISPUTA",        "etiqueta": "Disputó la deuda",   "icono": "❓", "color_scheme": "warning", "es_legado": False, "orden": 7},
+    {"codigo": "FALLIDO",        "etiqueta": "Falló",              "icono": "❌", "color_scheme": "danger",  "es_legado": True,  "orden": 90},
+    {"codigo": "PENDIENTE",      "etiqueta": "Prometió pagar",     "icono": "🤝", "color_scheme": "warning", "es_legado": True,  "orden": 91},
+    {"codigo": "REPROGRAMADO",   "etiqueta": "Derivar a Legal",    "icono": "⚖️", "color_scheme": "neutral", "es_legado": True,  "orden": 92},
+]
+
+# Caché en memoria: se invalida cada 5 minutos para reflejar cambios en BD sin reiniciar.
+_catalogo_cache: Optional[List[Dict[str, Any]]] = None
+_catalogo_cache_ts: float = 0.0
+_CATALOGO_TTL_SECONDS = 300  # 5 minutos
+
+
+def get_catalogo_resultados(*, include_legado: bool = True) -> List[Dict[str, Any]]:
+    """Devuelve el catálogo de resultados desde Supabase con caché de 5 minutos.
+
+    Cada elemento tiene: codigo, etiqueta, icono, color_scheme, es_legado, orden.
+    Si la tabla no existe o Supabase no está disponible, usa el fallback estático.
+
+    Args:
+        include_legado: Si False, excluye valores legado (para nuevas gestiones).
+    """
+    import time
+    global _catalogo_cache, _catalogo_cache_ts
+
+    now = time.monotonic()
+    if _catalogo_cache is None or (now - _catalogo_cache_ts) > _CATALOGO_TTL_SECONDS:
+        client = get_supabase_client()
+        if client:
+            try:
+                resp = _safe_execute(
+                    client.table("catalogo_resultados")
+                    .select("codigo,etiqueta,icono,color_scheme,es_legado,orden")
+                    .eq("activo", True)
+                    .order("orden")
+                )
+                if resp and isinstance(resp.data, list) and resp.data:
+                    _catalogo_cache = resp.data
+                    _catalogo_cache_ts = now
+            except Exception:
+                pass  # mantiene caché anterior o usa fallback
+
+    rows = _catalogo_cache if _catalogo_cache else _RESULTADOS_FALLBACK
+    if not include_legado:
+        rows = [r for r in rows if not r.get("es_legado", False)]
+    return rows
+
+
+def get_resultado_label(codigo: str) -> str:
+    """Convierte un código interno al label con ícono para mostrar en UI."""
+    for r in get_catalogo_resultados(include_legado=True):
+        if r["codigo"] == codigo:
+            return f"{r['icono']} {r['etiqueta']}"
+    return codigo
+
+
+def _get_resultados_validos_set() -> set:
+    """Set de códigos válidos para validación en insert_gestion."""
+    return {r["codigo"] for r in get_catalogo_resultados(include_legado=True)}
+
+
 
 
 def insert_gestion(
@@ -1154,8 +1225,16 @@ def insert_gestion(
     fecha: Optional[str] = None,
     cycle_id: Optional[str] = None,
     metadata_extra: Optional[Dict[str, Any]] = None,
+    tipo_registro: str = "GESTION",
 ) -> Tuple[bool, str]:
-    """Insert a manual gestion/interaction record."""
+    """Insert a gestion/interaction record.
+
+    tipo_registro:
+      'ENVIO'   — Registro automático del sistema (WA masivo enviado).
+                  El Dashboard lo cuenta en "WA enviados", no en "Gestiones".
+      'GESTION' — Acción manual del gestor (seguimiento, notas, resultado).
+                  El Dashboard lo cuenta en "Gestiones totales" y KPIs de éxito.
+    """
     client = get_supabase_client()
     if not client:
         _set_last_error("Supabase no disponible para registrar gestion.")
@@ -1166,8 +1245,10 @@ def insert_gestion(
         return False, f"Tipo de gestion invalido: {tipo_gestion}"
 
     resultado_norm = str(resultado or "PENDIENTE").strip().upper()
-    if resultado_norm not in GESTION_RESULTADOS_VALIDOS:
+    if resultado_norm not in _get_resultados_validos_set():
         resultado_norm = "PENDIENTE"
+
+    tipo_reg_norm = "ENVIO" if str(tipo_registro or "").strip().upper() == "ENVIO" else "GESTION"
 
     payload: Dict[str, Any] = {
         "cliente_id": str(cliente_id).strip(),
@@ -1179,6 +1260,7 @@ def insert_gestion(
         "duracion_minutos": duracion_minutos if duracion_minutos and duracion_minutos > 0 else None,
         "metadata": metadata_extra or {},
         "cycle_id": str(cycle_id).strip() if cycle_id else None,
+        "tipo_registro": tipo_reg_norm,
     }
     if fecha:
         payload["fecha"] = fecha
@@ -1744,3 +1826,424 @@ def get_clientes_sin_gestion_ciclo(cycle_id: str, limit: int = 200) -> List[str]
     except Exception as e:
         print(f"get_clientes_sin_gestion_ciclo Error: {e}")
         return []
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-038: Dashboard de Efectividad — Funciones de consulta
+# ---------------------------------------------------------------------------
+
+def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
+    """Funnel de cobranza: cartera → notificados → respondieron → acuerdo → recuperado.
+
+    Returns dict with keys: cartera, notificados_wa, notificados_email,
+    con_respuesta, con_acuerdo, recuperados.
+    """
+    client = get_supabase_client()
+    if not client:
+        return {}
+    try:
+        # Cartera = clientes ÚNICOS en el ciclo.
+        # REGLA: los registros DSP y PAV se excluyen del cálculo de SALDOS y de la cartera
+        # financiera (un cliente con SOLO registros DSP/PAV no tiene deuda real en cobranza).
+        # Pero el flag enviar_email es una propiedad del CLIENTE, no del registro:
+        # si un cliente tiene facturas FAC + notas DSP, el DSP solo reduce su saldo,
+        # no lo saca de cartera. Por eso set_notificable usa TODOS los documentos
+        # para respetar la voluntad de notificar al cliente, independiente del tipo de documento.
+        # Nota: documentos_ciclo usa cod_cliente (no cliente_id) como clave de cliente.
+        q_docs = client.table("documentos_ciclo").select("cod_cliente, tipo_pedido, enviar_email")
+        if cycle_id:
+            q_docs = q_docs.eq("cycle_id", str(cycle_id))
+        resp_docs = _safe_execute(q_docs.limit(5000))
+        _TIPOS_EXCL = {"DSP", "PAV"}
+        _todos_docs = [r for r in (resp_docs.data or []) if r.get("cod_cliente")]
+        # _filas_validas: registros de deuda real (excluye DSP/PAV) — base de la cartera financiera
+        _filas_validas = [
+            r for r in _todos_docs
+            if str(r.get("tipo_pedido", "") or "").strip().upper() not in _TIPOS_EXCL
+        ]
+        # cartera_total: clientes con al menos UN registro de deuda real
+        cartera_total = len({str(r["cod_cliente"]).strip() for r in _filas_validas})
+        # cartera notificable: de la cartera financiera, los que tienen enviar_email='SI'
+        cartera = len({
+            str(r["cod_cliente"]).strip()
+            for r in _filas_validas
+            if str(r.get("enviar_email", "SI") or "SI").strip().upper() == "SI"
+        })  # base de los KPIs operativos
+
+        # Notificados WA = clientes únicos que recibieron envío masivo en el ciclo.
+        # Solo tipo_registro='ENVIO' — no los seguimientos manuales del gestor.
+        q_wa = (client.table("gestiones").select("cliente_id")
+                .eq("tipo_gestion", "WHATSAPP").eq("tipo_registro", "ENVIO"))
+        if cycle_id:
+            q_wa = q_wa.eq("cycle_id", str(cycle_id))
+        resp_wa = _safe_execute(q_wa.limit(5000))
+        set_wa = {str(r["cliente_id"]).strip() for r in (resp_wa.data or []) if r.get("cliente_id")}
+        notificados_wa = len(set_wa)
+
+        # Notificados Email = clientes únicos con notificación EMAIL ENVIADA en el ciclo
+        q_email = client.table("notificaciones").select("cliente_id").eq("tipo_notificacion", "EMAIL").eq("estado", "ENVIADO")
+        if cycle_id:
+            q_email = q_email.eq("cycle_id", str(cycle_id))
+        resp_email = _safe_execute(q_email.limit(5000))
+        set_email = {str(r["cliente_id"]).strip() for r in (resp_email.data or []) if r.get("cliente_id")}
+        notificados_email = len(set_email)
+
+        # Con gestión registrada = clientes únicos a los que el gestor registró CUALQUIER resultado.
+        # Filtra tipo_registro='GESTION' (acciones manuales del gestor).
+        # NO filtra por resultado — SIN_RESPUESTA también es una gestión registrada.
+        # Selecciona tipo_gestion también — se reutiliza para calcular set_directo sin query extra.
+        # set_notificable: clientes que (1) tienen deuda real en cartera Y (2) tienen enviar_email='SI'.
+        # La condición (1) usa _filas_validas (excluye DSP/PAV — sin deuda real, fuera de cobranza).
+        # La condición (2) usa _todos_docs: el flag enviar_email es del CLIENTE, no del registro.
+        # Razón: un cliente puede tener FAC + DSP; el DSP no debe anular su flag de notificación.
+        # Un cliente con SOLO registros DSP/PAV no tiene deuda real → queda fuera del funnel.
+        _set_en_cartera = {str(r["cod_cliente"]).strip() for r in _filas_validas}
+        _set_con_flag   = {
+            str(r["cod_cliente"]).strip()
+            for r in _todos_docs
+            if str(r.get("enviar_email", "SI") or "SI").strip().upper() == "SI"
+        }
+        set_notificable = _set_en_cartera & _set_con_flag  # intersección exacta
+
+        _TIPOS_DIRECTOS = {"LLAMADA", "VISITA", "NOTA", "OTRO"}
+        q_resp = (client.table("gestiones").select("cliente_id, tipo_gestion")
+                  .eq("tipo_registro", "GESTION"))
+        if cycle_id:
+            q_resp = q_resp.eq("cycle_id", str(cycle_id))
+        resp_resp = _safe_execute(q_resp.limit(5000))
+        # Intersectar con set_notificable: especiales NO cuentan en el funnel operativo
+        set_resp = {
+            str(r["cliente_id"]).strip()
+            for r in (resp_resp.data or [])
+            if r.get("cliente_id") and str(r["cliente_id"]).strip() in set_notificable
+        }
+        con_respuesta = len(set_resp)
+
+        # Gestión directa = LLAMADA/VISITA/NOTA/OTRO — derivado de resp_resp (sin query extra).
+        # Representa el trabajo proactivo del gestor: llamadas, visitas, notas directas.
+        # Solo cuenta clientes notificables (mismo filtro que el resto del funnel).
+        _filas_directas = [
+            r for r in (resp_resp.data or [])
+            if r.get("cliente_id")
+            and str(r["cliente_id"]).strip() in set_notificable
+            and str(r.get("tipo_gestion", "") or "").upper() in _TIPOS_DIRECTOS
+        ]
+        set_directo = {str(r["cliente_id"]).strip() for r in _filas_directas}
+        contacto_directo = len(set_directo)
+
+        # Desglose de gestión directa por canal — clientes únicos por tipo.
+        # Permite mostrar "Con gestión directa: 2 (1 llamada · 1 visita)" en el funnel.
+        def _cuentadir(tipo: str) -> int:
+            return len({str(r["cliente_id"]).strip() for r in _filas_directas
+                        if str(r.get("tipo_gestion", "") or "").upper() == tipo})
+        llamadas_dir = _cuentadir("LLAMADA")
+        visitas_dir  = _cuentadir("VISITA")
+        notas_dir    = _cuentadir("NOTA")
+        otros_dir    = _cuentadir("OTRO")
+
+        # Métricas de cobertura derivadas con set operations (sin doble conteo)
+        set_notif   = set_wa | set_email                 # notificados por sistema
+        set_alcanz  = set_notif | set_directo            # alcanzados por cualquier vía
+        alcanzados     = len(set_alcanz)
+        sin_contactar  = max(cartera - alcanzados, 0)
+        pendientes_seg = max(alcanzados - con_respuesta, 0)  # alcanzados sin resultado aún
+
+        # Acuerdos activos = registros únicos (1 acuerdo por cliente por ciclo)
+        q_acuerdo = client.table("acuerdos_pago").select("id", count="exact").eq("estado", "ACTIVO")
+        if cycle_id:
+            q_acuerdo = q_acuerdo.eq("ciclo_id", str(cycle_id))
+        resp_acuerdo = _safe_execute(q_acuerdo.limit(1))
+        con_acuerdo = resp_acuerdo.count if resp_acuerdo else 0
+
+        # Recuperados = clientes únicos con resultado EXITOSO confirmado manualmente por el gestor.
+        # Solo tipo_registro='GESTION' — los envíos automáticos (tipo_registro='ENVIO') no cuentan.
+        # Alineado con PASO 2 ⑨ de sql/99_dashboard_data_reconciliation.sql
+        q_rec = (client.table("gestiones").select("cliente_id")
+                 .eq("resultado", "EXITOSO").eq("tipo_registro", "GESTION"))
+        if cycle_id:
+            q_rec = q_rec.eq("cycle_id", str(cycle_id))
+        resp_rec = _safe_execute(q_rec.limit(5000))
+        recuperados = len({str(r["cliente_id"]).strip() for r in (resp_rec.data or []) if r.get("cliente_id")})
+
+        return {
+            "cartera":           cartera,          # cartera notificable — base de KPIs operativos
+            "cartera_total":     cartera_total,    # exposición financiera total (incluye especiales)
+            "notificados_wa":    notificados_wa,
+            "notificados_email": notificados_email,
+            "contacto_directo":  contacto_directo, # LLAMADA/VISITA/NOTA — proactivo del gestor
+            "llamadas_dir":      llamadas_dir,     # clientes únicos contactados por LLAMADA
+            "visitas_dir":       visitas_dir,      # clientes únicos contactados por VISITA
+            "notas_dir":         notas_dir,        # clientes únicos con NOTA registrada
+            "otros_dir":         otros_dir,        # clientes únicos con OTRO canal directo
+            "alcanzados":        alcanzados,        # unión exacta notificados ∪ contacto directo
+            "sin_contactar":     sin_contactar,     # cartera − alcanzados (métrica de alarma)
+            "con_respuesta":     con_respuesta,     # con resultado GESTION registrado
+            "pendientes_seg":    pendientes_seg,    # alcanzados − con_respuesta
+            "con_acuerdo":       con_acuerdo,
+            "recuperados":       recuperados,
+        }
+    except Exception as e:
+        print(f"get_funnel_cobranza Error: {e}")
+        return {}
+
+
+def get_efectividad_por_plantilla(cycle_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Returns effectivity grouped by WA template used.
+
+    Each row: {plantilla, total_enviados, exitosos, tasa_pct}
+    Derived from notificaciones.metadata (campo 'template') + gestiones.resultado.
+    """
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        # Los WA masivos se graban en gestiones (tipo_gestion='WHATSAPP', tipo_registro='ENVIO').
+        # La plantilla usada queda en metadata->>'template_label'.
+        # Alineado con PASO 4 de sql/99_dashboard_data_reconciliation.sql
+        import json as _json
+        q = (client.table("gestiones")
+             .select("cliente_id, metadata, resultado")
+             .eq("tipo_gestion", "WHATSAPP")
+             .eq("tipo_registro", "ENVIO"))
+        if cycle_id:
+            q = q.eq("cycle_id", str(cycle_id))
+        resp = _safe_execute(q.limit(5000))
+        notifs = resp.data or []
+
+        # Agrupar por plantilla
+        plantilla_totales: Dict[str, int] = {}
+        plantilla_clientes: Dict[str, set] = {}
+        for n in notifs:
+            meta = n.get("metadata") or {}
+            if isinstance(meta, str):
+                try:
+                    meta = _json.loads(meta)
+                except Exception:
+                    meta = {}
+            plantilla = str(meta.get("template_label", meta.get("template", meta.get("plantilla", "Desconocida"))))
+            plantilla_totales[plantilla] = plantilla_totales.get(plantilla, 0) + 1
+            if plantilla not in plantilla_clientes:
+                plantilla_clientes[plantilla] = set()
+            cli = str(n.get("cliente_id", "")).strip()
+            if cli:
+                plantilla_clientes[plantilla].add(cli)
+
+        if not plantilla_totales:
+            return []
+
+        # Exitosos = gestiones manuales (tipo_registro='GESTION') con resultado EXITOSO en el ciclo.
+        # Se cruzan por cliente para determinar cuántos de los enviados con cada plantilla respondieron.
+        q_g = (client.table("gestiones").select("cliente_id, resultado")
+               .eq("resultado", "EXITOSO").eq("tipo_registro", "GESTION"))
+        if cycle_id:
+            q_g = q_g.eq("cycle_id", str(cycle_id))
+        resp_g = _safe_execute(q_g.limit(5000))
+        exitosos_set = {str(r["cliente_id"]).strip() for r in (resp_g.data or []) if r.get("cliente_id")}
+
+        result = []
+        for plantilla, total in sorted(plantilla_totales.items(), key=lambda x: -x[1]):
+            clientes_p = plantilla_clientes.get(plantilla, set())
+            exitosos = len(clientes_p & exitosos_set)
+            tasa = round(exitosos / total * 100, 1) if total > 0 else 0.0
+            result.append({
+                "plantilla": plantilla,
+                "total_enviados": total,
+                "exitosos": exitosos,
+                "tasa_pct": tasa,
+            })
+        return result
+    except Exception as e:
+        print(f"get_efectividad_por_plantilla Error: {e}")
+        return []
+
+
+def get_top_clientes_criticos(n: int = 10, cycle_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Top N clientes ordenados por saldo pendiente desc.
+
+    Returns list of dicts: {cliente_id, nombre, saldo_total, docs_count,
+    dias_mora_max, gestiones_count, ultimo_resultado}
+    """
+    client = get_supabase_client()
+    if not client:
+        return []
+    # Tipos de pedido que son datos basura — excluidos del análisis
+    _TIPOS_EXCLUIDOS = {"DSP", "PAV"}
+
+    try:
+        q = client.table("documentos_ciclo").select(
+            "cliente_id, empresa, saldo_real, dias_mora, fech_venc, moneda, tipo_pedido, enviar_email"
+        )
+        if cycle_id:
+            q = q.eq("cycle_id", str(cycle_id))
+        resp = _safe_execute(q.limit(2000))
+        docs = resp.data or []
+
+        # Agregar por cliente (excluyendo tipos de pedido basura)
+        cliente_data: Dict[str, Dict[str, Any]] = {}
+        for d in docs:
+            # Filtrar datos basura
+            tipo_ped = str(d.get("tipo_pedido", "") or "").strip().upper()
+            if tipo_ped in _TIPOS_EXCLUIDOS:
+                continue
+
+            cid = str(d.get("cliente_id", "")).strip()
+            if not cid:
+                continue
+
+            moneda = str(d.get("moneda", "") or "").strip().upper()
+            es_sol = moneda.startswith("S")
+            saldo  = float(d.get("saldo_real") or 0)
+
+            if cid not in cliente_data:
+                _env = str(d.get("enviar_email", "SI") or "SI").strip().upper()
+                cliente_data[cid] = {
+                    "cliente_id":  cid,
+                    "nombre":      str(d.get("empresa", cid)),
+                    "saldo_sol":   0.0,
+                    "saldo_usd":   0.0,
+                    "docs_sol":    0,
+                    "docs_usd":    0,
+                    "dias_mora_max": 0,
+                    "es_especial": _env != "SI",  # True = cliente especial, excluido del funnel KPI
+                }
+            if es_sol:
+                cliente_data[cid]["saldo_sol"] += saldo
+                cliente_data[cid]["docs_sol"]  += 1
+            else:
+                cliente_data[cid]["saldo_usd"] += saldo
+                cliente_data[cid]["docs_usd"]  += 1
+
+            try:
+                mora = int(d.get("dias_mora") or 0)
+            except (ValueError, TypeError):
+                mora = 0
+            if mora > cliente_data[cid]["dias_mora_max"]:
+                cliente_data[cid]["dias_mora_max"] = mora
+
+        for data in cliente_data.values():
+            data["saldo_total"] = data["saldo_sol"] + data["saldo_usd"]
+            data["docs_count"]  = data["docs_sol"] + data["docs_usd"]
+
+        if not cliente_data:
+            return []
+
+        # Solo gestiones MANUALES del gestor (tipo_registro='GESTION').
+        # Los envíos automáticos (tipo_registro='ENVIO') no cuentan como gestión.
+        # Alineado con PASO 5 ⑬ de sql/99_dashboard_data_reconciliation.sql
+        q_g = (client.table("gestiones")
+               .select("cliente_id, resultado, fecha")
+               .eq("tipo_registro", "GESTION")
+               .order("fecha", desc=True))
+        if cycle_id:
+            q_g = q_g.eq("cycle_id", str(cycle_id))
+        resp_g = _safe_execute(q_g.limit(5000))
+        gestiones_rows = resp_g.data or []
+
+        gestiones_count: Dict[str, int] = {}
+        ultimo_resultado: Dict[str, str] = {}
+        fecha_ultimo_gestion: Dict[str, str] = {}
+        for g in gestiones_rows:
+            cid = str(g.get("cliente_id", "")).strip()
+            gestiones_count[cid] = gestiones_count.get(cid, 0) + 1
+            if cid not in ultimo_resultado:
+                ultimo_resultado[cid] = str(g.get("resultado", ""))
+                fecha_ultimo_gestion[cid] = str(g.get("fecha", "") or "")
+
+        for cid, data in cliente_data.items():
+            data["gestiones_count"] = gestiones_count.get(cid, 0)
+            data["ultimo_resultado"] = ultimo_resultado.get(cid, "SIN_GESTION")
+            data["fecha_ultimo_gestion"] = fecha_ultimo_gestion.get(cid, "")
+
+        # Ordenar por saldo_sol DESC (referencia principal), igual que PASO 5 ⑫ del SQL.
+        # Clientes con saldo solo en USD quedan al final (saldo_sol = 0).
+        sorted_clientes = sorted(cliente_data.values(), key=lambda x: -x["saldo_sol"])
+        return sorted_clientes[:n]
+    except Exception as e:
+        print(f"get_top_clientes_criticos Error: {e}")
+        return []
+
+
+def get_kpis_periodo(date_from: str, date_to: str) -> Dict[str, Any]:
+    """KPIs agregados para un rango de fechas (YYYY-MM-DD).
+
+    Returns: {gestiones_total, exitosos, promesas, sin_respuesta,
+    tasa_exito_pct, notificaciones_wa, notificaciones_email,
+    tasa_notif_exitosa_pct, acuerdos_activos}
+    """
+    client = get_supabase_client()
+    if not client:
+        return {}
+    try:
+        # Gestiones del período — solo gestiones manuales del gestor (tipo_registro='GESTION').
+        # Los envíos automáticos del sistema (tipo_registro='ENVIO') se cuentan
+        # en el bloque de WA enviados, no aquí.
+        # Sufijo -05:00 = hora Lima (UTC-5).
+        resp_g = _safe_execute(
+            client.table("gestiones")
+            .select("resultado, fecha")
+            .eq("tipo_registro", "GESTION")
+            .gte("fecha", f"{date_from}T00:00:00-05:00")
+            .lte("fecha", f"{date_to}T23:59:59-05:00")
+            .limit(10000)
+        )
+        gestiones = resp_g.data or []
+
+        by_resultado: Dict[str, int] = {}
+        for g in gestiones:
+            r = str(g.get("resultado", "PENDIENTE"))
+            by_resultado[r] = by_resultado.get(r, 0) + 1
+
+        total_g = len(gestiones)
+        exitosos = by_resultado.get("EXITOSO", 0)
+        promesas = by_resultado.get("PROMESA_PAGO", 0)
+        sin_resp = by_resultado.get("SIN_RESPUESTA", 0)
+        tasa_exito = round(exitosos / total_g * 100, 1) if total_g > 0 else 0.0
+
+        # Notificaciones EMAIL en el período (emails se guardan en notificaciones)
+        resp_n = _safe_execute(
+            client.table("notificaciones")
+            .select("tipo_notificacion, estado, fecha_envio")
+            .gte("fecha_envio", f"{date_from}T00:00:00-05:00")
+            .lte("fecha_envio", f"{date_to}T23:59:59-05:00")
+            .limit(10000)
+        )
+        notifs = resp_n.data or []
+        notif_email = sum(1 for n in notifs if str(n.get("tipo_notificacion", "")).upper() == "EMAIL")
+        notif_enviadas = sum(1 for n in notifs if str(n.get("estado", "")).upper() == "ENVIADO")
+        tasa_notif = round(notif_enviadas / len(notifs) * 100, 1) if notifs else 0.0
+
+        # Mensajes WA enviados en el período — solo envíos automáticos del sistema
+        # (tipo_registro='ENVIO'). Los seguimientos manuales son tipo_registro='GESTION'
+        # y se cuentan en gestiones_total, no aquí.
+        resp_wa_g = _safe_execute(
+            client.table("gestiones")
+            .select("tipo_gestion")
+            .eq("tipo_gestion", "WHATSAPP")
+            .eq("tipo_registro", "ENVIO")
+            .gte("fecha", f"{date_from}T00:00:00-05:00")
+            .lte("fecha", f"{date_to}T23:59:59-05:00")
+            .limit(10000)
+        )
+        notif_wa = len(resp_wa_g.data or [])
+
+        # Acuerdos activos (no filtrados por fecha — estado actual)
+        resp_a = _safe_execute(
+            client.table("acuerdos_pago").select("id", count="exact").eq("estado", "ACTIVO").limit(1)
+        )
+        acuerdos_activos = resp_a.count if resp_a else 0
+
+        return {
+            "gestiones_total": total_g,
+            "exitosos": exitosos,
+            "promesas": promesas,
+            "sin_respuesta": sin_resp,
+            "by_resultado": by_resultado,
+            "tasa_exito_pct": tasa_exito,
+            "notificaciones_wa": notif_wa,
+            "notificaciones_email": notif_email,
+            "tasa_notif_exitosa_pct": tasa_notif,
+            "acuerdos_activos": acuerdos_activos,
+        }
+    except Exception as e:
+        print(f"get_kpis_periodo Error: {e}")
+        return {}

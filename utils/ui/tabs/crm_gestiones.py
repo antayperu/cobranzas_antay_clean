@@ -19,7 +19,6 @@ import utils.ui.styles as styles
 # ---------------------------------------------------------------------------
 
 TIPOS_GESTION = ["EMAIL", "WHATSAPP", "LLAMADA", "VISITA", "NOTA", "OTRO"]
-RESULTADOS = ["EXITOSO", "FALLIDO", "PENDIENTE", "SIN_RESPUESTA", "REPROGRAMADO"]
 
 TIPO_ICONS = {
     "EMAIL": "📧",
@@ -30,13 +29,19 @@ TIPO_ICONS = {
     "OTRO": "📌",
 }
 
-RESULTADO_COLORS = {
-    "EXITOSO": "success",
-    "FALLIDO": "danger",
-    "PENDIENTE": "warning",
-    "SIN_RESPUESTA": "neutral",
-    "REPROGRAMADO": "neutral",
-}
+
+def _build_resultado_maps():
+    """Construye los mapas de resultados desde el catálogo de BD (con caché de Supabase)."""
+    catalogo = dbm.get_catalogo_resultados(include_legado=True)
+    codigos = [r["codigo"] for r in catalogo]
+    labels = {r["codigo"]: f"{r['icono']} {r['etiqueta']}" for r in catalogo}
+    colors = {r["codigo"]: r["color_scheme"] for r in catalogo}
+    return codigos, labels, colors
+
+
+def _get_resultados_activos():
+    """Lista de códigos de resultados activos (no legado) para nuevas gestiones."""
+    return [r["codigo"] for r in dbm.get_catalogo_resultados(include_legado=False)]
 
 
 # ---------------------------------------------------------------------------
@@ -724,9 +729,16 @@ def _render_register_gestion():
         cliente_id_selected = selected_option.split(" — ")[0].strip()
 
     # Form
+    _codigos_resultado, _labels_resultado, _ = _build_resultado_maps()
+    _codigos_activos = _get_resultados_activos()
     fc1, fc2, fc3 = st.columns(3)
     tipo = fc1.selectbox("Tipo de gestion", TIPOS_GESTION, index=2, key="crm_reg_tipo")  # Default: LLAMADA
-    resultado = fc2.selectbox("Resultado", RESULTADOS, key="crm_reg_resultado")
+    resultado = fc2.selectbox(
+        "Resultado",
+        _codigos_activos,
+        key="crm_reg_resultado",
+        format_func=lambda c: _labels_resultado.get(c, c),
+    )
     fecha = fc3.date_input("Fecha", value=date.today(), key="crm_reg_fecha")
 
     fc4, fc5 = st.columns(2)
@@ -745,6 +757,11 @@ def _render_register_gestion():
             st.warning("Selecciona un cliente antes de registrar.")
             return
 
+        _cycle = (
+            st.session_state.get("active_cycle_id")
+            or st.session_state.get("current_cycle_id")
+            or st.session_state.get("cycle_id")
+        )
         ok, msg = dbm.insert_gestion(
             cliente_id=cliente_id_selected,
             tipo_gestion=tipo,
@@ -753,6 +770,7 @@ def _render_register_gestion():
             usuario=usuario if usuario else None,
             duracion_minutos=duracion if duracion > 0 else None,
             fecha=datetime.combine(fecha, datetime.min.time()).isoformat(),
+            cycle_id=_cycle,
         )
 
         if ok:
