@@ -1381,9 +1381,11 @@ def send_whatsapp_messages_direct(
                                 add_log(f"    ⚠️ Error adjuntando PDF: {error_msg}")
 
                         exitosos += 1
-                        resultados_por_cliente[_cod_cli] = 'EXITOSO'
+                        # SIN_RESPUESTA = mensaje enviado, esperando respuesta del cliente.
+                        # El gestor actualiza manualmente a EXITOSO, PROMESA_PAGO, etc.
+                        resultados_por_cliente[_cod_cli] = 'SIN_RESPUESTA'
                         if on_client_sent:
-                            on_client_sent(_cod_cli, 'EXITOSO', contact)
+                            on_client_sent(_cod_cli, 'SIN_RESPUESTA', contact)
 
                     except Exception as e_img:
                         err_msg = str(e_img).split('\n')[0]
@@ -1417,9 +1419,11 @@ def send_whatsapp_messages_direct(
 
                         add_log("    ✅ Enviado (Texto)")
                         exitosos += 1
-                        resultados_por_cliente[_cod_cli] = 'EXITOSO'
+                        # SIN_RESPUESTA = mensaje enviado, esperando respuesta del cliente.
+                        # El gestor actualiza manualmente a EXITOSO, PROMESA_PAGO, etc.
+                        resultados_por_cliente[_cod_cli] = 'SIN_RESPUESTA'
                         if on_client_sent:
-                            on_client_sent(_cod_cli, 'EXITOSO', contact)
+                            on_client_sent(_cod_cli, 'SIN_RESPUESTA', contact)
                         time.sleep(2)
 
                     except Exception as e_txt:
