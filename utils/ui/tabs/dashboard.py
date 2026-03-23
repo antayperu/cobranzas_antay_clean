@@ -167,9 +167,14 @@ def _render_kpis_principales(kpis: Dict[str, Any], funnel: Dict[str, int]) -> No
     contactados = funnel.get("alcanzados", 0)       # Total alcanzados únicos del ciclo
     gestionados = funnel.get("con_respuesta", 0)     # Con resultado registrado del ciclo
 
+    recuperados   = funnel.get("recuperados", 0)         # Clientes únicos con EXITOSO confirmado
+
     cobertura_pct = round(contactados / cartera * 100, 1) if cartera > 0 else 0.0
     tasa_gestion  = round(gestionados / contactados * 100, 1) if contactados > 0 else 0.0
-    tasa_recuper  = kpis.get("tasa_exito_pct", 0.0)
+    # RC-BUG-059: usar clientes únicos (funnel) en lugar de filas de gestión (get_kpis_periodo).
+    # Antes: exitosos_filas / total_filas_gestión → mezclaba fuentes y usaba denominador incorrecto.
+    # Ahora: recuperados_únicos / con_respuesta_únicos → 100% derivado del funnel, coherente.
+    tasa_recuper  = round(recuperados / gestionados * 100, 1) if gestionados > 0 else 0.0
 
     col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -201,7 +206,7 @@ def _render_kpis_principales(kpis: Dict[str, Any], funnel: Dict[str, int]) -> No
         st.metric(
             label="Tasa de recuperación",
             value=_fmt_pct(tasa_recuper),
-            help="% de gestiones con resultado EXITOSO (acordó pagar) sobre el total gestionado",
+            help="% de clientes únicos que acordaron pagar sobre el total con resultado registrado",
         )
 
 
