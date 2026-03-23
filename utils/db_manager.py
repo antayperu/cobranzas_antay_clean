@@ -1,3 +1,26 @@
+def get_clientes_email_enviados_hoy(cycle_id: str, fecha_hoy: str) -> set:
+    """
+    Devuelve un set de cliente_id únicos con notificación EMAIL enviada hoy para el ciclo dado.
+    """
+    client = get_supabase_client()
+    if not client:
+        return set()
+    try:
+        res = _safe_execute(
+            client.table("notificaciones")
+            .select("cliente_id, tipo_notificacion, estado, cycle_id, fecha_envio, created_at")
+            .eq("cycle_id", str(cycle_id).strip())
+            .eq("tipo_notificacion", "EMAIL")
+            .eq("estado", "ENVIADO")
+            .gte("created_at", f"{fecha_hoy} 00:00:00")
+            .lte("created_at", f"{fecha_hoy} 23:59:59")
+        )
+        if res.data:
+            return {row["cliente_id"] for row in res.data if row.get("cliente_id")}
+        return set()
+    except Exception as e:
+        print(f"get_clientes_email_enviados_hoy Error: {e}")
+        return set()
 import os
 import sqlite3
 import json
@@ -1879,6 +1902,8 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
         resp_wa = _safe_execute(q_wa.limit(5000))
         set_wa = {str(r["cliente_id"]).strip() for r in (resp_wa.data or []) if r.get("cliente_id")}
         notificados_wa = len(set_wa)
+        # total_envios_wa: COUNT filas de envío WA — puede ser > notificados_wa si hay reenvíos
+        total_envios_wa = len(resp_wa.data or [])
 
         # Notificados Email = clientes únicos con notificación EMAIL ENVIADA en el ciclo
         q_email = client.table("notificaciones").select("cliente_id").eq("tipo_notificacion", "EMAIL").eq("estado", "ENVIADO")
@@ -1906,8 +1931,10 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
         set_notificable = _set_en_cartera & _set_con_flag  # intersección exacta
 
         _TIPOS_DIRECTOS = {"LLAMADA", "VISITA", "NOTA", "OTRO"}
-        q_resp = (client.table("gestiones").select("cliente_id, tipo_gestion")
-                  .eq("tipo_registro", "GESTION"))
+        q_resp = (client.table("gestiones")
+                  .select("cliente_id, tipo_gestion, resultado, fecha")
+                  .eq("tipo_registro", "GESTION")
+                  .order("fecha", desc=True))
         if cycle_id:
             q_resp = q_resp.eq("cycle_id", str(cycle_id))
         resp_resp = _safe_execute(q_resp.limit(5000))
@@ -1918,6 +1945,32 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
             if r.get("cliente_id") and str(r["cliente_id"]).strip() in set_notificable
         }
         con_respuesta = len(set_resp)
+
+        # by_resultado_ultimo: último resultado por cliente único (para "¿Qué respondieron?")
+        # resp_resp ordenado DESC por fecha → el primer resultado encontrado por cliente = más reciente.
+        _ultimo_resultado_por_cliente: Dict[str, str] = {}
+        for r in (resp_resp.data or []):
+            cid = str(r.get("cliente_id", "")).strip()
+            if cid and cid in set_notificable and cid not in _ultimo_resultado_por_cliente:
+                resultado_val = str(r.get("resultado", "") or "").strip()
+                if resultado_val:
+                    _ultimo_resultado_por_cliente[cid] = resultado_val
+
+        by_resultado_ultimo: Dict[str, int] = {}
+        for v in _ultimo_resultado_por_cliente.values():
+            by_resultado_ultimo[v] = by_resultado_ultimo.get(v, 0) + 1
+
+        # total_gestion_wa: COUNT filas GESTION/WHATSAPP de clientes notificables (seguimiento WA)
+        # con_gestion_wa: clientes únicos con seguimiento WA registrado
+        _set_gestion_wa: set = set()
+        total_gestion_wa: int = 0
+        for r in (resp_resp.data or []):
+            cid = str(r.get("cliente_id", "")).strip()
+            if (cid and cid in set_notificable
+                    and str(r.get("tipo_gestion", "") or "").upper() == "WHATSAPP"):
+                total_gestion_wa += 1
+                _set_gestion_wa.add(cid)
+        con_gestion_wa = len(_set_gestion_wa)
 
         # Gestión directa = LLAMADA/VISITA/NOTA/OTRO — derivado de resp_resp (sin query extra).
         # Representa el trabajo proactivo del gestor: llamadas, visitas, notas directas.
@@ -1940,6 +1993,18 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
         visitas_dir  = _cuentadir("VISITA")
         notas_dir    = _cuentadir("NOTA")
         otros_dir    = _cuentadir("OTRO")
+
+        # Intensidad directa: COUNT filas (puede superar contacto_directo = clientes únicos)
+        total_gestiones_directas = len(_filas_directas)
+
+        def _cuentadir_total(tipo: str) -> int:
+            return sum(1 for r in _filas_directas
+                       if str(r.get("tipo_gestion", "") or "").upper() == tipo)
+
+        llamadas_total = _cuentadir_total("LLAMADA")
+        visitas_total  = _cuentadir_total("VISITA")
+        notas_total    = _cuentadir_total("NOTA")
+        otros_total    = _cuentadir_total("OTRO")
 
         # Métricas de cobertura derivadas con set operations (sin doble conteo)
         set_notif   = set_wa | set_email                 # notificados por sistema
@@ -1981,6 +2046,16 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
             "pendientes_seg":    pendientes_seg,    # alcanzados − con_respuesta
             "con_acuerdo":       con_acuerdo,
             "recuperados":       recuperados,
+            # --- Nuevas claves RC-FEAT-060 (auditabilidad e intensidad) ---
+            "by_resultado_ultimo":      by_resultado_ultimo,      # {resultado: count} último por cliente único
+            "total_envios_wa":          total_envios_wa,           # filas ENVIO/WHATSAPP (intensidad envíos)
+            "total_gestion_wa":         total_gestion_wa,          # filas GESTION/WHATSAPP (seguimiento WA)
+            "con_gestion_wa":           con_gestion_wa,            # clientes únicos con seguimiento WA
+            "total_gestiones_directas": total_gestiones_directas,  # filas LLAMADA/VISITA/NOTA/OTRO
+            "llamadas_total":           llamadas_total,            # filas LLAMADA
+            "visitas_total":            visitas_total,             # filas VISITA
+            "notas_total":              notas_total,               # filas NOTA
+            "otros_total":              otros_total,               # filas OTRO
         }
     except Exception as e:
         print(f"get_funnel_cobranza Error: {e}")

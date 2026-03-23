@@ -241,8 +241,12 @@ def _render_canal_notificaciones(kpis: Dict[str, Any]) -> None:
 # [D] Proceso de Cobranza (antes "Funnel")
 # ---------------------------------------------------------------------------
 
-def _render_funnel(funnel: Dict[str, int]) -> None:
-    """Bloque D: Proceso de cobranza — etapas del ciclo activo."""
+def _render_funnel(funnel: Dict[str, Any]) -> None:
+    """Bloque D: Proceso de cobranza — etapas del ciclo activo.
+
+    La columna 'Gestiones' muestra el total de filas de acción del equipo por etapa,
+    permitiendo verificar a simple vista que los totales son coherentes (auditabilidad).
+    """
     st.markdown("### 🔄 Proceso de Cobranza")
 
     if not funnel:
@@ -262,6 +266,13 @@ def _render_funnel(funnel: Dict[str, int]) -> None:
     comprometidos = funnel.get("recuperados", 0)
     con_acuerdo   = funnel.get("con_acuerdo", 0)
 
+    # Intensidades: filas de acción (pueden superar clientes únicos)
+    total_envios_wa          = funnel.get("total_envios_wa", 0)
+    total_gestion_wa         = funnel.get("total_gestion_wa", 0)
+    con_gestion_wa           = funnel.get("con_gestion_wa", 0)
+    total_gestiones_directas = funnel.get("total_gestiones_directas", 0)
+    grand_total_gestiones    = total_envios_wa + total_gestion_wa + total_gestiones_directas
+
     # Base del embudo: cartera_total si hay especiales, cartera si todos son notificables.
     # Así la barra de progreso cuenta la historia completa desde el universo financiero real.
     base = cartera_total if cartera_total > cartera else cartera
@@ -269,38 +280,34 @@ def _render_funnel(funnel: Dict[str, int]) -> None:
     def pct(parte: int) -> float:
         return round(parte / base * 100, 1) if base > 0 else 0.0
 
+    def _row(etapa: str, clientes: int, gestiones=None) -> dict:
+        return {"Etapa": etapa, "Clientes únicos": clientes,
+                "% del total": pct(clientes), "Gestiones": gestiones}
+
     # Filas contextuales de cartera total — solo se muestran cuando hay clientes especiales
     rows = []
     if especiales > 0:
         rows += [
-            {"Etapa":      "🏢 Toda la cartera del ciclo",
-             "Clientes":   cartera_total,
-             "% del total": pct(cartera_total)},
-            {"Etapa":      "  ↳ ⭐ Clientes especiales (trato directo · no notificar)",
-             "Clientes":   especiales,
-             "% del total": pct(especiales)},
+            _row("🏢 Toda la cartera del ciclo", cartera_total),
+            _row("  ↳ ⭐ Clientes especiales (trato directo · no notificar)", especiales),
         ]
 
-    # Pirámide de cobertura: cartera → cómo llegamos → qué resultados
-    # Filas del proceso de cobranza — diseño adaptativo:
-    # Las filas de alerta gritan cuando hay problema y desaparecen cuando todo está bien.
-    # Las filas informativas solo se muestran si aportan valor (valor > 0).
-
     # -- Cartera base — siempre visible --
-    rows.append({"Etapa": "📋 Cartera activa del ciclo",
-                 "Clientes": cartera, "% del total": pct(cartera)})
+    rows.append(_row("📋 Cartera activa del ciclo", cartera))
 
     # -- Cobertura: cómo llegamos a ellos --
-    # Notificados WA solo si se enviaron WA masivos
     if notif_wa > 0:
-        rows.append({"Etapa": "📱 Notificados por WhatsApp",
-                     "Clientes": notif_wa, "% del total": pct(notif_wa)})
-    # Notificados Email solo si se enviaron emails
+        rows.append(_row("📱 Notificados por WhatsApp", notif_wa,
+                         gestiones=total_envios_wa if total_envios_wa > 0 else None))
+        # Seguimiento WA: sub-fila solo si el gestor registró resultados WA
+        if total_gestion_wa > 0:
+            rows.append(_row("  ↳ 💬 Seguimiento WA registrado", con_gestion_wa,
+                             gestiones=total_gestion_wa))
+
     if notif_email > 0:
-        rows.append({"Etapa": "📧 Notificados por Email",
-                     "Clientes": notif_email, "% del total": pct(notif_email)})
-    # Gestión directa — solo si el gestor hizo trabajo proactivo.
-    # Opción B: desglose en paréntesis "X llamadas · Y visitas · Z notas"
+        # Email se gestiona en tabla notificaciones (canal aparte) → sin columna Gestiones
+        rows.append(_row("📧 Notificados por Email", notif_email))
+
     if contacto_dir > 0:
         _llamadas = funnel.get("llamadas_dir", 0)
         _visitas  = funnel.get("visitas_dir", 0)
@@ -312,37 +319,28 @@ def _render_funnel(funnel: Dict[str, int]) -> None:
         if _notas:    _partes.append(f"{_notas} {'nota' if _notas == 1 else 'notas'}")
         if _otros:    _partes.append(f"{_otros} {'otro' if _otros == 1 else 'otros'}")
         _detalle = f" ({' · '.join(_partes)})" if _partes else ""
-        rows.append({"Etapa": f"📞 Con gestión directa{_detalle}",
-                     "Clientes": contacto_dir, "% del total": pct(contacto_dir)})
+        rows.append(_row(f"📞 Con gestión directa{_detalle}", contacto_dir,
+                         gestiones=total_gestiones_directas if total_gestiones_directas > 0 else None))
 
-    # Total alcanzados — siempre visible (métrica principal de cobertura)
-    rows.append({"Etapa": "🎯 Total alcanzados (únicos)",
-                 "Clientes": alcanzados, "% del total": pct(alcanzados)})
+    # Total alcanzados — con grand total de gestiones para auditoría
+    rows.append(_row("🎯 Total alcanzados (únicos)", alcanzados,
+                     gestiones=grand_total_gestiones if grand_total_gestiones > 0 else None))
 
-    # Sin contacto — siempre visible: es la ALERTA CRÍTICA del gerente
-    # Cuando es 0, confirma cobertura total. Cuando es > 0, requiere acción inmediata.
+    # Sin contacto — siempre visible: ALERTA CRÍTICA del gerente
     alerta_sin_contacto = "❌ Sin ningún contacto — REQUIERE ACCIÓN" if sin_contactar > 0 else "✅ Sin contacto: 0 (cobertura completa)"
-    rows.append({"Etapa": alerta_sin_contacto,
-                 "Clientes": sin_contactar, "% del total": pct(sin_contactar)})
+    rows.append(_row(alerta_sin_contacto, sin_contactar))
 
     # -- Profundidad: qué resultados tenemos --
-    rows.append({"Etapa": "💬 Con resultado registrado",
-                 "Clientes": con_resultado, "% del total": pct(con_resultado)})
+    rows.append(_row("💬 Con resultado registrado", con_resultado))
 
-    # Pendientes solo si hay clientes sin resultado aún (lista de trabajo del gestor)
     if pendientes > 0:
-        rows.append({"Etapa": "⏳ Pendientes de seguimiento",
-                     "Clientes": pendientes, "% del total": pct(pendientes)})
+        rows.append(_row("⏳ Pendientes de seguimiento", pendientes))
 
-    # Comprometidos solo si hay compromisos registrados
     if comprometidos > 0:
-        rows.append({"Etapa": "  ↳ ✅ Comprometidos a pagar",
-                     "Clientes": comprometidos, "% del total": pct(comprometidos)})
+        rows.append(_row("  ↳ ✅ Comprometidos a pagar", comprometidos))
 
-    # Acuerdos de pago solo si hay acuerdos activos
     if con_acuerdo > 0:
-        rows.append({"Etapa": "🤝 Con acuerdo de pago activo",
-                     "Clientes": con_acuerdo, "% del total": pct(con_acuerdo)})
+        rows.append(_row("🤝 Con acuerdo de pago activo", con_acuerdo))
 
     df = pd.DataFrame(rows)
 
@@ -351,7 +349,12 @@ def _render_funnel(funnel: Dict[str, int]) -> None:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Clientes":    st.column_config.NumberColumn("Clientes", format="%d"),
+            "Clientes únicos": st.column_config.NumberColumn("Clientes únicos", format="%d"),
+            "Gestiones":       st.column_config.NumberColumn(
+                "Gestiones",
+                format="%d",
+                help="Total acciones del equipo · Puede superar la cartera · Email va por canal aparte",
+            ),
             "% del total": st.column_config.ProgressColumn(
                 "% del total",
                 min_value=0,
@@ -362,39 +365,53 @@ def _render_funnel(funnel: Dict[str, int]) -> None:
             ),
         },
     )
+    st.caption(
+        "Clientes únicos = cada persona se cuenta una vez · "
+        "Gestiones = total acciones del equipo (puede superar la cartera) · "
+        "Email se gestiona por canal aparte"
+    )
 
 
 # ---------------------------------------------------------------------------
 # [E] ¿Qué respondieron? (antes "Distribución de Resultados")
 # ---------------------------------------------------------------------------
 
-def _render_distribucion_resultados(kpis: Dict[str, Any]) -> None:
-    """Bloque E: Distribución de resultados de gestión registrados por el gestor."""
-    by_resultado = kpis.get("by_resultado", {})
+def _render_distribucion_resultados(funnel: Dict[str, Any]) -> None:
+    """Bloque E: Último resultado por cliente único — denominador = cartera activa."""
+    by_resultado  = funnel.get("by_resultado_ultimo", {})
+    cartera       = funnel.get("cartera", 0)
+    con_respuesta = funnel.get("con_respuesta", 0)
+
     if not by_resultado:
         return
 
     st.markdown("### 📊 ¿Qué respondieron los clientes?")
-    st.caption("Resultados registrados manualmente por el gestor en el período seleccionado · No incluye envíos automáticos")
+    st.caption(
+        f"Último resultado por cliente · {con_respuesta} de {cartera} clientes con respuesta registrada "
+        "· Cada cliente se cuenta una sola vez"
+    )
 
     rows = [
-        {"Respuesta del cliente": _resultado_label(k), "Cantidad": v}
+        {"Respuesta del cliente": _resultado_label(k), "Clientes": v}
         for k, v in sorted(by_resultado.items(), key=lambda x: -x[1])
     ]
     df = pd.DataFrame(rows)
-    total = df["Cantidad"].sum()
-    df["% del total"] = df["Cantidad"].apply(lambda x: round(x / total * 100, 1) if total > 0 else 0.0)
+    df["% de cartera activa"] = df["Clientes"].apply(
+        lambda x: round(x / cartera * 100, 1) if cartera > 0 else 0.0
+    )
 
     st.dataframe(
         df,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "% del total": st.column_config.ProgressColumn(
-                "% del total",
+            "Clientes":            st.column_config.NumberColumn(format="%d"),
+            "% de cartera activa": st.column_config.ProgressColumn(
+                "% de cartera activa",
                 min_value=0,
                 max_value=100,
                 format="%.1f%%",
+                help="% sobre la cartera activa del ciclo · Suma ≤ 100% porque cada cliente se cuenta una vez",
             ),
         },
     )
@@ -683,7 +700,7 @@ def render_tab(df_final: Any, config: Dict[str, Any]) -> None:
     with col_proceso:
         _render_funnel(funnel)
     with col_resp:
-        _render_distribucion_resultados(kpis)
+        _render_distribucion_resultados(funnel)
 
     st.markdown("---")
 

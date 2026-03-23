@@ -284,5 +284,107 @@ class TestDashboardTabImport(unittest.TestCase):
         self.assertEqual(_resultado_label("CODIGO_RARO"), "CODIGO_RARO")
 
 
+# ---------------------------------------------------------------------------
+# 6. RC-FEAT-060: by_resultado_ultimo, intensidad y nuevas claves
+# ---------------------------------------------------------------------------
+
+class TestFunnelRC060(unittest.TestCase):
+
+    def _build_funnel_mock(self, docs_data, wa_data, resp_data, acuerdo_count=0, rec_data=None):
+        """Helper: construye mocks para get_funnel_cobranza."""
+        mock_docs = MagicMock(); mock_docs.data = docs_data
+        mock_wa   = MagicMock(); mock_wa.data   = wa_data
+        mock_email = MagicMock(); mock_email.data = []
+        mock_resp = MagicMock(); mock_resp.data = resp_data
+        mock_acuerdo = MagicMock(); mock_acuerdo.count = acuerdo_count; mock_acuerdo.data = []
+        mock_rec = MagicMock(); mock_rec.data = rec_data or []
+
+        import utils.db_manager as _dbm
+        with patch('utils.db_manager.get_supabase_client') as mock_client, \
+             patch('utils.db_manager._safe_execute') as mock_exec:
+            mock_client.return_value = MagicMock()
+            mock_exec.side_effect = [mock_docs, mock_wa, mock_email, mock_resp, mock_acuerdo, mock_rec]
+            result = _dbm.get_funnel_cobranza(cycle_id="CIC-TEST")
+        return result
+
+    def test_by_resultado_ultimo_es_por_cliente_unico(self):
+        """Cliente con 3 gestiones (distinto resultado) → aparece 1 vez con el último resultado.
+
+        Se ordenan DESC por fecha → la primera fila encontrada por cliente es la más reciente.
+        El cliente CLI-001 tiene 3 gestiones; la más reciente es EXITOSO → debe contar 1 en EXITOSO.
+        """
+        docs_data = [
+            {"cod_cliente": "CLI-001", "tipo_pedido": "FAC", "enviar_email": "SI"},
+        ]
+        wa_data = []
+        # Ordenado DESC por fecha (el mock ya los entrega en este orden)
+        resp_data = [
+            {"cliente_id": "CLI-001", "tipo_gestion": "LLAMADA",
+             "resultado": "EXITOSO",       "fecha": "2026-03-20T14:00:00"},
+            {"cliente_id": "CLI-001", "tipo_gestion": "LLAMADA",
+             "resultado": "SIN_RESPUESTA", "fecha": "2026-03-19T10:00:00"},
+            {"cliente_id": "CLI-001", "tipo_gestion": "NOTA",
+             "resultado": "SOLICITO_PLAZO","fecha": "2026-03-18T09:00:00"},
+        ]
+        result = self._build_funnel_mock(docs_data, wa_data, resp_data)
+
+        by_ult = result.get("by_resultado_ultimo", {})
+        # Solo debe aparecer 1 cliente en by_resultado_ultimo
+        total_clientes = sum(by_ult.values())
+        self.assertEqual(total_clientes, 1,
+                         f"Esperado 1 cliente único, obtenido: {total_clientes} ({by_ult})")
+        # El resultado debe ser EXITOSO (más reciente)
+        self.assertEqual(by_ult.get("EXITOSO", 0), 1,
+                         f"Esperado EXITOSO=1, obtenido: {by_ult}")
+
+    def test_intensidad_cuenta_filas_no_clientes(self):
+        """1 cliente con 3 envíos WA y 2 llamadas → total_envios_wa=3, llamadas_total=2, notificados_wa=1."""
+        docs_data = [
+            {"cod_cliente": "CLI-001", "tipo_pedido": "FAC", "enviar_email": "SI"},
+        ]
+        # 3 filas de envío WA para el mismo cliente (reenvíos)
+        wa_data = [
+            {"cliente_id": "CLI-001"},
+            {"cliente_id": "CLI-001"},
+            {"cliente_id": "CLI-001"},
+        ]
+        # 2 llamadas para el mismo cliente
+        resp_data = [
+            {"cliente_id": "CLI-001", "tipo_gestion": "LLAMADA",
+             "resultado": "SIN_RESPUESTA", "fecha": "2026-03-20T10:00:00"},
+            {"cliente_id": "CLI-001", "tipo_gestion": "LLAMADA",
+             "resultado": "EXITOSO",       "fecha": "2026-03-21T10:00:00"},
+        ]
+        result = self._build_funnel_mock(docs_data, wa_data, resp_data)
+
+        self.assertEqual(result.get("total_envios_wa", -1), 3,
+                         f"Esperado total_envios_wa=3, obtenido={result.get('total_envios_wa')}")
+        self.assertEqual(result.get("llamadas_total", -1), 2,
+                         f"Esperado llamadas_total=2, obtenido={result.get('llamadas_total')}")
+        self.assertEqual(result.get("notificados_wa", -1), 1,
+                         f"Esperado notificados_wa=1 (clientes únicos), obtenido={result.get('notificados_wa')}")
+
+    def test_nuevas_claves_en_funnel_return(self):
+        """Las 9 nuevas claves de RC-FEAT-060 están presentes en el código fuente del return."""
+        import inspect
+        import utils.db_manager as _dbm
+        source = inspect.getsource(_dbm.get_funnel_cobranza)
+
+        claves_esperadas = [
+            "by_resultado_ultimo",
+            "total_envios_wa",
+            "total_gestion_wa",
+            "con_gestion_wa",
+            "total_gestiones_directas",
+            "llamadas_total",
+            "visitas_total",
+            "notas_total",
+            "otros_total",
+        ]
+        for clave in claves_esperadas:
+            self.assertIn(f'"{clave}"', source,
+                          f"Clave '{clave}' no encontrada en el return de get_funnel_cobranza")
+
+
 if __name__ == '__main__':
     unittest.main()
