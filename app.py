@@ -38,6 +38,7 @@ import utils.ui.tabs.email_notifications as tab_email # Email Notifications Tab 
 import utils.ui.tabs.clientes_premium as tab_clientes_premium # Premium Clients Tab Module
 import utils.ui.tabs.crm_gestiones as tab_crm  # CRM & Gestiones Tab Module
 import utils.ui.tabs.config_tab as tab_config # Configuration Tab Module
+import utils.ui.tabs.dashboard as tab_dashboard  # RC-FEAT-038 Dashboard de Efectividad
 import utils.supabase_cycle_service as supabase_cycle_service
 import utils.storage_manager as storage_mgr
 import utils.state_manager as state_mgr
@@ -340,7 +341,8 @@ if st.session_state['data_ready']:
             "5. Notificaciones Email",
             "6. Clientes Premium",
             "7. Centro de Gestiones",
-            "8. Configuración",
+            "8. Dashboard",
+            "9. Configuración",
         ]
     )
     
@@ -380,8 +382,12 @@ if st.session_state['data_ready']:
     with tab_map["7. Centro de Gestiones"]:
         tab_crm.render_tab(df_final, CONFIG)
 
-    # --- TAB 8: CONFIGURACIÓN GLOBAL ---
-    with tab_map["8. Configuración"]:
+    # --- TAB 8: DASHBOARD DE EFECTIVIDAD (RC-FEAT-038) ---
+    with tab_map["8. Dashboard"]:
+        tab_dashboard.render_tab(df_final, CONFIG)
+
+    # --- TAB 9: CONFIGURACIÓN GLOBAL ---
+    with tab_map["9. Configuración"]:
         # Logic extracted to utils/ui/tabs/config_tab.py
         tab_config.render_tab(CONFIG)
 
