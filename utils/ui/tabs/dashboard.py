@@ -244,8 +244,11 @@ def _render_canal_notificaciones(kpis: Dict[str, Any]) -> None:
 def _render_funnel(funnel: Dict[str, Any]) -> None:
     """Bloque D: Proceso de cobranza — etapas del ciclo activo.
 
-    La columna 'Gestiones' muestra el total de filas de acción del equipo por etapa,
-    permitiendo verificar a simple vista que los totales son coherentes (auditabilidad).
+    Columna 'Cantidad':
+    - Filas de cartera/cobertura: clientes únicos
+    - Filas de gestión (WA seguimiento, Email seguimiento, Llamada, Visita, Nota, Otros):
+      total de acciones (puede superar clientes únicos si el mismo cliente recibe varias)
+    Auditabilidad: los totales de sub-filas suman al padre (1+1+1+0=3 para gestión directa).
     """
     st.markdown("### 🔄 Proceso de Cobranza")
 
@@ -266,71 +269,70 @@ def _render_funnel(funnel: Dict[str, Any]) -> None:
     comprometidos = funnel.get("recuperados", 0)
     con_acuerdo   = funnel.get("con_acuerdo", 0)
 
-    # Intensidades: filas de acción (pueden superar clientes únicos)
-    total_envios_wa          = funnel.get("total_envios_wa", 0)
-    total_gestion_wa         = funnel.get("total_gestion_wa", 0)
+    # Gestiones (filas de acción)
     con_gestion_wa           = funnel.get("con_gestion_wa", 0)
+    total_gestion_wa         = funnel.get("total_gestion_wa", 0)
+    total_gestion_email      = funnel.get("total_gestion_email", 0)
     total_gestiones_directas = funnel.get("total_gestiones_directas", 0)
-    grand_total_gestiones    = total_envios_wa + total_gestion_wa + total_gestiones_directas
+    llamadas_total           = funnel.get("llamadas_total", 0)
+    visitas_total            = funnel.get("visitas_total", 0)
+    notas_total              = funnel.get("notas_total", 0)
+    otros_total              = funnel.get("otros_total", 0)
 
     # Base del embudo: cartera_total si hay especiales, cartera si todos son notificables.
-    # Así la barra de progreso cuenta la historia completa desde el universo financiero real.
     base = cartera_total if cartera_total > cartera else cartera
 
-    def pct(parte: int) -> float:
-        return round(parte / base * 100, 1) if base > 0 else 0.0
+    def pct(valor: int, denominador: int = 0) -> float:
+        den = denominador if denominador > 0 else base
+        return round(valor / den * 100, 1) if den > 0 else 0.0
 
-    def _row(etapa: str, clientes: int, gestiones=None) -> dict:
-        return {"Etapa": etapa, "Clientes únicos": clientes,
-                "% del total": pct(clientes), "Gestiones": gestiones}
+    def _row(etapa: str, cantidad: int, denominador: int = 0) -> dict:
+        return {"Etapa": etapa, "Cantidad": cantidad,
+                "% del total": pct(cantidad, denominador)}
 
-    # Filas contextuales de cartera total — solo se muestran cuando hay clientes especiales
     rows = []
+
+    # Filas de cartera — solo si hay especiales
     if especiales > 0:
         rows += [
-            _row("🏢 Toda la cartera del ciclo", cartera_total),
+            _row("🏢 Toda la cartera del ciclo",                            cartera_total),
             _row("  ↳ ⭐ Clientes especiales (trato directo · no notificar)", especiales),
         ]
 
-    # -- Cartera base — siempre visible --
     rows.append(_row("📋 Cartera activa del ciclo", cartera))
 
-    # -- Cobertura: cómo llegamos a ellos --
+    # -- Canal WhatsApp --
     if notif_wa > 0:
-        rows.append(_row("📱 Notificados por WhatsApp", notif_wa,
-                         gestiones=total_envios_wa if total_envios_wa > 0 else None))
-        # Seguimiento WA: sub-fila solo si el gestor registró resultados WA
-        if total_gestion_wa > 0:
-            rows.append(_row("  ↳ 💬 Seguimiento WA registrado", con_gestion_wa,
-                             gestiones=total_gestion_wa))
+        rows.append(_row("📱 Notificados por WhatsApp", notif_wa))
+        # Seguimiento WA: mismo nivel que notificados (no sub-fila)
+        # Muestra clientes únicos con gestión WA registrada
+        rows.append(_row("  💬 Seguimiento WA registrado", con_gestion_wa))
 
+    # -- Canal Email --
     if notif_email > 0:
-        # Email se gestiona en tabla notificaciones (canal aparte) → sin columna Gestiones
         rows.append(_row("📧 Notificados por Email", notif_email))
+        # Seguimiento Email: gestiones manuales de email (puede ser 0 si no se registraron)
+        rows.append(_row("  💬 Seguimiento Email enviados", total_gestion_email))
 
+    # -- Gestión directa: padre muestra TOTAL gestiones, sub-filas detallan --
     if contacto_dir > 0:
-        _llamadas = funnel.get("llamadas_dir", 0)
-        _visitas  = funnel.get("visitas_dir", 0)
-        _notas    = funnel.get("notas_dir", 0)
-        _otros    = funnel.get("otros_dir", 0)
-        _partes = []
-        if _llamadas: _partes.append(f"{_llamadas} {'llamada' if _llamadas == 1 else 'llamadas'}")
-        if _visitas:  _partes.append(f"{_visitas} {'visita' if _visitas == 1 else 'visitas'}")
-        if _notas:    _partes.append(f"{_notas} {'nota' if _notas == 1 else 'notas'}")
-        if _otros:    _partes.append(f"{_otros} {'otro' if _otros == 1 else 'otros'}")
-        _detalle = f" ({' · '.join(_partes)})" if _partes else ""
-        rows.append(_row(f"📞 Con gestión directa{_detalle}", contacto_dir,
-                         gestiones=total_gestiones_directas if total_gestiones_directas > 0 else None))
+        rows.append(_row("📞 Con gestión directa", total_gestiones_directas))
+        # Sub-filas: cada tipo, % sobre el total de gestiones directas (suma a 100%)
+        rows.append(_row("  ↳ Llamada", llamadas_total, total_gestiones_directas))
+        rows.append(_row("  ↳ Visita",  visitas_total,  total_gestiones_directas))
+        rows.append(_row("  ↳ Nota",    notas_total,    total_gestiones_directas))
+        rows.append(_row("  ↳ Otros",   otros_total,    total_gestiones_directas))
 
-    # Total alcanzados — con grand total de gestiones para auditoría
-    rows.append(_row("🎯 Total alcanzados (únicos)", alcanzados,
-                     gestiones=grand_total_gestiones if grand_total_gestiones > 0 else None))
+    # -- Cobertura resultante (clientes únicos) --
+    rows.append(_row("🎯 Total alcanzados (únicos)", alcanzados))
 
-    # Sin contacto — siempre visible: ALERTA CRÍTICA del gerente
-    alerta_sin_contacto = "❌ Sin ningún contacto — REQUIERE ACCIÓN" if sin_contactar > 0 else "✅ Sin contacto: 0 (cobertura completa)"
+    alerta_sin_contacto = (
+        "❌ Sin ningún contacto — REQUIERE ACCIÓN"
+        if sin_contactar > 0 else
+        "✅ Sin contacto: 0 (cobertura completa)"
+    )
     rows.append(_row(alerta_sin_contacto, sin_contactar))
 
-    # -- Profundidad: qué resultados tenemos --
     rows.append(_row("💬 Con resultado registrado", con_resultado))
 
     if pendientes > 0:
@@ -349,26 +351,25 @@ def _render_funnel(funnel: Dict[str, Any]) -> None:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Clientes únicos": st.column_config.NumberColumn("Clientes únicos", format="%d"),
-            "Gestiones":       st.column_config.NumberColumn(
-                "Gestiones",
-                format="%d",
-                help="Total acciones del equipo · Puede superar la cartera · Email va por canal aparte",
-            ),
+            "Cantidad": st.column_config.NumberColumn("Cantidad", format="%d"),
             "% del total": st.column_config.ProgressColumn(
                 "% del total",
                 min_value=0,
                 max_value=100,
                 format="%.1f%%",
-                help="Porcentaje sobre la cartera total del ciclo (incluye especiales)" if especiales > 0
-                     else "Porcentaje sobre la cartera activa del ciclo",
+                help=(
+                    "Porcentaje sobre la cartera total del ciclo (incluye especiales)"
+                    if especiales > 0 else
+                    "Porcentaje sobre la cartera activa del ciclo · "
+                    "Sub-filas de gestión directa muestran % sobre el total de esa sección"
+                ),
             ),
         },
     )
     st.caption(
-        "Clientes únicos = cada persona se cuenta una vez · "
-        "Gestiones = total acciones del equipo (puede superar la cartera) · "
-        "Email se gestiona por canal aparte"
+        "Cantidad = clientes únicos en filas de cartera y cobertura · "
+        "gestiones totales en filas de seguimiento y gestión directa · "
+        "Sub-filas de gestión directa suman al total de la fila padre"
     )
 
 

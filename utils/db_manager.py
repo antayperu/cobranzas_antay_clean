@@ -1972,6 +1972,13 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
                 _set_gestion_wa.add(cid)
         con_gestion_wa = len(_set_gestion_wa)
 
+        # total_gestion_email: filas GESTION/EMAIL de clientes notificables (seguimiento email)
+        total_gestion_email: int = sum(
+            1 for r in (resp_resp.data or [])
+            if str(r.get("tipo_gestion", "") or "").upper() == "EMAIL"
+            and str(r.get("cliente_id", "")).strip() in set_notificable
+        )
+
         # Gestión directa = LLAMADA/VISITA/NOTA/OTRO — derivado de resp_resp (sin query extra).
         # Representa el trabajo proactivo del gestor: llamadas, visitas, notas directas.
         # Solo cuenta clientes notificables (mismo filtro que el resto del funnel).
@@ -2051,6 +2058,7 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
             "total_envios_wa":          total_envios_wa,           # filas ENVIO/WHATSAPP (intensidad envíos)
             "total_gestion_wa":         total_gestion_wa,          # filas GESTION/WHATSAPP (seguimiento WA)
             "con_gestion_wa":           con_gestion_wa,            # clientes únicos con seguimiento WA
+            "total_gestion_email":      total_gestion_email,       # filas GESTION/EMAIL (seguimiento email)
             "total_gestiones_directas": total_gestiones_directas,  # filas LLAMADA/VISITA/NOTA/OTRO
             "llamadas_total":           llamadas_total,            # filas LLAMADA
             "visitas_total":            visitas_total,             # filas VISITA
