@@ -856,6 +856,7 @@ def render_tab(df_filtered, config):
                             fecha=_fecha_utc_str,
                             cycle_id=current_cycle_id,
                             metadata_extra=_meta,
+                            tipo_registro='ENVIO',  # sistema — no gestión manual del gestor
                         )
                         if ok:
                             _persisted_wa[0] += 1
@@ -905,7 +906,6 @@ def render_tab(df_filtered, config):
                             # RC-BUG-047: registrar hora/tipo/rowkey para que el cálculo
                             # "último envío" vs "última gestión" funcione en casos de reenvío.
                             'Hora': now_wa.strftime('%d/%m/%Y %H:%M'),
-                            'HoraISO': now_wa.isoformat(),  # RC-BUG-051: timestamp para gestiones posteriores
                             'Tipo': 'Envío WA',
                             'RowKey': f"{_cod_c}_{now_wa.strftime('%Y%m%d%H%M%S')}_envio",
                             'Notas': f"WA masivo | {c.get('TOTAL_SALDO_REAL', '')} | Tel: {c.get('telefono', '')}",
@@ -988,10 +988,8 @@ def render_tab(df_filtered, config):
             # que no estén ya presentes (evita duplicados del lote actual en sesión).
             # Esto permite ver TODOS los lotes del mismo cycle_id sin recargar.
             _RESULTADO_DISPLAY_MAP = {
-                'EXITOSO':      '✅ Acordó pagar',
-                'PENDIENTE':    '🤝 Prometió pagar',
-                'SIN_RESPUESTA':'📵 Sin respuesta',
-                'REPROGRAMADO': '🔴 Derivar a Legal',
+                r["codigo"]: f"{r['icono']} {r['etiqueta']}"
+                for r in dbm.get_catalogo_resultados(include_legado=True)
             }
             _resultados_supabase = {}
             if not _df_gest.empty:
@@ -1108,28 +1106,22 @@ def render_tab(df_filtered, config):
             # "Con gestión"     = registros manuales del cobrador (metadata con source)
             # "Pendientes"      = clientes enviados sin gestión manual aún
             # "Sin contacto"    = gestiones manuales con resultado SIN_RESPUESTA
-            import json as _json
-            def _es_envio_masivo_kpi(row):
-                _m = row.get('metadata') or {}
-                if isinstance(_m, str):
-                    try: _m = _json.loads(_m)
-                    except Exception: _m = {}
-                return not bool(_m.get('source', ''))
-
             if not _df_gest.empty and 'resultado' in _df_gest.columns:
-                _mask_envio    = _df_gest.apply(_es_envio_masivo_kpi, axis=1)
-                _mask_gestion  = ~_mask_envio
+                _mask_envio    = _df_gest.get('tipo_registro', pd.Series('GESTION', index=_df_gest.index)) == 'ENVIO'
+                _mask_gestion  = _df_gest.get('tipo_registro', pd.Series('GESTION', index=_df_gest.index)) == 'GESTION'
                 _cids_enviados = set(_df_gest[_mask_envio]['cliente_id'].astype(str))
                 _cids_gestion  = set(_df_gest[_mask_gestion]['cliente_id'].astype(str))
-                _total_env     = len(_cids_enviados)          # clientes únicos con envío WA
-                _con_gestion   = len(_cids_gestion)           # clientes únicos con gestión registrada
+                _total_env     = len(_cids_enviados)              # clientes únicos con envío WA
+                _con_gestion   = int(_mask_gestion.sum())         # total filas de gestión (igual que Dashboard)
+                _efec_clientes = len(_cids_gestion)               # clientes únicos con gestión (para % efectividad)
                 _pend_resp     = len(_cids_enviados - _cids_gestion)
                 _sin_contacto  = int((_df_gest[_mask_gestion]['resultado'] == 'SIN_RESPUESTA').sum())
             else:
-                _total_env    = len(_details_sesion)
-                _con_gestion  = 0
-                _pend_resp    = 0
-                _sin_contacto = 0
+                _total_env     = len(_details_sesion)
+                _con_gestion   = 0
+                _efec_clientes = 0
+                _pend_resp     = 0
+                _sin_contacto  = 0
 
             # Monto gestionado por moneda — un cliente puede tener varias filas (Envío WA + Gestión manual).
             # Contar cada CodCliente UNA SOLA VEZ para evitar doble conteo.
@@ -1179,8 +1171,8 @@ def render_tab(df_filtered, config):
             if _monto_usd: _monto_parts.append(f"$ {_monto_usd:,.0f}")
             _monto_fmt = " + ".join(_monto_parts) if _monto_parts else "—"
 
-            # KPI efectividad: % de enviados con gestión registrada (#3)
-            _efectividad_pct = round(_con_gestion / _total_env * 100) if _total_env > 0 else 0
+            # KPI efectividad: % clientes únicos gestionados sobre total enviados
+            _efectividad_pct = round(_efec_clientes / _total_env * 100) if _total_env > 0 else 0
             _efec_lbl = f"Con gestión registrada"
             _efec_sub = f"{_efectividad_pct}% efectividad"
 
@@ -1211,31 +1203,29 @@ def render_tab(df_filtered, config):
             if not _details_sesion:
                 st.info("📭 No hay clientes registrados en este ciclo.")
             else:
-                _OPCIONES_RESULTADO = [
-                    "⏳ Sin registrar",
-                    "Acordó pagar",
-                    "Prometió pagar",
-                    "Sin respuesta",
-                    "Derivar a Legal",
-                    "Solicitó más plazo",
+                # Mapas construidos dinámicamente desde catalogo_resultados (Supabase)
+                _SCHEME_TO_HEX = {
+                    "success": ("#166534", "#dcfce7"),
+                    "info":    ("#1e40af", "#dbeafe"),
+                    "warning": ("#92400e", "#fef3c7"),
+                    "danger":  ("#991b1b", "#fee2e2"),
+                    "neutral": ("#6b7280", "#f3f4f6"),
+                }
+                _catalogo_wa = dbm.get_catalogo_resultados(include_legado=False)
+                _OPCIONES_RESULTADO = ["⏳ Sin registrar"] + [
+                    f"{r['icono']} {r['etiqueta']}" for r in _catalogo_wa
                 ]
                 _RESULTADO_MAP = {
-                    "Acordó pagar":       "EXITOSO",
-                    "Prometió pagar":     "PENDIENTE",
-                    "Sin respuesta":      "SIN_RESPUESTA",
-                    "Derivar a Legal":    "REPROGRAMADO",
-                    "Solicitó más plazo": "PENDIENTE",
+                    f"{r['icono']} {r['etiqueta']}": r["codigo"] for r in _catalogo_wa
                 }
-                # Mapa resultado → (color texto, color fondo) para badges
+                # Mapa label → (color texto, color fondo) para badges
                 _RES_COLOR = {
-                    "Acordó pagar":       ("#166534", "#dcfce7"),
-                    "Prometió pagar":     ("#1e40af", "#dbeafe"),
-                    "Sin respuesta":      ("#6b7280", "#f3f4f6"),
-                    "Derivar a Legal":    ("#991b1b", "#fee2e2"),
-                    "Solicitó más plazo": ("#92400e", "#fef3c7"),
-                    "Enviado OK":         ("#0369a1", "#e0f2fe"),
-                    "Fallo envío":        ("#7f1d1d", "#fef2f2"),
+                    f"{r['icono']} {r['etiqueta']}": _SCHEME_TO_HEX.get(r["color_scheme"], ("#6b7280", "#f3f4f6"))
+                    for r in _catalogo_wa
                 }
+                # Colores para estados de envío (no son resultados de gestión)
+                _RES_COLOR["Enviado OK"]  = ("#0369a1", "#e0f2fe")
+                _RES_COLOR["Fallo envío"] = ("#7f1d1d", "#fef2f2")
 
                 # RC-BUG-052: Usar resultados consolidados en lugar de solo del último envío
                 _resultados_guard = _resultados_consolidados.copy()
