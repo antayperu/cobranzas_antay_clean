@@ -130,7 +130,8 @@ def _safe_execute(table_op):
 
 
 def _now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    from datetime import timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def log_attempt(recipient, status, run_id, ledger_key, reason=""):
