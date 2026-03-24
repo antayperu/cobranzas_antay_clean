@@ -539,10 +539,11 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
     # --- Metric cards ---
     total_sol      = sum(float(c.get("saldo_sol", 0)) for c in criticos_vista)
     total_usd      = sum(float(c.get("saldo_usd", 0)) for c in criticos_vista)
-    # "Sin gestionar" excluye especiales en AMBAS vistas — ellos nunca se gestionan vía sistema
-    sin_gestion    = sum(
+    # gestionados = clientes con al menos 1 gestión manual (excluye especiales)
+    notificables_n = sum(1 for c in criticos_vista if not c.get("es_especial"))
+    gestionados    = sum(
         1 for c in criticos_vista
-        if int(c.get("gestiones_count", 0)) == 0 and not c.get("es_especial")
+        if int(c.get("gestiones_count", 0)) > 0 and not c.get("es_especial")
     )
     criticos_count = sum(1 for c in criticos_vista if int(c.get("dias_mora_max", 0)) >= 90)
     n              = len(criticos_vista)
@@ -559,18 +560,22 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
         help="Suma del saldo pendiente en Dólares de los clientes mostrados",
     )
     mk3.metric(
-        label="Sin gestionar",
-        value=f"{sin_gestion} clientes",
+        label="Gestionados",
+        value=f"{gestionados} de {notificables_n}",
         help=(
-            f"{sin_gestion} de {n} sin ningún contacto manual registrado en este ciclo "
-            f"({round(sin_gestion / n * 100) if n else 0}%) · "
+            f"{gestionados} de {notificables_n} clientes con al menos un contacto manual registrado "
+            f"en este ciclo ({round(gestionados / notificables_n * 100) if notificables_n else 0}%) · "
             "Excluye clientes con trato directo"
         ),
     )
     mk4.metric(
-        label="Mora > 90 días",
+        label="Mora crítica (>90 días)",
         value=str(criticos_count),
-        help="Clientes con mora crítica — candidatos prioritarios para acción legal",
+        help=(
+            f"{criticos_count} clientes con mora superior a 90 días — "
+            "identificados en la tabla con nivel 'Crítica' — "
+            "candidatos prioritarios para acción legal"
+        ),
         delta_color="inverse",
     )
 
@@ -589,6 +594,15 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
         pct_val     = round(saldo_sol / total_sol * 100, 1) if total_sol > 0 else 0.0
         es_especial = c.get("es_especial", False)
 
+        if mora >= 90:
+            nivel_mora = "Crítica"
+        elif mora >= 60:
+            nivel_mora = "Alta"
+        elif mora >= 30:
+            nivel_mora = "Media"
+        else:
+            nivel_mora = "Normal"
+
         rows.append({
             "#":               i,
             "Cliente":         c.get("nombre", c.get("cliente_id", "—")),
@@ -598,6 +612,7 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
             "Docs US$":        docs_usd,
             "% ranking S/":    pct_val,
             "Mora (días)":     mora,
+            "Nivel mora":      nivel_mora,
             "Gestiones":       gestiones,
             "Último contacto": fecha_ult,
             "Acción sugerida": "Trato directo" if es_especial else _accion_sugerida(mora, gestiones, ultimo),
@@ -634,6 +649,12 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
             "Mora (días)", format="%d días", width="small",
             help="Días de mora máximos entre sus documentos de deuda",
         ),
+        "Nivel mora": st.column_config.SelectboxColumn(
+            "Nivel mora",
+            options=["Crítica", "Alta", "Media", "Normal"],
+            width="small",
+            help="Crítica >90d · Alta >60d · Media >30d · Normal ≤30d",
+        ),
         "Gestiones": st.column_config.NumberColumn(
             "Gestiones", format="%d", width="small",
             help=(
@@ -665,7 +686,7 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
         f"Top {n} clientes · "
         f"Saldo S/: **{_fmt_moneda(total_sol)}** · "
         f"Saldo US$: **US$ {total_usd:,.2f}** · "
-        f"**{sin_gestion}** sin contactar · "
+        f"**{gestionados}** de {notificables_n} gestionados · "
         f"**{criticos_count}** en mora crítica (>90 días) · "
         f"{caption_segmento} · "
         "Excluye documentos tipo DSP y PAV"
