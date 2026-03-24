@@ -477,22 +477,22 @@ def _categoria_riesgo(dias: int, gestiones: int) -> str:
 def _accion_sugerida(dias: int, gestiones: int, ultimo: str) -> str:
     """Acción de cobranza recomendada según el perfil del cliente."""
     if dias >= 90 and gestiones == 0:
-        return "⚖️ Derivar a Legal"
+        return "Derivar a Legal"
     if dias >= 60 and gestiones == 0:
-        return "📞 Llamada URGENTE"
+        return "Llamada urgente"
     if dias >= 30 and gestiones == 0:
-        return "📱 Primer contacto WA"
+        return "Primer contacto"
     if ultimo == "SIN_RESPUESTA":
-        return "📞 Llamada directa"
+        return "Llamada directa"
     if ultimo == "PROMESA_PAGO":
-        return "🔄 Verificar pago"
+        return "Verificar pago"
     if ultimo in ("SOLICITO_PLAZO", "EN_NEGOCIACION"):
-        return "🤝 Continuar negociación"
+        return "Continuar negociación"
     if ultimo == "EXITOSO":
-        return "✅ Confirmar recepción"
+        return "Confirmar recepción"
     if ultimo == "ESCALAR_LEGAL":
-        return "⚖️ Actualizar Legal"
-    return "📋 Seguimiento"
+        return "Actualizar Legal"
+    return "Seguimiento"
 
 
 def _fmt_fecha_gestion(fecha_str: str) -> str:
@@ -506,9 +506,10 @@ def _fmt_fecha_gestion(fecha_str: str) -> str:
         return "—"
 
 
+@st.fragment
 def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
     """Bloque G: Ranking ejecutivo de clientes críticos."""
-    st.markdown("### 🔴 Top Clientes por Saldo Pendiente")
+    st.markdown("### Top Clientes — Saldo Pendiente")
 
     if not criticos:
         st.info("Sin datos de clientes para el ciclo seleccionado.")
@@ -517,8 +518,8 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
     # --- Selector de perspectiva ---
     vista = st.radio(
         "Perspectiva",
-        options=["📊 Vista financiera — toda la cartera", "🎯 Vista operativa — solo en gestión"],
-        index=0,
+        options=["Vista financiera — toda la cartera", "Vista operativa — solo en gestión"],
+        index=1,  # operativa por defecto
         horizontal=True,
         key="dash_top_clientes_vista",
         label_visibility="collapsed",
@@ -532,7 +533,7 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
     )
 
     if not criticos_vista:
-        st.info("Sin clientes notificables para el ciclo seleccionado.")
+        st.info("Sin clientes en esta perspectiva para el ciclo seleccionado.")
         return
 
     # --- Metric cards ---
@@ -548,22 +549,26 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
 
     mk1, mk2, mk3, mk4 = st.columns(4)
     mk1.metric(
-        label="💰 Saldo S/ en riesgo",
+        label="Saldo S/ en riesgo",
         value=_fmt_moneda(total_sol),
-        help="Suma de saldo pendiente en Soles de los clientes mostrados",
+        help="Suma del saldo pendiente en Soles de los clientes mostrados",
     )
     mk2.metric(
-        label="💵 Saldo US$ en riesgo",
+        label="Saldo US$ en riesgo",
         value=f"US$ {total_usd:,.2f}",
-        help="Suma de saldo pendiente en Dólares de los clientes mostrados",
+        help="Suma del saldo pendiente en Dólares de los clientes mostrados",
     )
     mk3.metric(
-        label="🚫 Sin gestionar",
+        label="Sin gestionar",
         value=f"{sin_gestion} clientes",
-        help=f"{sin_gestion} de {n} del top no tienen ningún contacto registrado en este ciclo ({round(sin_gestion / n * 100) if n else 0}%)",
+        help=(
+            f"{sin_gestion} de {n} sin ningún contacto manual registrado en este ciclo "
+            f"({round(sin_gestion / n * 100) if n else 0}%) · "
+            "Excluye clientes con trato directo"
+        ),
     )
     mk4.metric(
-        label="🔴 Mora > 90 días",
+        label="Mora > 90 días",
         value=str(criticos_count),
         help="Clientes con mora crítica — candidatos prioritarios para acción legal",
         delta_color="inverse",
@@ -575,32 +580,28 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
     for i, c in enumerate(criticos_vista, start=1):
         saldo_sol   = float(c.get("saldo_sol", 0))
         saldo_usd   = float(c.get("saldo_usd", 0))
+        docs_sol    = int(c.get("docs_sol", 0))
+        docs_usd    = int(c.get("docs_usd", 0))
         mora        = int(c.get("dias_mora_max", 0))
         gestiones   = int(c.get("gestiones_count", 0))
         ultimo      = c.get("ultimo_resultado", "SIN_GESTION")
         fecha_ult   = _fmt_fecha_gestion(c.get("fecha_ultimo_gestion", ""))
-        pct         = round(saldo_sol / total_sol * 100, 1) if total_sol > 0 else 0.0
+        pct_val     = round(saldo_sol / total_sol * 100, 1) if total_sol > 0 else 0.0
         es_especial = c.get("es_especial", False)
 
-        _mora_emoji = "🔴" if mora >= 90 else "🟠" if mora >= 60 else "🟡" if mora >= 30 else "🟢"
-
-        row: Dict[str, Any] = {
-            "#":       i,
-            "Cliente": c.get("nombre", c.get("cliente_id", "—")),
-        }
-        # Columna "Tipo" solo en Vista financiera (en operativa todos son estándar — la columna es ruido)
-        if not solo_notificables:
-            row["Tipo"] = "⭐ Especial" if es_especial else "Estándar"
-        row.update({
-            "Saldo S/":       saldo_sol,
-            "Saldo US$":      saldo_usd,
-            "% top S/":       pct,
-            "Mora":           f"{_mora_emoji} {mora}d",
-            "Gestiones":      gestiones,
-            "Contacto":       fecha_ult,
-            "Próxima acción": "— Trato directo" if es_especial else _accion_sugerida(mora, gestiones, ultimo),
+        rows.append({
+            "#":               i,
+            "Cliente":         c.get("nombre", c.get("cliente_id", "—")),
+            "Saldo S/":        saldo_sol,
+            "Docs S/":         docs_sol,
+            "Saldo US$":       saldo_usd,
+            "Docs US$":        docs_usd,
+            "% ranking S/":    pct_val,
+            "Mora (días)":     mora,
+            "Gestiones":       gestiones,
+            "Último contacto": fecha_ult,
+            "Acción sugerida": "Trato directo" if es_especial else _accion_sugerida(mora, gestiones, ultimo),
         })
-        rows.append(row)
 
     df = pd.DataFrame(rows)
 
@@ -608,33 +609,44 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
         "#": st.column_config.NumberColumn("#", format="%d", width="small"),
         "Saldo S/": st.column_config.NumberColumn(
             "Saldo S/", format="S/ %.2f",
-            help="Saldo pendiente en Soles (excluye DSP y PAV)",
+            help="Saldo pendiente en Soles (excluye documentos DSP y PAV)",
+        ),
+        "Docs S/": st.column_config.NumberColumn(
+            "Docs S/", format="%d", width="small",
+            help="Cantidad de documentos de deuda en Soles",
         ),
         "Saldo US$": st.column_config.NumberColumn(
             "Saldo US$", format="$ %.2f",
             help="Saldo pendiente en Dólares",
         ),
-        "% top S/": st.column_config.ProgressColumn(
-            "% top S/",
+        "Docs US$": st.column_config.NumberColumn(
+            "Docs US$", format="%d", width="small",
+            help="Cantidad de documentos de deuda en Dólares",
+        ),
+        "% ranking S/": st.column_config.ProgressColumn(
+            "% ranking S/",
             min_value=0,
             max_value=100,
             format="%.1f%%",
-            help="Peso del cliente en el ranking por saldo en Soles",
+            help="Peso relativo del cliente en el ranking por saldo en Soles",
+        ),
+        "Mora (días)": st.column_config.NumberColumn(
+            "Mora (días)", format="%d días", width="small",
+            help="Días de mora máximos entre sus documentos de deuda",
         ),
         "Gestiones": st.column_config.NumberColumn(
-            "Gestor.", format="%d", width="small",
-            help="Gestiones manuales registradas por el gestor en este ciclo",
+            "Gestiones", format="%d", width="small",
+            help=(
+                "Contactos manuales registrados en este ciclo — "
+                "incluye seguimiento WA, llamadas, visitas presenciales y notas. "
+                "No incluye el envío masivo automático de WhatsApp."
+            ),
         ),
-        "Contacto": st.column_config.TextColumn(
-            "Contacto", width="small",
-            help="Fecha del último contacto registrado (dd/mm/aa)",
+        "Último contacto": st.column_config.TextColumn(
+            "Último contacto", width="small",
+            help="Fecha del último contacto manual registrado (dd/mm/aa)",
         ),
     }
-    if not solo_notificables:
-        col_cfg["Tipo"] = st.column_config.TextColumn(
-            "Tipo", width="small",
-            help="Estándar = incluido en KPIs · ⭐ Especial = trato directo, excluido del Proceso de Cobranza",
-        )
 
     st.dataframe(
         df,
@@ -644,13 +656,19 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
         column_config=col_cfg,
     )
 
+    caption_segmento = (
+        "Solo cartera activa — excluye clientes con trato directo"
+        if solo_notificables
+        else f"Toda la cartera · {sum(1 for c in criticos if c.get('es_especial'))} clientes con trato directo incluidos"
+    )
     st.caption(
-        f"Mostrando **{n} clientes** · "
+        f"Top {n} clientes · "
         f"Saldo S/: **{_fmt_moneda(total_sol)}** · "
         f"Saldo US$: **US$ {total_usd:,.2f}** · "
         f"**{sin_gestion}** sin contactar · "
-        f"**{criticos_count}** en mora crítica · "
-        f"Excluye tipos de pedido: DSP, PAV"
+        f"**{criticos_count}** en mora crítica (>90 días) · "
+        f"{caption_segmento} · "
+        "Excluye documentos tipo DSP y PAV"
     )
 
 
