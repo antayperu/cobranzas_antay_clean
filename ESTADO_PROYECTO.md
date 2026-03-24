@@ -1,123 +1,103 @@
-# Estado del Proyecto: Reporte de Cobranzas y WhatsApp
+# Estado del Proyecto: ReporteCobranzas — Antay Fábrica de Software
 
-**Fecha de Inicio**: 2025-12-16
-**Estado General**: ✅ STATUS: v1.5.6 (Estable / Producción)
-**Última Actualización:** 2026-02-01
-**Estado:** Estable (v1.5.6) | **En Proceso:** Entrega Final de Release 1.5.x
-**Repositorio**: [antayperu/cobranzas_antay_clean](https://github.com/antayperu/cobranzas_antay_clean)
-
-## 🎯 Objetivo
-Construir una aplicación web en Streamlit para consolidar reportes de cobranza, calcular detracciones y gestionar notificaciones masivas con altos estándares visuales.
-
-## 📌 Preferencias del Proyecto
-- **Idioma**: Toda la comunicación y documentación en **Español**.
-- **UX**: Estándar Enterprise Premium (Antay Methodology).
-- **Layout**: Diseño Edge-to-Edge para máxima productividad.
-
-## 🏆 Evolución Reciente (Sprints 1.5.x)
-
-### 📈 v1.5.4: Premium UI/UX
-- **Badges de Estado**: Implementación de etiquetas color-coded para correos y detracciones.
-- **Fechas Humanizadas**: Uso de etiquetas dinámicas (Hoy, Ayer) para facilitar el seguimiento.
-- **KPI Emphasis**: Resaltado visual del **Saldo Real** en azul corporativo.
-
-### 🖥️ v1.5.5: Layout Enterprise
-- **Edge-to-Edge**: Aplicación expandida al 100% del ancho del monitor.
-- **Auto-fit Columns**: Refinamiento de anchos de tabla para eliminar scroll horizontal.
-
-### 🛡️ v1.5.6: Tracking Integrity (Hotfix Crítico)
-- **Local Time Sync**: Eliminación de desfases horários (UTC -> Local).
-- **Surgical Sync**: Protección de base de datos para evitar sobre-escritura masiva de estados.
-- **Robustness**: Detección de estados mejorada para reportes históricos.
+**Fecha de Inicio:** 2025-12-16
+**Última Actualización:** 2026-03-23
+**Versión Actual:** v1.9.0 (dev) — Dashboard RC-FEAT-060 completo · 162/162 tests
+**Estado General:** 🟡 EN QA — pendiente Gate 3 smoke en staging antes de merge a main
+**Repositorio:** [antayperu/cobranzas_antay_clean](https://github.com/antayperu/cobranzas_antay_clean)
+**Rama activa:** `dev` | **Tag producción:** `v1.6.0`
 
 ---
 
-## 🔄 Contexto para Próxima Sesión
-- **Estado Actual**: v1.5.6 validado y listo para cierre.
-- **Pendientes**: 
-    - [ ] Monitoreo de desempeño en envíos reales masivos.
-    - [ ] Feedback de usuario sobre el nuevo layout Edge-to-Edge.
+## 🎯 Objetivo del Producto
+
+**ReporteCobranzas** es una plataforma de gestión de cobranza B2B para DACTA S.A.C. — consolida cartera, envía notificaciones (WA + Email), registra gestiones CRM y reporta efectividad a distintos niveles jerárquicos.
+
+Ver FRD maestro: `docs/FRD_REPORTECOBRANZAS_v4.0.md`
 
 ---
 
-## 📦 Backlog (Ver docs/TICKETS_ANTAY.md)
-*Consulta el archivo técnico oficial `docs/TICKETS_ANTAY.md` para el backlog detallado.*
+## ✅ Módulos Completados (Producción)
+
+| Módulo | Versión | Estado |
+|---|---|---|
+| Reporte General (Excel → cartera visual) | v1.6.0 | ✅ PROD |
+| Notificaciones Email (HTML premium + tracking) | v1.6.0 | ✅ PROD |
+| WhatsApp Masivo (Selenium + 8 plantillas) | v1.8.3 | ✅ PROD |
+| CRM Centro de Gestiones (multicanal) | v1.8.3 | ✅ PROD |
+| Acuerdos de Pago con Cuotas | v1.8.3 | ✅ PROD |
+| Bandeja de Pendientes del Día | v1.8.3 | ✅ PROD |
+| Clientes Premium (CRUD Supabase) | v1.7.1 | ✅ PROD |
+| Dashboard de Efectividad (RC-FEAT-038) | v1.9.0 | 🟡 QA |
 
 ---
 
-## 📦 HISTORIAL DE VERSIONES
-- **v1.0 - v1.4**: Desarrollo base y refinamiento de filtros.
-- **v1.5.2**: Persistencia de sesión y remoción de fullscreen.
-- **v1.5.6**: Release estable con UI Premium y Tracking Auditado.
-- **Última Actualización**: 23/12/2025
-- **Estado**: 🟢 ESTABLE (En proceso de release v5.0)
+## 🔄 Sprint Actual — v1.9.0 (RC-FEAT-060)
 
-## 📌 Resumen Ejecutivo
-Sprint "UX & Enterprise Standards" completado. Se han cerrado temas críticos de persistencia y se ha elevado el estándar visual del correo a nivel corporativo.
+### Cambios incluidos en dev (pendientes de merge a main)
 
-### 🚀 Últimos Cambios (v4.6.3)
-- **[RC-UX-003] Template PC Premium**:
-    - Diseño tipo "Hoja Corporativa" (700px, Sombra, Membrete).
-    - Header formal con barra de marca y logo ampliado.
-    - Tabla con zebra-striping y badges de estado.
-    - Footer de pagos estructurado en grilla.
-- **[RC-FEAT-011] Supervisor Copy**: Copia oculta automática (BCC) configurable.
-- **[RC-BUG-017] Persistencia Config**: Solucionado guardado de settings JSON.
-    - **v4.3 (Filtros Profesionales & KPIs Multi-Moneda)**:
-        - **Diseño de Filtros "Stacked"**: Multiselección de Empresa a ancho completo para evitar problemas de layout, y filtros secundarios organizados en grid.
-        - **Lógica de Filtrado**: Incorporación de filtro "Tipo Pedido" (Multi-select) y eliminación de filtros ocultos en backend.
-        - **KPIs Inteligentes**: Tarjetas de resumen y conteo de documentos con desglose explicito por moneda (`S/` y `$`).
-    - **v4.4 (Email Refinements & Logic)**:
-        - **Refinamiento Visual**: Aumento de fuente en títulos, cambio de etiquetas ("Saldo Pendiente") y ajuste de etiquetas móviles ("Estado Detr.").
-        - **Lógica Robusta**: Corrección de suma de monedas (exclusión estricta de Dólares en totales Soles) y prevención de errores de sintaxis CSS.
-        - **Intro Dinámico**: Texto introductorio inteligente con resumen automático de deuda por moneda y cantidad de documentos (e.g., "S/ 100 (2 docs) y $ 50 (1 doc)").
-        - **Limpieza**: Eliminación de título redundante "Estado de Cuenta".
-        - **Corrección Crítica**: Solucionado problema de scope de variable `logo_b64` que impedía envío de imágenes.
-        - **Timing Mejorado**: Implementado `WebDriverWait` con espera explícita de 1.5s para carga completa de recursos.
-        - **Logging Detallado**: Progreso en tiempo real por contacto con manejo robusto de errores (continúa si uno falla).
-        - **Limpieza Automática**: Eliminación de archivos JPG temporales al finalizar envío.
-    - **v4.5 (WhatsApp Pro Fix)**:
-        - **Solución Definitiva**: Implementación de técnica **JS-Force-Click** para bypass de intersección de elementos (`ElementClickInterceptedException`).
-        - **Sincronización Avanzada**: Aumento de tiempo de portapapeles (3s) para garantizar integridad de datos en el pegado.
-        - **Modo Estricto (Imagen)**: Eliminado fallback de texto para cumplir con el requerimiento de calidad visual 100%.
-    - **v4.6.4 (Multi-Client Email Support)**:
-        - **Nueva Funcionalidad**: Soporte oficial para múltiples destinatarios por cliente (separados por coma o punto y coma).
-        - **UX Mejorada**: Truncamiento visual inteligente en listas largas de correos para no romper el diseño.
-        - **Calidad**: Validación unitaria de normalización de correos y soporte completo en Excel Export.
+**RC-BUG-059** — Fix tasa de recuperación: denominador = clientes únicos del funnel, no conteo de filas KPIs período.
 
-   ### 📅 ROADMAP: WhatsApp Pro Upgrade (v5.0) - [EN PROCESO]
-Se ha decidido pivotar la estrategia de envío para maximizar profesionalismo y legibilidad:
+**RC-FEAT-060** — Dashboard: Cobertura, Intensidad y Resultados por cliente:
+- `get_funnel_cobranza()`: 9 nuevas claves de intensidad y último resultado por cliente
+- Funnel jerárquico con sub-filas auditables (Llamada/Visita/Nota/Otros suman al padre)
+- "¿Qué respondieron?": muestra **último resultado por cliente único** (no filas de gestión)
+- Top Clientes: `@st.fragment` para cambio instantáneo entre vistas, columna **Nivel mora** (Crítica/Alta/Media/Normal), métrica **Gestionados: X de N**, columnas Docs S/ y Docs US$ recuperadas, UX corporativa
 
-1.  **Imagen "Tarjeta Resumen Ejecutivo"**:
-    - Sustituir el listado detallado (tira larga) por una tarjeta de impacto.
-    - Contenido: Logo corporativo destacado, texto introductorio y totales consolidados por moneda.
-2.  **Adjunto de PDF Formal**:
-    - Opción (vía configuración) de adjuntar un Estado de Cuenta en PDF.
-    - El PDF replicará fielmente el diseño de alta fidelidad usado en los correos corporativos (PC).
-3.  **Selector de Modo de Envío**:
-    - Toggle en interfaz: **Solo Texto** vs **Imagen + Texto**.
-    - Previsualización dinámica basada en la selección para asegurar predictibilidad.
-4.  **Trazabilidad Total**: Todas las configuraciones de plantilla y logo son ahora persistentes.
+**Tests:** 162/162 PASS (Gate 0 ✅ · Gate 1 ✅)
 
 ---
 
-### ✅ LOGROS RECIENTES (v4.6)
-- **Document Mode Estabilizado**: Implementación de tablas HTML dentro de imágenes para WhatsApp.
-- **Persistencia de Plantillas**: Sistema de guardado de mensajes de marketing implementado en `config.json`.
-- **Canvas Dinámico**: Eliminación de bandas negras/espacio vacío en imágenes verticales.
-- **Selenium Ultra-Stable**: Inyección vía JS-Force-Click para evitar bloqueos por capas de UI.
-- **Email Zero-Duplicate**: Implementación de Ledger SQLite, TTL para prevenir re-envíos accidentales y UX Premium.
+## 📋 Checklist Gate 3 — Smoke en staging (localhost:8502)
+
+Antes de hacer merge a main, el PO valida visualmente:
+
+```
+[ ] CA-1  — Abrir Dashboard, ciclo CIC-20260322-1256 cargado correctamente
+[ ] CA-2  — Tabla "Proceso de Cobranza": sub-filas Llamada/Visita/Nota/Otros suman al padre
+[ ] CA-3  — Columna "Cantidad": sub-filas de directa muestran números (no vacíos)
+[ ] CA-4  — "¿Qué respondieron?": cada empresa aparece 1 sola vez (no repite por gestión)
+[ ] CA-5  — Top Clientes: Vista operativa es el default al entrar al Dashboard
+[ ] CA-6  — Top Clientes: cambiar entre Vista financiera/operativa es instantáneo (sin spinner)
+[ ] CA-7  — Top Clientes: KPIs (Gestionados, Saldo, Mora) cambian correctamente al cambiar vista
+[ ] CA-8  — Top Clientes: columna "Nivel mora" visible — filas con >90 días muestran "Crítica"
+[ ] CA-9  — Banner "AMBIENTE DE PRUEBAS (STAGING)" visible en sidebar
+[ ] CA-10 — Versión "v1.9.0" visible en el sidebar
+```
 
 ---
 
-### 📦 HISTORIAL DE VERSIONES
-- **v1.0 - v4.0**: Desarrollo base de reportes, email y primer motor WhatsApp.
-- **v4.5**: WhatsApp Pro Fix (Estabilidad Selenium y sincronización Dual).
-- **v4.6**: Diseño Document Mode y Persistencia.
-- **Cómo Retomar**: 
-    1. Indicar al asistente que lea este archivo: `ReporteCobranzas/ESTADO_PROYECTO.md`.
-    2. Ejecutar la app con `streamlit run app.py`.
-- **Pendientes Futuros**:
+## 🗺️ Roadmap — Próximas Funcionalidades
 
-- [ ] Validación masiva de correos (rebotados).
-- [ ] Dashboards de métricas de envío.
+Según orden de prioridad del FRD v4.0 (sección 11):
+
+| # | Ticket | Descripción | Prioridad | Depende de |
+|---|---|---|---|---|
+| 1 | **RC-FEAT-061** | Gestión de Email — CRM seguimiento post-envío email | P1 Alto | — |
+| 2 | **RC-FEAT-039** | Informe Gerencial PDF para comités de directorio | P1 Alto | RC-FEAT-038 ✅ |
+| 3 | **RC-SEC-001** | Seguridad: credenciales SMTP fuera de config.json | P0 Urgente | — |
+| 4 | **RC-UX-001** | Feedback visual en tiempo real durante envío WA masivo | P1 Alto | — |
+| 5 | **RC-FEAT-027** | Plantilla WA sugerida por aging del cliente | P1 Alto | — |
+| 6 | **RC-FEAT-028** | KPIs operativos del ciclo en Tab WA y CRM | P2 Medio | — |
+
+---
+
+## 🔧 Instrucciones para retomar sesión
+
+1. Leer este archivo: `ESTADO_PROYECTO.md`
+2. Leer FRD: `docs/FRD_REPORTECOBRANZAS_v4.0.md`
+3. Verificar rama activa: `git status` → debe estar en `dev`
+4. Ambientes: STAGING en localhost:8502 con `.env.staging`
+
+---
+
+## 📦 Historial de Versiones
+
+| Versión | Fecha | Descripción |
+|---|---|---|
+| v1.6.0 | 2026-03-13 | TIER 1 CRM WhatsApp completo — 141/141 tests |
+| v1.7.1 | 2026-03-13 | Módulo Clientes Premium + Home 2 archivos |
+| v1.7.2 | 2026-03-14 | CRM flow + auto-restore + banner STAGING |
+| v1.8.0 | 2026-03-16 | TIER 2: panel prueba WA + 9 mejoras UX post-envío |
+| v1.8.3 | 2026-03-16 | Trazabilidad individual + persistencia en tiempo real |
+| **v1.9.0** | **2026-03-23** | **RC-FEAT-060: Dashboard completo — funnel jerárquico, resultados por cliente único, Top Clientes 7 mejoras UX + @st.fragment** |
