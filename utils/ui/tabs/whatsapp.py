@@ -834,8 +834,15 @@ def render_tab(df_filtered, config):
                     _fecha_utc_str = now_wa_utc.isoformat()
                     _persisted_wa  = [0]  # lista mutable para contar desde el closure
 
+                    # Mapa cod_cliente → índice en session_results para actualización en vivo
+                    _cod_to_idx = {
+                        str(c.get('cod_cliente', '')).strip(): i
+                        for i, c in enumerate(contacts_to_send)
+                    }
+
                     def _on_client_sent(cod_cliente, resultado, contact_data):
-                        """Graba en Supabase inmediatamente al terminar el envío de cada cliente."""
+                        """Graba en Supabase inmediatamente al terminar el envío de cada cliente
+                        y actualiza la tabla visual en tiempo real."""
                         if not cod_cliente:
                             return
                         _meta = {
@@ -860,6 +867,19 @@ def render_tab(df_filtered, config):
                         )
                         if ok:
                             _persisted_wa[0] += 1
+
+                        # Actualizar tabla visual per-cliente en tiempo real
+                        _idx_sent = _cod_to_idx.get(str(cod_cliente).strip(), -1)
+                        if 0 <= _idx_sent < len(session_results):
+                            if resultado in ('SIN_RESPUESTA', 'EXITOSO'):
+                                session_results[_idx_sent]["Estado"] = "✅ Enviado"
+                            else:
+                                session_results[_idx_sent]["Estado"] = "❌ Fallido"
+                            results_placeholder.dataframe(
+                                pd.DataFrame(session_results),
+                                hide_index=True,
+                                use_container_width=True,
+                            )
 
                     results = send_whatsapp_messages_direct(
                         contacts=contacts_to_send,
