@@ -96,11 +96,7 @@ with st.sidebar:
     else:
         st.markdown(f"## {CONFIG['company_name']}")
 
-    st.markdown("---")
-    
-    # --- RECOVERY: Mostrar opcion de restaurar sesion anterior ---
-    if not st.session_state.get('data_ready', False):
-        session_lib.render_recovery_options()
+    # Logo only — ciclos y recovery se gestionan en render_sidebar()
     
 
 
