@@ -30,14 +30,15 @@ from utils.pdf_report import InformeGerencial
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _load_smtp_config() -> Dict[str, Any]:
-    """Lee la configuración SMTP de session_state (guardada en Tab Configuración)."""
+def _load_smtp_config(smtp_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Lee la configuración SMTP del Tab Configuración (config['smtp_config'])."""
+    cfg = smtp_config or {}
     return {
-        "host":     st.session_state.get("smtp_host", ""),
-        "port":     int(st.session_state.get("smtp_port", 587)),
-        "user":     st.session_state.get("smtp_user", ""),
-        "password": st.session_state.get("smtp_password", ""),
-        "from":     st.session_state.get("smtp_from", ""),
+        "host":     cfg.get("server", ""),
+        "port":     int(cfg.get("port", 587) or 587),
+        "user":     cfg.get("user", ""),
+        "password": cfg.get("password", ""),
+        "from":     cfg.get("user", ""),
         "to_list":  st.session_state.get("informe_destinatarios", ""),
     }
 
@@ -105,6 +106,7 @@ def render_panel_informe(
     funnel: Optional[Dict[str, Any]] = None,
     criticos: Optional[List[Dict[str, Any]]] = None,
     empresa: str = "DACTA S.A.C.",
+    smtp_config: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Renderiza el panel colapsable 'Generar Informe para Comité de Directorio'.
 
@@ -113,6 +115,7 @@ def render_panel_informe(
         funnel:           Dict de get_funnel_cobranza() ya cargado en Dashboard.
         criticos:         List de get_top_clientes_criticos() ya cargado.
         empresa:          Nombre de la empresa para el encabezado del PDF.
+        smtp_config:      Dict con claves server/port/user/password del Tab Configuración.
     """
     is_staging = st.session_state.get("IS_STAGING", False)
 
@@ -268,7 +271,7 @@ def render_panel_informe(
                 )
 
             if enviar and not is_staging:
-                smtp_cfg = _load_smtp_config()
+                smtp_cfg = _load_smtp_config(smtp_config)
                 with st.spinner("Enviando por email…"):
                     ok, msg = _enviar_pdf_por_email(
                         pdf_bytes=pdf_bytes,

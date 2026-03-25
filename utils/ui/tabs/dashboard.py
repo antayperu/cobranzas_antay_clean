@@ -773,6 +773,7 @@ def render_tab(df_final: Any, config: Dict[str, Any]) -> None:
         funnel=funnel,
         criticos=criticos,
         empresa=empresa,
+        smtp_config=config.get("smtp_config", {}) if config else {},
     )
 
     st.markdown("---")
