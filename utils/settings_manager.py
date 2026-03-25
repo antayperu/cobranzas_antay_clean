@@ -179,17 +179,14 @@ _CREDENTIAL_FIELDS: Dict[str, tuple] = {
 
 
 def _strip_credentials(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Return a deep copy of payload with all sensitive credential fields removed.
+    """Devuelve copia limpia del payload sin rutas de máquina ni config de infra.
 
-    Credentials must be injected at runtime via environment variables only.
-    This ensures app_config in Supabase never contains secrets, maintaining
-    strict environment isolation (staging / production / local).
+    Las credenciales SMTP se persisten en Supabase para que el usuario no deba
+    re-ingresarlas en cada refresco (app monousuario privada). Si están seteados
+    los env vars SMTP_USER / SMTP_PASSWORD, estos siguen teniendo prioridad
+    (útil para el servidor QA con variables de entorno configuradas).
     """
     p = copy.deepcopy(payload)
-    smtp = p.get("smtp_config")
-    if isinstance(smtp, dict):
-        for key in ("user", "password", "resend_api_key", "sendgrid_api_key"):
-            smtp.pop(key, None)
     p.pop("supabase_config", None)  # infra config never belongs in app_config
     p.pop("logo_path", None)        # machine-local paths must not reach the cloud
     return p
