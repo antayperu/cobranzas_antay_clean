@@ -284,7 +284,7 @@ class InformeGerencial:
         ))
         story.append(Paragraph(
             f"Informe generado automáticamente el {self.generated_at.strftime('%d/%m/%Y a las %H:%M UTC')} "
-            f"por ReporteCobranzas · Antay Fábrica de Software. "
+            f"por {self.empresa}. "
             f"Ciclo: {self.cycle_id}. CONFIDENCIAL.",
             ST_NOTE,
         ))
@@ -343,7 +343,7 @@ class InformeGerencial:
         canvas_obj.setFont(_F_BODY, 7)
         canvas_obj.drawString(
             0.5 * cm, 0.55 * cm,
-            f"Antay Fábrica de Software — Confidencial  |  {self.generated_at.strftime('%d/%m/%Y %H:%M UTC')}",
+            f"{self.empresa} — Confidencial  |  {self.generated_at.strftime('%d/%m/%Y %H:%M UTC')}",
         )
         canvas_obj.drawRightString(
             page_w - 0.5 * cm, 0.55 * cm,
