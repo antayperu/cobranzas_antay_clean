@@ -2198,11 +2198,15 @@ def get_efectividad_por_plantilla(cycle_id: Optional[str] = None) -> List[Dict[s
         return []
 
 
-def get_top_clientes_criticos(n: int = 10, cycle_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_top_clientes_criticos(n: int = 10, cycle_id: Optional[str] = None, solo_notificable: bool = False) -> List[Dict[str, Any]]:
     """Top N clientes ordenados por saldo pendiente desc.
 
     Returns list of dicts: {cliente_id, nombre, saldo_total, docs_count,
     dias_mora_max, gestiones_count, ultimo_resultado}
+
+    Args:
+        solo_notificable: Si True, filtra solo clientes con enviar_email='SI'
+                          (Cartera Activa). Si False, incluye toda la cartera.
     """
     client = get_supabase_client()
     if not client:
@@ -2216,6 +2220,8 @@ def get_top_clientes_criticos(n: int = 10, cycle_id: Optional[str] = None) -> Li
         )
         if cycle_id:
             q = q.eq("cycle_id", str(cycle_id))
+        if solo_notificable:
+            q = q.eq("enviar_email", "SI")
         resp = _safe_execute(q.limit(2000))
         docs = resp.data or []
 
@@ -2445,24 +2451,28 @@ _AGING_BUCKETS = [
 ]
 
 
-def get_aging_distribution(cycle_id: str) -> List[Dict[str, Any]]:
+def get_aging_distribution(cycle_id: str, solo_notificable: bool = False) -> List[Dict[str, Any]]:
     """Distribución de cartera por antigüedad de mora para el ciclo dado.
 
     Retorna una fila por bucket con: segmento, riesgo, clientes,
     saldo_sol, saldo_usd, pct_sol (% del total en Soles).
     Excluye documentos DSP y PAV (no representan deuda real).
+
+    Args:
+        solo_notificable: Si True, filtra solo clientes con enviar_email='SI'
+                          (Cartera Activa). Si False, incluye toda la cartera.
     """
     client = get_supabase_client()
     if not client:
         return []
     try:
-        res = _safe_execute(
-            client.table("documentos_ciclo")
-            .select("cod_cliente, saldo_real, moneda, dias_mora")
-            .eq("cycle_id", cycle_id)
-            .not_.in_("tipo_pedido", ["DSP", "PAV"])
-            .limit(10000)
-        )
+        q = (client.table("documentos_ciclo")
+             .select("cod_cliente, saldo_real, moneda, dias_mora")
+             .eq("cycle_id", cycle_id)
+             .not_.in_("tipo_pedido", ["DSP", "PAV"]))
+        if solo_notificable:
+            q = q.eq("enviar_email", "SI")
+        res = _safe_execute(q.limit(10000))
         docs = res.data or []
 
         # Un cliente puede tener varios docs: usar su mora máxima y sumar saldos

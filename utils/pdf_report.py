@@ -216,6 +216,7 @@ class InformeGerencial:
         empresa: str = "DACTA S.A.C.",
         secciones: Optional[set] = None,
         recovery: Optional[Dict[str, Any]] = None,
+        scope: str = "activa",
     ) -> None:
         self.cycle_id  = cycle_id
         self.funnel    = funnel
@@ -225,6 +226,7 @@ class InformeGerencial:
         self.empresa   = empresa
         self.secciones = secciones or {"A", "B", "C", "D", "E"}
         self.recovery  = recovery or {}
+        self.scope     = scope   # "activa" | "general"
         self.generated_at = datetime.now(timezone.utc)
         # Ancho disponible para contenido (A4 portrait con márgenes 1.8cm)
         self._page_w = A4[0] - 2 * 1.8 * cm
@@ -449,10 +451,16 @@ class InformeGerencial:
         story.append(kpi_strip)
         story.append(_spacer(0.5))
 
+        scope_label = (
+            "Cartera Activa — solo clientes notificables (Envío Email = SI)"
+            if self.scope == "activa"
+            else "Cartera General — todos los clientes con deuda real"
+        )
         resumen_data = [
             ["Empresa", self.empresa],
             ["Ciclo analizado", self.cycle_id],
             ["Fecha de generación", self.generated_at.strftime("%d de %B de %Y, %H:%M UTC")],
+            ["Alcance del informe", scope_label],
             ["Total cartera del ciclo", f"{cartera_total} clientes"],
             ["Cartera activa (notificable)", f"{cartera} clientes"],
             ["Saldo total en Soles", _fmt_sol(total_sol)],
@@ -488,15 +496,30 @@ class InformeGerencial:
     def _seccion_a_semaforo(self) -> List:
         story: List = []
         story += _section_title("A.  Semáforo Ejecutivo", self._page_w)
+
+        # Badge de alcance bajo el título de sección
+        scope_badge = (
+            "Vista: Cartera Activa — solo clientes notificables (Envío Email = SI)"
+            if self.scope == "activa"
+            else "Vista: Cartera General — todos los clientes con deuda real"
+        )
+        story.append(Paragraph(scope_badge, ST_SMALL))
         story.append(_spacer(0.2))
 
         funnel = self.funnel
         gestiones = self.gestiones or {}
         aging = self.aging or []
 
-        cartera = funnel.get("cartera", 0)
+        # Para scope "activa": usar "cartera" (notificables)
+        # Para scope "general": usar "cartera_total" (todos con deuda)
+        cartera = (
+            funnel.get("cartera", 0)
+            if self.scope == "activa"
+            else funnel.get("cartera_total", 0)
+        )
         alcanzados = funnel.get("alcanzados", 0)
-        sin_contactar = funnel.get("sin_contactar", 0)
+        # sin_contactar solo es operativamente válido en scope "activa"
+        sin_contactar = funnel.get("sin_contactar", 0) if self.scope == "activa" else 0
         con_respuesta = funnel.get("con_respuesta", 0)
 
         total_sol = sum(b.get("saldo_sol", 0) for b in aging)

@@ -134,6 +134,27 @@ def render_panel_informe(
             unsafe_allow_html=True,
         )
 
+        # --- Alcance del informe ---
+        st.markdown("**Alcance del informe:**")
+        scope = st.radio(
+            "Alcance",
+            options=["activa", "general"],
+            format_func=lambda x: (
+                "🎯 Cartera Activa — solo clientes notificables (Envío Email = SI)"
+                if x == "activa"
+                else "📋 Cartera General — todos los clientes con deuda"
+            ),
+            index=0,
+            key="informe_scope",
+            label_visibility="collapsed",
+            help=(
+                "Cartera Activa: base de la gestión operativa (clientes con Envío Email = SI). "
+                "Cartera General: incluye además los clientes de trato directo."
+            ),
+        )
+        solo_notificable = (scope == "activa")
+        st.markdown("---")
+
         # --- Selector de ciclo ---
         ciclos = dbm.get_ciclos_para_informe(limit=12)
         if not ciclos:
@@ -227,17 +248,19 @@ def render_panel_informe(
 
         # --- Generar PDF ---
         if generar or enviar:
-            # Reutilizar datos del Dashboard si coincide el ciclo; de lo contrario, cargar desde BD
-            if selected_cycle == current_cycle_id and funnel and criticos:
-                _funnel   = funnel
-                _criticos = criticos
-            else:
-                with st.spinner("Cargando datos del ciclo seleccionado…"):
-                    _funnel   = dbm.get_funnel_cobranza(cycle_id=selected_cycle)
-                    _criticos = dbm.get_top_clientes_criticos(n=10, cycle_id=selected_cycle)
+            with st.spinner("Cargando datos del ciclo seleccionado…"):
+                # Funnel: reutilizar del Dashboard si coincide el ciclo (tiene cartera y cartera_total)
+                if selected_cycle == current_cycle_id and funnel:
+                    _funnel = funnel
+                else:
+                    _funnel = dbm.get_funnel_cobranza(cycle_id=selected_cycle)
+                # Criticos y aging: siempre con el filtro de scope correcto
+                _criticos = dbm.get_top_clientes_criticos(
+                    n=10, cycle_id=selected_cycle, solo_notificable=solo_notificable
+                )
 
             with st.spinner("Obteniendo distribución de cartera y gestiones…"):
-                _aging     = dbm.get_aging_distribution(selected_cycle)
+                _aging     = dbm.get_aging_distribution(selected_cycle, solo_notificable=solo_notificable)
                 _gestiones = dbm.get_resumen_gestiones_ciclo(selected_cycle)
                 _recovery  = dbm.get_recovery_stats(selected_cycle)
 
@@ -251,6 +274,7 @@ def render_panel_informe(
                     empresa=empresa,
                     secciones=secciones_sel,
                     recovery=_recovery,
+                    scope=scope,
                 ).generate()
 
             fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
