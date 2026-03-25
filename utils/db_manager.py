@@ -1,26 +1,3 @@
-def get_clientes_email_enviados_hoy(cycle_id: str, fecha_hoy: str) -> set:
-    """
-    Devuelve un set de cliente_id únicos con notificación EMAIL enviada hoy para el ciclo dado.
-    """
-    client = get_supabase_client()
-    if not client:
-        return set()
-    try:
-        res = _safe_execute(
-            client.table("notificaciones")
-            .select("cliente_id, tipo_notificacion, estado, cycle_id, fecha_envio, created_at")
-            .eq("cycle_id", str(cycle_id).strip())
-            .eq("tipo_notificacion", "EMAIL")
-            .eq("estado", "ENVIADO")
-            .gte("created_at", f"{fecha_hoy} 00:00:00")
-            .lte("created_at", f"{fecha_hoy} 23:59:59")
-        )
-        if res.data:
-            return {row["cliente_id"] for row in res.data if row.get("cliente_id")}
-        return set()
-    except Exception as e:
-        print(f"get_clientes_email_enviados_hoy Error: {e}")
-        return set()
 import os
 import sqlite3
 import json
@@ -1629,7 +1606,7 @@ def _get_docs_simple_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
     try:
         resp = _safe_execute(
             client.table("documentos_ciclo")
-            .select("match_key,cliente_id,saldo_real,saldo_original")
+            .select("match_key,cliente_id,saldo_real,saldo_original,moneda")
             .eq("cycle_id", str(cycle_id))
             .limit(5000)
         )
@@ -1683,7 +1660,12 @@ def reconcile_ciclo_recovery(
             cliente_nuevo[cid]["docs_total"] += 1
             cliente_nuevo[cid]["monto_total"] += float(doc.get("saldo_real") or 0)
 
-        # Build per-client recovered stats
+        # Constantes de moneda USD
+        _MONEDAS_USD = {"USD", "US$", "$", "DOLARES", "DÓLARES"}
+
+        # Build per-client recovered stats (con split por moneda)
+        total_monto_rec_sol = 0.0
+        total_monto_rec_usd = 0.0
         for mk in keys_recuperados:
             doc = keys_ant[mk]
             cid = str(doc.get("cliente_id", "")).strip()
@@ -1692,8 +1674,14 @@ def reconcile_ciclo_recovery(
             if cid not in cliente_nuevo:
                 cliente_nuevo[cid] = {"docs_total": 0, "monto_total": 0.0,
                                        "docs_recuperados": 0, "monto_recuperado": 0.0}
+            monto_doc = float(doc.get("saldo_real") or 0)
             cliente_nuevo[cid]["docs_recuperados"] += 1
-            cliente_nuevo[cid]["monto_recuperado"] += float(doc.get("saldo_real") or 0)
+            cliente_nuevo[cid]["monto_recuperado"] += monto_doc
+            moneda_doc = str(doc.get("moneda") or "").upper().strip()
+            if moneda_doc in _MONEDAS_USD:
+                total_monto_rec_usd += monto_doc
+            else:
+                total_monto_rec_sol += monto_doc
 
         # Gestiones por cliente en el ciclo nuevo
         gestiones_nuevas = get_gestiones_list(limit=5000)  # All recent
@@ -1746,8 +1734,8 @@ def reconcile_ciclo_recovery(
             )
 
         # Persist resumen_ciclo
-        total_docs_rec = sum(v["docs_recuperados"] for v in cliente_nuevo.values())
-        total_monto_rec = sum(v["monto_recuperado"] for v in cliente_nuevo.values())
+        total_docs_rec  = sum(v["docs_recuperados"] for v in cliente_nuevo.values())
+        total_monto_rec = total_monto_rec_sol + total_monto_rec_usd
         total_docs_ant = len(keys_ant)
         tasa = round(total_docs_rec / total_docs_ant * 100, 2) if total_docs_ant > 0 else 0.0
 
@@ -1765,7 +1753,9 @@ def reconcile_ciclo_recovery(
             "monto_total": round(sum(v["monto_total"] for v in cliente_nuevo.values()), 2),
             "clientes_recuperados": sum(1 for v in cliente_nuevo.values() if v["docs_recuperados"] > 0),
             "docs_recuperados": total_docs_rec,
-            "monto_recuperado": round(total_monto_rec, 2),
+            "monto_recuperado":     round(total_monto_rec, 2),
+            "monto_recuperado_sol": round(total_monto_rec_sol, 2),
+            "monto_recuperado_usd": round(total_monto_rec_usd, 2),
             "tasa_recuperacion": tasa,
             "gestiones_total": total_gestiones,
             "acuerdos_total": total_acuerdos or 0,
@@ -1794,6 +1784,48 @@ def reconcile_ciclo_recovery(
         print(f"reconcile_ciclo_recovery Error: {e}")
         return {"ok": False, "mensaje": f"Error en reconciliación: {e}", "stats": {}}
 
+def get_recovery_stats(cycle_id: str) -> Dict[str, Any]:
+    """Read resumen_ciclo to get real recovery amounts split by currency.
+
+    Returns dict with monto_recuperado_sol, monto_recuperado_usd,
+    docs_recuperados, tasa_recuperacion, cycle_id_anterior, tiene_anterior.
+    Falls back to zeros if no row exists (e.g. first cycle with no predecessor).
+    """
+    client = get_supabase_client()
+    if not client:
+        return _recovery_zero()
+    try:
+        resp = _safe_execute(
+            client.table("resumen_ciclo")
+            .select("monto_recuperado_sol,monto_recuperado_usd,docs_recuperados,tasa_recuperacion,cycle_id_anterior")
+            .eq("cycle_id", str(cycle_id))
+            .limit(1)
+        )
+        if resp and resp.data:
+            row = resp.data[0]
+            return {
+                "monto_recuperado_sol": float(row.get("monto_recuperado_sol") or 0),
+                "monto_recuperado_usd": float(row.get("monto_recuperado_usd") or 0),
+                "docs_recuperados":     int(row.get("docs_recuperados") or 0),
+                "tasa_recuperacion":    float(row.get("tasa_recuperacion") or 0),
+                "cycle_id_anterior":    row.get("cycle_id_anterior"),
+                "tiene_anterior":       row.get("cycle_id_anterior") is not None,
+            }
+    except Exception as e:
+        print(f"get_recovery_stats error: {e}")
+    return _recovery_zero()
+
+
+def _recovery_zero() -> Dict[str, Any]:
+    return {
+        "monto_recuperado_sol": 0.0,
+        "monto_recuperado_usd": 0.0,
+        "docs_recuperados": 0,
+        "tasa_recuperacion": 0.0,
+        "cycle_id_anterior": None,
+        "tiene_anterior": False,
+    }
+
 
 # ---------------------------------------------------------------------------
 # RC-FEAT-022: Bandeja de Pendientes
@@ -1819,6 +1851,29 @@ def get_cuotas_pendientes_hoy(limit: int = 200) -> List[Dict[str, Any]]:
     except Exception as e:
         print(f"get_cuotas_pendientes_hoy Error: {e}")
         return []
+
+
+def get_clientes_email_enviados_hoy(cycle_id: str, fecha_hoy: str) -> set:
+    """Devuelve set de cliente_id con notificación EMAIL enviada hoy para el ciclo dado."""
+    client = get_supabase_client()
+    if not client:
+        return set()
+    try:
+        res = _safe_execute(
+            client.table("notificaciones")
+            .select("cliente_id, tipo_notificacion, estado, cycle_id, fecha_envio, created_at")
+            .eq("cycle_id", str(cycle_id).strip())
+            .eq("tipo_notificacion", "EMAIL")
+            .eq("estado", "ENVIADO")
+            .gte("created_at", f"{fecha_hoy} 00:00:00")
+            .lte("created_at", f"{fecha_hoy} 23:59:59")
+        )
+        if res.data:
+            return {row["cliente_id"] for row in res.data if row.get("cliente_id")}
+        return set()
+    except Exception as e:
+        print(f"get_clientes_email_enviados_hoy Error: {e}")
+        return set()
 
 
 def get_clientes_sin_gestion_ciclo(cycle_id: str, limit: int = 200) -> List[str]:
@@ -1913,6 +1968,7 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
         resp_email = _safe_execute(q_email.limit(5000))
         set_email = {str(r["cliente_id"]).strip() for r in (resp_email.data or []) if r.get("cliente_id")}
         notificados_email = len(set_email)
+        total_envios_email = len(resp_email.data or [])  # filas totales — puede ser > únicos si hay reenvíos
 
         # Con gestión registrada = clientes únicos a los que el gestor registró CUALQUIER resultado.
         # Filtra tipo_registro='GESTION' (acciones manuales del gestor).
@@ -2057,6 +2113,7 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
             # --- Nuevas claves RC-FEAT-060 (auditabilidad e intensidad) ---
             "by_resultado_ultimo":      by_resultado_ultimo,      # {resultado: count} último por cliente único
             "total_envios_wa":          total_envios_wa,           # filas ENVIO/WHATSAPP (intensidad envíos)
+            "total_envios_email":       total_envios_email,        # filas EMAIL ENVIADO (intensidad envíos)
             "total_gestion_wa":         total_gestion_wa,          # filas GESTION/WHATSAPP (seguimiento WA)
             "con_gestion_wa":           con_gestion_wa,            # clientes únicos con seguimiento WA
             "total_gestion_email":      total_gestion_email,       # filas GESTION/EMAIL (seguimiento email)
@@ -2330,4 +2387,201 @@ def get_kpis_periodo(date_from: str, date_to: str) -> Dict[str, Any]:
         }
     except Exception as e:
         print(f"get_kpis_periodo Error: {e}")
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-039 — Informe Gerencial: funciones de datos
+# ---------------------------------------------------------------------------
+
+def get_ciclos_para_informe(limit: int = 12) -> List[Dict[str, Any]]:
+    """Lista ciclos disponibles para el selector del Informe Gerencial.
+
+    Retorna lista de dicts con: cycle_id, label (texto para selectbox),
+    fecha_corte, file_ctas.
+    """
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        res = _safe_execute(
+            client.table("ciclos_procesamiento")
+            .select("cycle_id, metadata, row_count, created_at")
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        rows = res.data or []
+        result = []
+        seen_labels: Dict[str, int] = {}
+        for row in rows:
+            meta = row.get("metadata") or {}
+            created_str = row.get("created_at", "")
+            try:
+                created_at = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                label_base = created_at.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                label_base = row.get("cycle_id", "—")
+            rows_count = row.get("row_count", 0)
+            base = f"{label_base}  ·  {rows_count} filas"
+            seen_labels[base] = seen_labels.get(base, 0) + 1
+            label = base if seen_labels[base] == 1 else f"{base} [{seen_labels[base]}]"
+            result.append({
+                "cycle_id":    row.get("cycle_id", ""),
+                "label":       label,
+                "fecha_corte": meta.get("fecha_corte") or "—",
+                "file_ctas":   meta.get("file_ctas") or "—",
+            })
+        return result
+    except Exception as e:
+        print(f"get_ciclos_para_informe Error: {e}")
+        return []
+
+
+_AGING_BUCKETS = [
+    (0,  14,     "🟢 0 – 14 días",    "BAJO"),
+    (15, 30,     "🟡 15 – 30 días",   "MEDIO"),
+    (31, 60,     "🟠 31 – 60 días",   "ALTO"),
+    (61, 999999, "🔴 Más de 60 días", "CRÍTICO"),
+]
+
+
+def get_aging_distribution(cycle_id: str) -> List[Dict[str, Any]]:
+    """Distribución de cartera por antigüedad de mora para el ciclo dado.
+
+    Retorna una fila por bucket con: segmento, riesgo, clientes,
+    saldo_sol, saldo_usd, pct_sol (% del total en Soles).
+    Excluye documentos DSP y PAV (no representan deuda real).
+    """
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        res = _safe_execute(
+            client.table("documentos_ciclo")
+            .select("cod_cliente, saldo_real, moneda, dias_mora")
+            .eq("cycle_id", cycle_id)
+            .not_.in_("tipo_pedido", ["DSP", "PAV"])
+            .limit(10000)
+        )
+        docs = res.data or []
+
+        # Un cliente puede tener varios docs: usar su mora máxima y sumar saldos
+        clientes: Dict[str, Dict] = {}
+        for d in docs:
+            cod   = d.get("cod_cliente", "")
+            mora  = int(d.get("dias_mora") or 0)
+            moneda = str(d.get("moneda") or "S/").strip().upper()
+            saldo  = float(d.get("saldo_real") or 0)
+            if cod not in clientes:
+                clientes[cod] = {"dias_mora": mora, "saldo_sol": 0.0, "saldo_usd": 0.0}
+            else:
+                clientes[cod]["dias_mora"] = max(clientes[cod]["dias_mora"], mora)
+            if moneda in ("USD", "US$", "$", "DOLARES", "DÓLARES"):
+                clientes[cod]["saldo_usd"] += saldo
+            else:
+                clientes[cod]["saldo_sol"] += saldo
+
+        # Acumular en buckets
+        buckets: Dict[str, Dict] = {
+            label: {"clientes": 0, "saldo_sol": 0.0, "saldo_usd": 0.0, "riesgo": riesgo}
+            for _, _, label, riesgo in _AGING_BUCKETS
+        }
+        for c in clientes.values():
+            mora = c["dias_mora"]
+            for dmin, dmax, label, _ in _AGING_BUCKETS:
+                if dmin <= mora <= dmax:
+                    buckets[label]["clientes"] += 1
+                    buckets[label]["saldo_sol"] += c["saldo_sol"]
+                    buckets[label]["saldo_usd"] += c["saldo_usd"]
+                    break
+
+        total_sol = sum(b["saldo_sol"] for b in buckets.values())
+        result = []
+        for _, _, label, _ in _AGING_BUCKETS:
+            b = buckets[label]
+            pct = round(b["saldo_sol"] / total_sol * 100, 1) if total_sol > 0 else 0.0
+            result.append({
+                "segmento":  label,
+                "riesgo":    b["riesgo"],
+                "clientes":  b["clientes"],
+                "saldo_sol": round(b["saldo_sol"], 2),
+                "saldo_usd": round(b["saldo_usd"], 2),
+                "pct_sol":   pct,
+            })
+        return result
+    except Exception as e:
+        print(f"get_aging_distribution Error: {e}")
+        return []
+
+
+def get_resumen_gestiones_ciclo(cycle_id: str) -> Dict[str, Any]:
+    """Resumen de actividad de gestión para el ciclo dado.
+
+    Retorna conteos por canal (WA, email, llamadas, visitas, notas),
+    escalamientos a legal, acuerdos firmados y cuotas cobradas.
+    """
+    client = get_supabase_client()
+    if not client:
+        return {}
+    try:
+        res = _safe_execute(
+            client.table("gestiones")
+            .select("tipo_registro, tipo_gestion, resultado")
+            .eq("cycle_id", cycle_id)
+            .limit(10000)
+        )
+        gestiones = res.data or []
+
+        wa_envios    = sum(1 for g in gestiones if g.get("tipo_registro") == "ENVIO"   and g.get("tipo_gestion") == "WHATSAPP")
+        email_envios = sum(1 for g in gestiones if g.get("tipo_registro") == "ENVIO"   and g.get("tipo_gestion") == "EMAIL")
+        llamadas     = sum(1 for g in gestiones if g.get("tipo_gestion") == "LLAMADA")
+        visitas      = sum(1 for g in gestiones if g.get("tipo_gestion") == "VISITA")
+        notas        = sum(1 for g in gestiones if g.get("tipo_gestion") == "NOTA")
+        otros        = sum(1 for g in gestiones if g.get("tipo_gestion") == "OTRO")
+        legal        = sum(1 for g in gestiones if g.get("resultado") == "ESCALAR_LEGAL")
+        exitosos     = sum(1 for g in gestiones if g.get("resultado") in ("EXITOSO", "PROMESA_PAGO"))
+
+        # Acuerdos firmados en el ciclo (acuerdos_pago usa ciclo_id, no cycle_id)
+        resp_a = _safe_execute(
+            client.table("acuerdos_pago")
+            .select("id, monto_total, estado")
+            .eq("ciclo_id", cycle_id)
+            .limit(500)
+        )
+        acuerdos = resp_a.data or []
+        acuerdos_count   = len(acuerdos)
+        acuerdos_monto   = sum(float(a.get("monto_total") or 0) for a in acuerdos)
+        acuerdos_activos = sum(1 for a in acuerdos if a.get("estado") == "ACTIVO")
+
+        # Cuotas ya pagadas en acuerdos de este ciclo
+        acuerdo_ids = [a["id"] for a in acuerdos if a.get("id")]
+        cuotas_pagadas_monto = 0.0
+        if acuerdo_ids:
+            resp_c = _safe_execute(
+                client.table("cuotas_acuerdo")
+                .select("monto_cuota, estado")
+                .in_("acuerdo_id", acuerdo_ids)
+                .eq("estado", "PAGADA")
+                .limit(2000)
+            )
+            cuotas_pagadas_monto = sum(
+                float(c.get("monto_cuota") or 0) for c in (resp_c.data or [])
+            )
+
+        return {
+            "wa_envios":            wa_envios,
+            "email_envios":         email_envios,
+            "llamadas":             llamadas,
+            "visitas":              visitas,
+            "notas":                notas,
+            "otros":                otros,
+            "legal":                legal,
+            "exitosos":             exitosos,
+            "acuerdos_count":       acuerdos_count,
+            "acuerdos_activos":     acuerdos_activos,
+            "acuerdos_monto":       round(acuerdos_monto, 2),
+            "cuotas_pagadas_monto": round(cuotas_pagadas_monto, 2),
+        }
+    except Exception as e:
+        print(f"get_resumen_gestiones_ciclo Error: {e}")
         return {}
