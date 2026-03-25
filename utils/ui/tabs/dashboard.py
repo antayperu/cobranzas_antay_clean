@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 import utils.db_manager as dbm
 from utils.ui.styles import COLORS
+from utils.ui.tabs.report_generator import render_panel_informe
 
 
 # ---------------------------------------------------------------------------
@@ -259,8 +260,10 @@ def _render_funnel(funnel: Dict[str, Any]) -> None:
     cartera       = funnel.get("cartera", 0)
     cartera_total = funnel.get("cartera_total", cartera)
     especiales    = max(cartera_total - cartera, 0)
-    notif_wa      = funnel.get("notificados_wa", 0)
-    notif_email   = funnel.get("notificados_email", 0)
+    notif_wa           = funnel.get("notificados_wa", 0)
+    notif_email        = funnel.get("notificados_email", 0)
+    total_envios_wa    = funnel.get("total_envios_wa", notif_wa)
+    total_envios_email = funnel.get("total_envios_email", notif_email)
     contacto_dir  = funnel.get("contacto_directo", 0)
     alcanzados    = funnel.get("alcanzados", notif_wa + notif_email)
     sin_contactar = funnel.get("sin_contactar", max(cartera - alcanzados, 0))
@@ -303,15 +306,22 @@ def _render_funnel(funnel: Dict[str, Any]) -> None:
 
     # -- Canal WhatsApp --
     if notif_wa > 0:
-        rows.append(_row("📱 Notificados por WhatsApp", notif_wa))
-        # Seguimiento WA: mismo nivel que notificados (no sub-fila)
-        # Muestra clientes únicos con gestión WA registrada
+        _wa_label = (
+            f"📱 Notificados por WhatsApp  · {total_envios_wa} envíos"
+            if total_envios_wa > notif_wa else
+            "📱 Notificados por WhatsApp"
+        )
+        rows.append(_row(_wa_label, notif_wa))
         rows.append(_row("  💬 Seguimiento WA registrado", con_gestion_wa))
 
     # -- Canal Email --
     if notif_email > 0:
-        rows.append(_row("📧 Notificados por Email", notif_email))
-        # Seguimiento Email: gestiones manuales de email (puede ser 0 si no se registraron)
+        _email_label = (
+            f"📧 Notificados por Email  · {total_envios_email} envíos"
+            if total_envios_email > notif_email else
+            "📧 Notificados por Email"
+        )
+        rows.append(_row(_email_label, notif_email))
         rows.append(_row("  💬 Seguimiento Email enviados", total_gestion_email))
 
     # -- Gestión directa: padre muestra TOTAL gestiones, sub-filas detallan --
@@ -605,6 +615,7 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
 
         rows.append({
             "#":               i,
+            "Código":          c.get("cliente_id", "—"),
             "Cliente":         c.get("nombre", c.get("cliente_id", "—")),
             "Saldo S/":        saldo_sol,
             "Docs S/":         docs_sol,
@@ -622,6 +633,7 @@ def _render_top_clientes(criticos: List[Dict[str, Any]]) -> None:
 
     col_cfg: Dict[str, Any] = {
         "#": st.column_config.NumberColumn("#", format="%d", width="small"),
+        "Código": st.column_config.TextColumn("Código", width="small", help="Código interno del cliente"),
         "Saldo S/": st.column_config.NumberColumn(
             "Saldo S/", format="S/ %.2f",
             help="Saldo pendiente en Soles (excluye documentos DSP y PAV)",
@@ -751,6 +763,17 @@ def render_tab(df_final: Any, config: Dict[str, Any]) -> None:
 
     # [G] Top Clientes Críticos
     _render_top_clientes(criticos)
+
+    st.markdown("---")
+
+    # [H] Panel Informe Gerencial — RC-FEAT-039
+    empresa = config.get("company_name", "DACTA S.A.C.") if config else "DACTA S.A.C."
+    render_panel_informe(
+        current_cycle_id=cycle_id,
+        funnel=funnel,
+        criticos=criticos,
+        empresa=empresa,
+    )
 
     st.markdown("---")
     st.caption(

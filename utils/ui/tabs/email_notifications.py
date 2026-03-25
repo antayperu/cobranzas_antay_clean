@@ -121,17 +121,15 @@ def render_tab(df_final, df_filtered, config):
                 # --- KPIs de Envío (TAB Notificaciones Email) ---
                 # Calcular por COD_CLIENTE único para evitar confusión con emails compartidos
                 today_str = date.today().strftime('%Y-%m-%d')
-                
-                # Contar clientes enviados HOY
-                if 'ESTADO_EMAIL' in df_final.columns and 'FECHA_ULTIMO_ENVIO' in df_final.columns:
-                    mask_enviado = df_final['ESTADO_EMAIL'] == 'ENVIADO'
-                    mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
-                    mask_enviado_hoy = mask_enviado & mask_hoy
-                    
-                    # COD_CLIENTE únicos enviados hoy
-                    clientes_enviados_hoy_count = df_final[mask_enviado_hoy]['COD CLIENTE'].nunique()
-                else:
-                    clientes_enviados_hoy_count = 0
+                cycle_id = config.get('cycle_id') or st.session_state.get('cycle_id')
+                clientes_enviados_hoy = set()
+                clientes_enviados_hoy_count = 0
+                if cycle_id:
+                    try:
+                        clientes_enviados_hoy = dbm.get_clientes_email_enviados_hoy(cycle_id, today_str)
+                        clientes_enviados_hoy_count = len(clientes_enviados_hoy)
+                    except Exception as e:
+                        st.warning(f"Error consultando enviados hoy: {e}")
                 
                 # --- Filtrar clientes disponibles (Lógica Movida ANTES de mostrar KPIs) ---
                 # Layout de columnas para KPIs y Controles
@@ -139,20 +137,9 @@ def render_tab(df_final, df_filtered, config):
                 
                 hide_sent_today = c_ctrl.toggle("🙈 Ocultar ya enviados hoy", value=True, help="Oculta de la lista los clientes que ya recibieron correo hoy.")
                 
-                if hide_sent_today:
-                    # Obtener COD_CLIENTE de clientes enviados HOY desde df_final (SSOT)
-                    today_str = date.today().strftime('%Y-%m-%d')
-                    
-                    if 'ESTADO_EMAIL' in df_final.columns and 'FECHA_ULTIMO_ENVIO' in df_final.columns:
-                        mask_enviado = df_final['ESTADO_EMAIL'] == 'ENVIADO'
-                        mask_hoy = df_final['FECHA_ULTIMO_ENVIO'].astype(str).str.startswith(today_str)
-                        mask_enviado_hoy = mask_enviado & mask_hoy
-                        
-                        # Obtener COD_CLIENTE únicos enviados hoy
-                        clientes_enviados_hoy = df_final[mask_enviado_hoy]['COD CLIENTE'].unique()
-                        
-                        # Filtrar: excluir clientes enviados hoy
-                        client_group_email = client_group_email[~client_group_email['COD CLIENTE'].isin(clientes_enviados_hoy)]
+                if hide_sent_today and clientes_enviados_hoy:
+                    # Filtrar: excluir clientes enviados hoy según notificaciones reales
+                    client_group_email = client_group_email[~client_group_email['COD CLIENTE'].isin(clientes_enviados_hoy)]
                 
                 # --- Calcular KPIs con la lista FINAL filtrada ---
                 # Total de clientes disponibles (coincide con opciones del multiselect)

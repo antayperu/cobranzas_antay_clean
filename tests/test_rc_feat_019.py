@@ -12,43 +12,52 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import utils.db_manager as dbm
 
 
-# Mapa extraído del panel (mismo que en whatsapp.py)
+# Mapa extraído del panel (mismo que en whatsapp.py) — estándar industria 2026-03-17
 _RESULTADO_MAP = {
-    "✅ Acordó pagar": "EXITOSO",
-    "🤝 Prometió pagar": "PENDIENTE",
-    "📵 Sin respuesta": "SIN_RESPUESTA",
-    "🔴 Escalar / Pre-Legal": "REPROGRAMADO",
-    "💬 Solicitó más plazo": "PENDIENTE",
+    "✅ Acordó pagar":       "EXITOSO",
+    "🤝 Prometió pagar":     "PROMESA_PAGO",
+    "⏳ Solicitó más plazo": "SOLICITO_PLAZO",
+    "💬 En negociación":     "EN_NEGOCIACION",
+    "📵 Sin respuesta":      "SIN_RESPUESTA",
+    "⚖️ Derivar a Legal":    "ESCALAR_LEGAL",
+    "❓ Disputó la deuda":   "DISPUTA",
 }
 
 
 class TestRC019ResultadoPostEnvio(unittest.TestCase):
 
     # ------------------------------------------------------------------
-    # 1. Mapeo de opciones a valores Supabase
+    # 1. Mapeo de opciones a valores Supabase (estándar industria)
     # ------------------------------------------------------------------
     def test_mapeo_acordo_pagar(self):
         self.assertEqual(_RESULTADO_MAP["✅ Acordó pagar"], "EXITOSO")
 
     def test_mapeo_prometio_pagar(self):
-        self.assertEqual(_RESULTADO_MAP["🤝 Prometió pagar"], "PENDIENTE")
+        self.assertEqual(_RESULTADO_MAP["🤝 Prometió pagar"], "PROMESA_PAGO")
 
     def test_mapeo_sin_respuesta(self):
         self.assertEqual(_RESULTADO_MAP["📵 Sin respuesta"], "SIN_RESPUESTA")
 
     def test_mapeo_escalar(self):
-        self.assertEqual(_RESULTADO_MAP["🔴 Escalar / Pre-Legal"], "REPROGRAMADO")
+        self.assertEqual(_RESULTADO_MAP["⚖️ Derivar a Legal"], "ESCALAR_LEGAL")
 
     def test_mapeo_plazo(self):
-        self.assertEqual(_RESULTADO_MAP["💬 Solicitó más plazo"], "PENDIENTE")
+        self.assertEqual(_RESULTADO_MAP["⏳ Solicitó más plazo"], "SOLICITO_PLAZO")
+
+    def test_mapeo_en_negociacion(self):
+        self.assertEqual(_RESULTADO_MAP["💬 En negociación"], "EN_NEGOCIACION")
+
+    def test_mapeo_disputa(self):
+        self.assertEqual(_RESULTADO_MAP["❓ Disputó la deuda"], "DISPUTA")
 
     def test_todos_los_valores_son_validos_en_supabase(self):
-        """Los valores mapeados deben estar en GESTION_RESULTADOS_VALIDOS."""
+        """Los valores mapeados deben estar en el catálogo de resultados válidos."""
+        validos = dbm._get_resultados_validos_set()
         for opcion, valor in _RESULTADO_MAP.items():
             self.assertIn(
                 valor,
-                dbm.GESTION_RESULTADOS_VALIDOS,
-                f"Opción '{opcion}' mapea a '{valor}' que no está en GESTION_RESULTADOS_VALIDOS",
+                validos,
+                f"Opción '{opcion}' mapea a '{valor}' que no está en el catálogo de resultados",
             )
 
     # ------------------------------------------------------------------
