@@ -57,4 +57,6 @@ Write-Host "Ambiente: PRODUCCION" -ForegroundColor Green
 Write-Host "SUPABASE_URL: $($env:SUPABASE_URL)"
 Write-Host "Puerto Streamlit: $Port"
 
-streamlit run app.py --server.port $Port
+Start-Process powershell -ArgumentList 'streamlit run app.py --server.port $Port'
+Start-Sleep -Seconds 2
+Start-Process "http://localhost:$Port"

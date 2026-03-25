@@ -55,6 +55,45 @@ Esto significa:
 - Email: smtplib | Tests: pytest | Env vars: `.env` / `.env.staging`
 
 ---
+## Skills activos — SIEMPRE aplicar
+
+Estos skills están instalados globalmente y deben usarse en cada tarea
+según el contexto. No es necesario invocarlos manualmente — Claude los
+activa automáticamente, pero se listan aquí como política obligatoria.
+
+### 🎨 frontend-design
+**Cuándo:** En TODO componente visual, pantalla, sidebar, tabla o UI
+**Regla:** Antes de codificar cualquier elemento visual, definir
+dirección estética. Respetar siempre el Design System Antay:
+paleta COLORS de `utils/ui/styles.py`, tipografía Manrope + IBM Plex Sans.
+Nunca romper el sistema de diseño por decisiones del skill.
+
+### 🏗️ feature-dev
+**Cuándo:** En TODA feature nueva o cambio de arquitectura significativo
+**Regla:** Seguir las 7 fases obligatorias: requerimientos → exploración
+→ arquitectura → implementación → testing → revisión → documentación.
+Nunca saltar directo a codificar sin explorar el código existente primero.
+
+### ✅ code-review
+**Cuándo:** Al terminar CADA tarea antes de declararla "done"
+**Regla:** Revisar calidad, legibilidad y principios SOLID.
+Complementa los Quality Gates existentes (Gate 0 y Gate 1).
+Invocar explícitamente con: `usa code-review para revisar los cambios`
+
+### 🔒 security-guidance
+**Cuándo:** Antes de escribir código que maneje archivos, datos del
+usuario, conexiones a Supabase o cualquier input externo
+**Regla:** Validar archivos Excel subidos por el usuario, sanitizar
+inputs, no exponer credenciales en logs. Especialmente crítico en
+`utils/db_manager.py` y `utils/processing.py`.
+
+### 📄 document-skills
+**Cuándo:** Para generar informes gerenciales en PDF (RC-FEAT-039)
+y cualquier documento formal del sistema
+**Regla:** Formato A4 profesional, márgenes correctos, logo
+"Cobranzas Antay", número de página y fecha en pie de página.
+Tipografía ejecutiva. Tablas financieras correctamente alineadas.
+Los valores monetarios siempre con símbolo de moneda (S/ o $).
 
 ## Reglas no negociables
 

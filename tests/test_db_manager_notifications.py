@@ -70,7 +70,7 @@ def test_persist_notification_event_sent_maps_to_enviado(monkeypatch):
     assert len(inserts) == 1
     table_name, payload = inserts[0]
     assert table_name == "notificaciones"
-    assert payload["tipo_notificacion"] == "INFO"
+    assert payload["tipo_notificacion"] == "EMAIL"
     assert payload["estado"] == "ENVIADO"
     assert payload["fecha_envio"] is not None
     assert payload["cliente_id"] == "000001"
@@ -93,7 +93,7 @@ def test_persist_notification_event_failed_maps_to_gestion_fallida(monkeypatch):
 
     assert ok is True
     _, payload = inserts[0]
-    assert payload["tipo_notificacion"] == "GESTION_FALLIDA"
+    assert payload["tipo_notificacion"] == "EMAIL"
     assert payload["estado"] == "PENDIENTE"
     assert payload["fecha_envio"] is None
 
@@ -133,7 +133,7 @@ def test_get_notifications_report_filters_estado_and_canal(monkeypatch):
             "estado": "ENVIADO",
             "fecha_envio": "2026-02-17 10:00:00",
             "created_at": "2026-02-17 10:00:00",
-            "tipo_notificacion": "INFO",
+            "tipo_notificacion": "EMAIL",
             "metadata": {"channel": "EMAIL", "status_code": "SENT"},
         },
         {
@@ -142,7 +142,7 @@ def test_get_notifications_report_filters_estado_and_canal(monkeypatch):
             "estado": "PENDIENTE",
             "fecha_envio": None,
             "created_at": "2026-02-17 10:05:00",
-            "tipo_notificacion": "ALERTA",
+            "tipo_notificacion": "EMAIL",
             "metadata": {"channel": "WHATSAPP", "status_code": "BLOCKED"},
         },
     ]

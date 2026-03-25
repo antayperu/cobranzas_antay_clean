@@ -132,6 +132,12 @@ Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). TIER 2 co
   - Fix: deduplicar `CodCliente` en cálculo (un cliente tiene fila Envío + fila Gestión)
 - Criterios de aceptación definidos y documentados en `RETOMAR_SESION.md`
 
+### Completados — TIER 2 (Sprint 2026-03-24) ✅ → v2.0.0
+- RC-FEAT-039: Informe Gerencial PDF para Comité de Directorio — Secciones A-E, 5 secciones ✅
+- RC-FIX-062: Recuperado real dual moneda (S/ + US$) desde resumen_ciclo — diferencia CxC ✅
+- RC-UX-001: Sidebar progressive disclosure + slots duales con feedback visual por archivo ✅
+- RC-UX-002: PDF Informe Gerencial — tipografía Manrope + IBM Plex Sans, visual premium ✅
+
 ### Completados — TIER 2 (Sprint 2026-03-16) ✅
 - RC-FEAT-026: Panel de envío WA de prueba en Config Tab — `config_tab.py` SECCIÓN 8 ✅
 - RC-BUG-032: Notas vacías en historial post-rerun (causa raíz: `notas` faltaba en SELECT Supabase) ✅

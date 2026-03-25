@@ -7,9 +7,9 @@
 
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
-| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 060 |
-| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 059 |
-| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 013 |
+| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 062 |
+| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 062 |
+| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 002 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
 | **RC-TECH** | Deuda técnica | Estandarización de esquema, nomenclatura, contratos internos. | 001 |
@@ -26,10 +26,12 @@
 
 | ID | Título | Prioridad | Estado | Asignado | Fecha Inicio |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **RC-FEAT-039** | Informe Gerencial PDF para Comité de Directorio | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 |
+| **RC-FIX-062** | Recuperado real dual moneda desde resumen_ciclo | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 |
+| **RC-UX-001** | Sidebar progressive disclosure + feedback visual archivos | **P2** (Medio) | Done ✅ | Claude | 2026-03-24 |
+| **RC-UX-002** | Informe Gerencial — tipografía Manrope/IBM Plex Sans + visual premium | **P2** (Medio) | Done ✅ | Claude | 2026-03-24 |
 | **RC-QA-001** | Validar Envío PDF (Estrategia Force-Click + Loop) | **P0** (Critico) | Ready | Antigravity | 2025-12-22 |
-| **RC-UX-001** | Feedback Visual Envío WhatsApp (Logs y Progreso) | **P1** (Alto) | Backlog | - | - |
 | **RC-FEAT-001** | Selector Tri-modal (Texto / Imagen / +PDF) | **P1** (Alto) | Backlog | - | - |
-| **RC-UX-002** | Rediseño Tarjeta Ejecutiva (Match Email UI) | **P1** (Alto) | Backlog | - | - |
 | **RC-ARCH-001** | Estandarización Selectores DOM WhatsApp Web | **P2** (Medio) | Backlog | - | - |
 | **RC-PERF-001** | Optimización Generación Imágenes (Caché por Hash) | **P2** (Medio) | Backlog | - | - |
 | **RC-OPS-001** | Hotfix Release: Deshabilitar WhatsApp Imagen+Texto | **P0** (Critico) | In Progress | Antigravity | 2025-12-22 |

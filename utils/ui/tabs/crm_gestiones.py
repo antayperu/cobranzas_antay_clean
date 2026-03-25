@@ -19,6 +19,7 @@ import utils.ui.styles as styles
 # ---------------------------------------------------------------------------
 
 TIPOS_GESTION = ["EMAIL", "WHATSAPP", "LLAMADA", "VISITA", "NOTA", "OTRO"]
+TIPOS_GESTION_MANUAL = ["LLAMADA", "VISITA", "NOTA", "OTRO"]
 
 TIPO_ICONS = {
     "EMAIL": "📧",
@@ -700,6 +701,13 @@ def _render_register_gestion():
         unsafe_allow_html=True,
     )
 
+    # ── Contador de formulario: al incrementar, todos los keys cambian y los widgets se limpian ──
+    _fv = st.session_state.get("crm_reg_form_v", 0)
+
+    # Mensaje de éxito (se muestra antes del formulario, tras el rerun)
+    if st.session_state.pop("crm_reg_success", None):
+        st.success("✓ Gestión registrada correctamente.")
+
     # ── Cargar todos los clientes: Supabase + ciclo activo ──────────────────
     nombre_map_reg: Dict[str, str] = dbm.get_clientes_nombres_map()
     df_ciclo_reg = (_v if (_v := st.session_state.get("df_final")) is not None else pd.DataFrame())
@@ -720,7 +728,7 @@ def _render_register_gestion():
         options=[None] + client_options,
         index=0,
         placeholder="Escribe código o nombre para buscar...",
-        key="crm_reg_client",
+        key=f"crm_reg_client_{_fv}",
         format_func=lambda x: "— Selecciona un cliente —" if x is None else x,
     )
 
@@ -732,27 +740,27 @@ def _render_register_gestion():
     _codigos_resultado, _labels_resultado, _ = _build_resultado_maps()
     _codigos_activos = _get_resultados_activos()
     fc1, fc2, fc3 = st.columns(3)
-    tipo = fc1.selectbox("Tipo de gestion", TIPOS_GESTION, index=2, key="crm_reg_tipo")  # Default: LLAMADA
+    tipo = fc1.selectbox("Tipo de gestion", TIPOS_GESTION_MANUAL, index=0, key=f"crm_reg_tipo_{_fv}")
     resultado = fc2.selectbox(
         "Resultado",
         _codigos_activos,
-        key="crm_reg_resultado",
+        key=f"crm_reg_resultado_{_fv}",
         format_func=lambda c: _labels_resultado.get(c, c),
     )
-    fecha = fc3.date_input("Fecha", value=date.today(), key="crm_reg_fecha")
+    fecha = fc3.date_input("Fecha", value=date.today(), key=f"crm_reg_fecha_{_fv}")
 
     fc4, fc5 = st.columns(2)
-    duracion = fc4.number_input("Duracion (minutos)", min_value=0, max_value=480, value=0, key="crm_reg_duracion")
-    usuario = fc5.text_input("Operador / Usuario", key="crm_reg_usuario")
+    duracion = fc4.number_input("Duracion (minutos)", min_value=0, max_value=480, value=0, key=f"crm_reg_duracion_{_fv}")
+    usuario = fc5.text_input("Operador / Usuario", key=f"crm_reg_usuario_{_fv}")
 
     notas = st.text_area(
         "Notas / Observaciones",
         placeholder="Detalla la gestion realizada...",
-        key="crm_reg_notas",
+        key=f"crm_reg_notas_{_fv}",
         height=100,
     )
 
-    if st.button("Registrar Gestion", type="primary", key="crm_reg_submit"):
+    if st.button("Registrar Gestion", type="primary", key=f"crm_reg_submit_{_fv}"):
         if not cliente_id_selected:
             st.warning("Selecciona un cliente antes de registrar.")
             return
@@ -774,8 +782,9 @@ def _render_register_gestion():
         )
 
         if ok:
-            st.success(f"Gestion registrada para cliente {cliente_id_selected}")
-            st.balloons()
+            st.session_state["crm_reg_form_v"] = _fv + 1
+            st.session_state["crm_reg_success"] = True
+            st.rerun()
         else:
             st.error(msg)
 
@@ -971,7 +980,6 @@ def _render_nuevo_acuerdo():
                 f"✅ Acuerdo creado (ID: `{result}`) — "
                 f"{int(num_cuotas)} cuotas de S/ {monto_cuota:,.2f} para **{sel_np}**."
             )
-            st.balloons()
         else:
             st.error(f"❌ {result}")
 
