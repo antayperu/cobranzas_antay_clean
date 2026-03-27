@@ -262,7 +262,7 @@ def render_panel_informe(
             with st.spinner("Obteniendo distribución de cartera y gestiones…"):
                 _aging     = dbm.get_aging_distribution(selected_cycle, solo_notificable=solo_notificable)
                 _gestiones = dbm.get_resumen_gestiones_ciclo(selected_cycle, solo_notificable=solo_notificable)
-                _recovery  = dbm.get_recovery_stats(selected_cycle)
+                _recovery  = dbm.get_recovery_stats(selected_cycle, solo_notificable=solo_notificable)
 
             with st.spinner("Generando PDF…"):
                 pdf_bytes = InformeGerencial(

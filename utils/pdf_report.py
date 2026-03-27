@@ -379,10 +379,16 @@ class InformeGerencial:
 
         # --- Hero banner ---
         fecha_gen = self.generated_at.strftime("%d/%m/%Y  %H:%M UTC")
+        scope_hero = (
+            "🎯 Cartera Activa — solo clientes notificables (Envío Email = SI)"
+            if self.scope == "activa"
+            else "📋 Cartera General — todos los clientes con deuda"
+        )
         hero_content = Table([
             [Paragraph(self.empresa, ST_HERO_TITLE)],
             [Paragraph("Informe Gerencial para Comité de Directorio", ST_HERO_SUB)],
-            [Spacer(1, 0.15 * cm)],
+            [Paragraph(scope_hero, ST_HERO_META)],
+            [Spacer(1, 0.10 * cm)],
             [Paragraph(
                 f"Ciclo analizado: {self.cycle_id}  ·  Generado: {fecha_gen}  ·  CONFIDENCIAL",
                 ST_HERO_META,

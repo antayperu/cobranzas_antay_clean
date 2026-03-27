@@ -1606,7 +1606,7 @@ def _get_docs_simple_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
     try:
         resp = _safe_execute(
             client.table("documentos_ciclo")
-            .select("match_key,cliente_id,saldo_real,saldo_original,moneda")
+            .select("match_key,cliente_id,saldo_real,saldo_original,moneda,enviar_email")
             .eq("cycle_id", str(cycle_id))
             .limit(5000)
         )
@@ -1645,8 +1645,16 @@ def reconcile_ciclo_recovery(
         keys_ant: Dict[str, Dict] = {str(d.get("match_key", "")): d for d in docs_ant if d.get("match_key")}
         keys_nue: Dict[str, Dict] = {str(d.get("match_key", "")): d for d in docs_nue if d.get("match_key")}
 
-        # Docs in anterior but NOT in nuevo → recovered
+        # Docs in anterior but NOT in nuevo → recovered (Cartera General)
         keys_recuperados = set(keys_ant.keys()) - set(keys_nue.keys())
+
+        # Subset Cartera Activa (enviar_email = 'SI') para cálculo independiente
+        _ACTIVA = "SI"
+        keys_ant_activa = {mk: d for mk, d in keys_ant.items()
+                           if str(d.get("enviar_email", "")).upper() == _ACTIVA}
+        keys_nue_activa = {mk: d for mk, d in keys_nue.items()
+                           if str(d.get("enviar_email", "")).upper() == _ACTIVA}
+        keys_rec_activa = set(keys_ant_activa.keys()) - set(keys_nue_activa.keys())
 
         # Build per-client stats for cycle_id_nuevo
         cliente_nuevo: Dict[str, Dict[str, Any]] = {}
@@ -1666,6 +1674,8 @@ def reconcile_ciclo_recovery(
         # Build per-client recovered stats (con split por moneda)
         total_monto_rec_sol = 0.0
         total_monto_rec_usd = 0.0
+        total_monto_rec_sol_activa = 0.0
+        total_monto_rec_usd_activa = 0.0
         for mk in keys_recuperados:
             doc = keys_ant[mk]
             cid = str(doc.get("cliente_id", "")).strip()
@@ -1680,8 +1690,12 @@ def reconcile_ciclo_recovery(
             moneda_doc = str(doc.get("moneda") or "").upper().strip()
             if moneda_doc in _MONEDAS_USD:
                 total_monto_rec_usd += monto_doc
+                if mk in keys_rec_activa:
+                    total_monto_rec_usd_activa += monto_doc
             else:
                 total_monto_rec_sol += monto_doc
+                if mk in keys_rec_activa:
+                    total_monto_rec_sol_activa += monto_doc
 
         # Gestiones por cliente en el ciclo nuevo
         gestiones_nuevas = get_gestiones_list(limit=5000)  # All recent
@@ -1736,8 +1750,15 @@ def reconcile_ciclo_recovery(
         # Persist resumen_ciclo
         total_docs_rec  = sum(v["docs_recuperados"] for v in cliente_nuevo.values())
         total_monto_rec = total_monto_rec_sol + total_monto_rec_usd
-        total_docs_ant = len(keys_ant)
+        total_docs_ant  = len(keys_ant)
         tasa = round(total_docs_rec / total_docs_ant * 100, 2) if total_docs_ant > 0 else 0.0
+
+        # Métricas Cartera Activa
+        total_docs_rec_activa = len(keys_rec_activa)
+        total_docs_ant_activa = len(keys_ant_activa)
+        tasa_activa = round(
+            total_docs_rec_activa / total_docs_ant_activa * 100, 2
+        ) if total_docs_ant_activa > 0 else 0.0
 
         total_gestiones = len(gestiones_nuevas)
         total_acuerdos_resp = _safe_execute(
@@ -1757,6 +1778,10 @@ def reconcile_ciclo_recovery(
             "monto_recuperado_sol": round(total_monto_rec_sol, 2),
             "monto_recuperado_usd": round(total_monto_rec_usd, 2),
             "tasa_recuperacion": tasa,
+            "monto_recuperado_sol_activa": round(total_monto_rec_sol_activa, 2),
+            "monto_recuperado_usd_activa": round(total_monto_rec_usd_activa, 2),
+            "docs_recuperados_activa": total_docs_rec_activa,
+            "tasa_recuperacion_activa": tasa_activa,
             "gestiones_total": total_gestiones,
             "acuerdos_total": total_acuerdos or 0,
             "updated_at": ahora,
@@ -1784,11 +1809,11 @@ def reconcile_ciclo_recovery(
         print(f"reconcile_ciclo_recovery Error: {e}")
         return {"ok": False, "mensaje": f"Error en reconciliación: {e}", "stats": {}}
 
-def get_recovery_stats(cycle_id: str) -> Dict[str, Any]:
+def get_recovery_stats(cycle_id: str, solo_notificable: bool = False) -> Dict[str, Any]:
     """Read resumen_ciclo to get real recovery amounts split by currency.
 
-    Returns dict with monto_recuperado_sol, monto_recuperado_usd,
-    docs_recuperados, tasa_recuperacion, cycle_id_anterior, tiene_anterior.
+    solo_notificable=True  → retorna valores de Cartera Activa (enviar_email='SI')
+    solo_notificable=False → retorna valores de Cartera General (todos los clientes)
 
     Lazy reconciliation: si no existe fila en resumen_ciclo y hay un ciclo
     anterior disponible, ejecuta la reconciliación automáticamente y retorna
@@ -1801,13 +1826,26 @@ def get_recovery_stats(cycle_id: str) -> Dict[str, Any]:
     def _read_row() -> Optional[Dict[str, Any]]:
         resp = _safe_execute(
             client.table("resumen_ciclo")
-            .select("monto_recuperado_sol,monto_recuperado_usd,docs_recuperados,tasa_recuperacion,cycle_id_anterior")
+            .select(
+                "monto_recuperado_sol,monto_recuperado_usd,docs_recuperados,tasa_recuperacion,"
+                "monto_recuperado_sol_activa,monto_recuperado_usd_activa,"
+                "docs_recuperados_activa,tasa_recuperacion_activa,cycle_id_anterior"
+            )
             .eq("cycle_id", str(cycle_id))
             .limit(1)
         )
         return resp.data[0] if resp and resp.data else None
 
     def _build_result(row: Dict[str, Any]) -> Dict[str, Any]:
+        if solo_notificable:
+            return {
+                "monto_recuperado_sol": float(row.get("monto_recuperado_sol_activa") or 0),
+                "monto_recuperado_usd": float(row.get("monto_recuperado_usd_activa") or 0),
+                "docs_recuperados":     int(row.get("docs_recuperados_activa") or 0),
+                "tasa_recuperacion":    float(row.get("tasa_recuperacion_activa") or 0),
+                "cycle_id_anterior":    row.get("cycle_id_anterior"),
+                "tiene_anterior":       row.get("cycle_id_anterior") is not None,
+            }
         return {
             "monto_recuperado_sol": float(row.get("monto_recuperado_sol") or 0),
             "monto_recuperado_usd": float(row.get("monto_recuperado_usd") or 0),
