@@ -1789,28 +1789,46 @@ def get_recovery_stats(cycle_id: str) -> Dict[str, Any]:
 
     Returns dict with monto_recuperado_sol, monto_recuperado_usd,
     docs_recuperados, tasa_recuperacion, cycle_id_anterior, tiene_anterior.
-    Falls back to zeros if no row exists (e.g. first cycle with no predecessor).
+
+    Lazy reconciliation: si no existe fila en resumen_ciclo y hay un ciclo
+    anterior disponible, ejecuta la reconciliación automáticamente y retorna
+    los datos recién calculados. Transparente para el usuario.
     """
     client = get_supabase_client()
     if not client:
         return _recovery_zero()
-    try:
+
+    def _read_row() -> Optional[Dict[str, Any]]:
         resp = _safe_execute(
             client.table("resumen_ciclo")
             .select("monto_recuperado_sol,monto_recuperado_usd,docs_recuperados,tasa_recuperacion,cycle_id_anterior")
             .eq("cycle_id", str(cycle_id))
             .limit(1)
         )
-        if resp and resp.data:
-            row = resp.data[0]
-            return {
-                "monto_recuperado_sol": float(row.get("monto_recuperado_sol") or 0),
-                "monto_recuperado_usd": float(row.get("monto_recuperado_usd") or 0),
-                "docs_recuperados":     int(row.get("docs_recuperados") or 0),
-                "tasa_recuperacion":    float(row.get("tasa_recuperacion") or 0),
-                "cycle_id_anterior":    row.get("cycle_id_anterior"),
-                "tiene_anterior":       row.get("cycle_id_anterior") is not None,
-            }
+        return resp.data[0] if resp and resp.data else None
+
+    def _build_result(row: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "monto_recuperado_sol": float(row.get("monto_recuperado_sol") or 0),
+            "monto_recuperado_usd": float(row.get("monto_recuperado_usd") or 0),
+            "docs_recuperados":     int(row.get("docs_recuperados") or 0),
+            "tasa_recuperacion":    float(row.get("tasa_recuperacion") or 0),
+            "cycle_id_anterior":    row.get("cycle_id_anterior"),
+            "tiene_anterior":       row.get("cycle_id_anterior") is not None,
+        }
+
+    try:
+        row = _read_row()
+        if row:
+            return _build_result(row)
+
+        # Lazy reconciliation: calcular si existe un ciclo anterior
+        _prev = get_prev_cycle_id(cycle_id)
+        if _prev:
+            reconcile_ciclo_recovery(cycle_id_anterior=_prev, cycle_id_nuevo=cycle_id)
+            row = _read_row()
+            if row:
+                return _build_result(row)
     except Exception as e:
         print(f"get_recovery_stats error: {e}")
     return _recovery_zero()
