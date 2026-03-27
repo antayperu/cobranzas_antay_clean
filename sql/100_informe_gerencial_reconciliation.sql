@@ -292,6 +292,82 @@ WHERE ap.ciclo_id = 'CIC-YYYYMMDD-HHMM'
 
 
 -- ===========================================================================
+-- SECCIÓN E — DETALLE DE DOCUMENTOS RECUPERADOS (validación Tarjeta 2)
+-- ===========================================================================
+-- Propósito: Listar uno a uno los documentos considerados "recuperados",
+--            es decir, los que estaban en el ciclo ANTERIOR y ya NO aparecen
+--            en el ciclo ACTUAL (el cliente los pagó en el ERP).
+--            La suma de estos montos debe coincidir exactamente con
+--            "RECUPERADO EN EL PERÍODO" del PDF.
+--
+-- Reemplazar también 'CIC-ANTERIOR-HHMM' con el cycle_id del ciclo previo
+-- (ver columna cycle_id_anterior en la query ②).
+-- ===========================================================================
+
+-- ⑪ Documentos recuperados — detalle por documento
+--    Cartera Activa  → descomentar: AND anterior.enviar_email = 'SI'
+--    Cartera General → dejar comentado
+WITH docs_anterior AS (
+    SELECT match_key, cod_cliente, empresa, saldo_real, moneda, enviar_email
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-ANTERIOR-HHMM'       -- ← ciclo ANTERIOR
+      AND tipo_pedido NOT IN ('DSP','PAV')
+      -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+),
+docs_actual AS (
+    SELECT match_key
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'       -- ← ciclo ACTUAL
+      AND tipo_pedido NOT IN ('DSP','PAV')
+)
+SELECT
+    ant.cod_cliente                                         AS cliente_id,
+    ant.empresa                                             AS nombre,
+    ant.match_key,
+    ant.moneda,
+    ROUND(ant.saldo_real::NUMERIC, 2)                       AS monto_recuperado,
+    ant.enviar_email
+FROM docs_anterior ant
+LEFT JOIN docs_actual act ON act.match_key = ant.match_key
+WHERE act.match_key IS NULL          -- estaba antes, ya no está ahora = recuperado
+ORDER BY ant.moneda, ant.saldo_real DESC;
+-- Cada fila = un documento cobrado entre el ciclo anterior y el actual.
+-- La suma de monto_recuperado (por moneda) debe igualar Tarjeta 2 del PDF.
+
+
+-- ⑫ Totales de documentos recuperados — debe coincidir con resumen_ciclo
+--    Cartera Activa  → descomentar: AND anterior.enviar_email = 'SI'
+--    Cartera General → dejar comentado
+WITH docs_anterior AS (
+    SELECT match_key, saldo_real, moneda, enviar_email
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-ANTERIOR-HHMM'       -- ← ciclo ANTERIOR
+      AND tipo_pedido NOT IN ('DSP','PAV')
+      -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+),
+docs_actual AS (
+    SELECT match_key
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'       -- ← ciclo ACTUAL
+      AND tipo_pedido NOT IN ('DSP','PAV')
+)
+SELECT
+    COUNT(*)                                                             AS docs_recuperados,
+    ROUND(COALESCE(SUM(ant.saldo_real) FILTER (
+        WHERE ant.moneda NOT IN ('USD','US$','$','DOLARES','DÓLARES')
+    ), 0)::NUMERIC, 2)                                                   AS total_recuperado_sol,
+    ROUND(COALESCE(SUM(ant.saldo_real) FILTER (
+        WHERE ant.moneda IN ('USD','US$','$','DOLARES','DÓLARES')
+    ), 0)::NUMERIC, 2)                                                   AS total_recuperado_usd
+FROM docs_anterior ant
+LEFT JOIN docs_actual act ON act.match_key = ant.match_key
+WHERE act.match_key IS NULL;
+-- ✅ total_recuperado_sol debe igualar recuperado_sol_activa (o _general) de la query ②
+-- ✅ total_recuperado_usd debe igualar recuperado_usd_activa (o _general) de la query ②
+-- ✅ docs_recuperados    debe igualar docs_recuperados_activa (o _general) de la query ②
+
+
+-- ===========================================================================
 -- DIAGNÓSTICO: tabla acuerdos_pago — verificar campo ciclo_id vs cycle_id
 -- ===========================================================================
 SELECT ciclo_id, estado, COUNT(*) AS cantidad, SUM(monto_total) AS monto_total
