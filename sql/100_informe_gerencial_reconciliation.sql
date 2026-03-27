@@ -43,12 +43,24 @@ WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'
 -- 0c. Estado de resumen_ciclo (fuente del "Recuperado en el Período")
 SELECT
     cycle_id, cycle_id_anterior,
-    clientes_total, docs_recuperados,
+    clientes_total,
+    -- Full recoveries (docs que desaparecieron)
+    docs_recuperados,
     monto_recuperado_sol, monto_recuperado_usd,
-    tasa_recuperacion, updated_at
+    tasa_recuperacion,
+    -- Amortizaciones parciales (RC-BUG-070)
+    docs_amortizados,
+    monto_amortizado_sol, monto_amortizado_usd,
+    -- Cartera Activa
+    docs_recuperados_activa,
+    monto_recuperado_sol_activa,
+    docs_amortizados_activa,
+    monto_amortizado_sol_activa,
+    updated_at
 FROM resumen_ciclo
 WHERE cycle_id = 'CIC-YYYYMMDD-HHMM';
 -- Si vacío → el lazy reconciliation se ejecutará al generar el PDF por primera vez.
+-- Si docs_amortizados = NULL → migración 104 no ejecutada aún en este ambiente.
 
 
 -- ===========================================================================
@@ -77,16 +89,23 @@ WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'
 --    Cartera Activa  → columnas *_activa  (solo clientes con enviar_email = 'SI')
 --    Cartera General → columnas sin sufijo (todos los clientes)
 SELECT
-    -- Cartera General
+    -- Cartera General (combinado: full recovery + amortizaciones)
     monto_recuperado_sol                AS recuperado_sol_general,
     monto_recuperado_usd                AS recuperado_usd_general,
-    docs_recuperados                    AS docs_recuperados_general,
+    docs_recuperados                    AS docs_completos_general,
+    docs_amortizados                    AS docs_amortizados_general,
     tasa_recuperacion                   AS tasa_general,
     -- Cartera Activa (solo enviar_email = 'SI')
     monto_recuperado_sol_activa         AS recuperado_sol_activa,
     monto_recuperado_usd_activa         AS recuperado_usd_activa,
-    docs_recuperados_activa             AS docs_recuperados_activa,
+    docs_recuperados_activa             AS docs_completos_activa,
+    docs_amortizados_activa             AS docs_amortizados_activa,
     tasa_recuperacion_activa            AS tasa_activa,
+    -- Detalle amortizaciones (auditoría RC-BUG-070)
+    monto_amortizado_sol                AS amortizado_sol_general,
+    monto_amortizado_usd                AS amortizado_usd_general,
+    monto_amortizado_sol_activa         AS amortizado_sol_activa,
+    monto_amortizado_usd_activa         AS amortizado_usd_activa,
     -- Referencia
     cycle_id_anterior
 FROM resumen_ciclo
@@ -96,6 +115,10 @@ WHERE cycle_id = 'CIC-YYYYMMDD-HHMM';
 -- Si activa = 0 y general > 0 → fila antigua sin columnas activa: repetir DELETE + PDF.
 -- PDF Cartera Activa  muestra: recuperado_sol_activa / recuperado_usd_activa
 -- PDF Cartera General muestra: recuperado_sol_general / recuperado_usd_general
+--
+-- VALIDACIÓN RC-BUG-070 (amortizaciones):
+--   recuperado_sol_general = total_recuperado_sol (⑫) + total_amortizado_sol (⑭)
+--   docs_completos_general + docs_amortizados_general = total de documentos con cobro parcial o total
 
 
 -- ③ TARJETA 3: SALDO PENDIENTE
@@ -365,6 +388,85 @@ WHERE act.match_key IS NULL;
 -- ✅ total_recuperado_sol debe igualar recuperado_sol_activa (o _general) de la query ②
 -- ✅ total_recuperado_usd debe igualar recuperado_usd_activa (o _general) de la query ②
 -- ✅ docs_recuperados    debe igualar docs_recuperados_activa (o _general) de la query ②
+
+
+-- ===========================================================================
+-- SECCIÓN F — DETALLE DE AMORTIZACIONES PARCIALES (RC-BUG-070)
+-- ===========================================================================
+-- Propósito: Listar los documentos que PERMANECEN entre ciclos pero con
+--            saldo_real reducido (el cliente pagó parcialmente).
+--            La suma de monto_amortizado + total_recuperado (⑫) debe igualar
+--            el total de la Tarjeta 2 del PDF para el scope correspondiente.
+--
+-- NOTA: el umbral de 0.01 evita ruido de redondeo (igual al usado en Python).
+-- ===========================================================================
+
+-- ⑬ Amortizaciones parciales — detalle por documento
+--    Cartera Activa  → descomentar: AND anterior.enviar_email = 'SI'
+--    Cartera General → dejar comentado
+WITH docs_anterior AS (
+    SELECT match_key, cod_cliente, empresa, saldo_real, moneda, enviar_email
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-ANTERIOR-HHMM'       -- ← ciclo ANTERIOR
+      AND tipo_pedido NOT IN ('DSP','PAV')
+      -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+),
+docs_actual AS (
+    SELECT match_key, saldo_real
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'       -- ← ciclo ACTUAL
+      AND tipo_pedido NOT IN ('DSP','PAV')
+)
+SELECT
+    ant.cod_cliente                                               AS cliente_id,
+    ant.empresa                                                   AS nombre,
+    ant.match_key,
+    ant.moneda,
+    ROUND(ant.saldo_real::NUMERIC, 2)                            AS saldo_anterior,
+    ROUND(act.saldo_real::NUMERIC, 2)                            AS saldo_actual,
+    ROUND((ant.saldo_real - act.saldo_real)::NUMERIC, 2)         AS monto_amortizado,
+    ant.enviar_email
+FROM docs_anterior ant
+INNER JOIN docs_actual act ON act.match_key = ant.match_key
+WHERE ant.saldo_real IS NOT NULL
+  AND act.saldo_real IS NOT NULL
+  AND (ant.saldo_real - act.saldo_real) > 0.01
+ORDER BY ant.moneda, (ant.saldo_real - act.saldo_real) DESC;
+-- Cada fila = un documento con pago parcial entre el ciclo anterior y el actual.
+
+
+-- ⑭ Totales de amortizaciones — para validar con resumen_ciclo y Tarjeta 2
+--    Cartera Activa  → descomentar: AND anterior.enviar_email = 'SI'
+--    Cartera General → dejar comentado
+WITH docs_anterior AS (
+    SELECT match_key, saldo_real, moneda, enviar_email
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-ANTERIOR-HHMM'       -- ← ciclo ANTERIOR
+      AND tipo_pedido NOT IN ('DSP','PAV')
+      -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+),
+docs_actual AS (
+    SELECT match_key, saldo_real
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'       -- ← ciclo ACTUAL
+      AND tipo_pedido NOT IN ('DSP','PAV')
+)
+SELECT
+    COUNT(*)                                                              AS docs_amortizados,
+    ROUND(COALESCE(SUM(ant.saldo_real - act.saldo_real) FILTER (
+        WHERE ant.moneda NOT IN ('USD','US$','$','DOLARES','DÓLARES')
+    ), 0)::NUMERIC, 2)                                                    AS total_amortizado_sol,
+    ROUND(COALESCE(SUM(ant.saldo_real - act.saldo_real) FILTER (
+        WHERE ant.moneda IN ('USD','US$','$','DOLARES','DÓLARES')
+    ), 0)::NUMERIC, 2)                                                    AS total_amortizado_usd
+FROM docs_anterior ant
+INNER JOIN docs_actual act ON act.match_key = ant.match_key
+WHERE ant.saldo_real IS NOT NULL
+  AND act.saldo_real IS NOT NULL
+  AND (ant.saldo_real - act.saldo_real) > 0.01;
+-- ✅ total_amortizado_sol + recuperado total_recuperado_sol (⑫) = monto_recuperado_sol de ②
+-- ✅ total_amortizado_usd + total_recuperado_usd (⑫)           = monto_recuperado_usd de ②
+-- ✅ docs_amortizados debe igualar docs_amortizados en resumen_ciclo (columnas de migración 104)
 
 
 -- ===========================================================================

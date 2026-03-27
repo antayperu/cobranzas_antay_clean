@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile utils/ui/tabs/dashboard.py)",
+      "Bash(python -m py_compile utils/db_manager.py utils/ui/tabs/dashboard.py)",
+      "Bash(python -m py_compile utils/db_manager.py)",
+      "Bash(python -m py_compile utils/ui/tabs/crm_gestiones.py utils/db_manager.py utils/ui/tabs/dashboard.py)",
+      "Bash(python _buscar_especial.py)",
+      "Bash(python -c \":*)",
+      "Bash(python _diag_staging.py)",
+      "Bash(python _fix_visita_staging.py)",
+      "Bash(python -m pytest tests/ -v --tb=short -q)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(python -m py_compile utils/ui/sidebar.py)",
+      "Bash(python -m py_compile app.py utils/session.py utils/state_manager.py)",
+      "Bash(python -m py_compile utils/ui/sidebar.py utils/ui/styles.py app.py)",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(python -m py_compile c:/dev/ReporteCobranzas/utils/db_manager.py)"
+    ]
+  }
+}

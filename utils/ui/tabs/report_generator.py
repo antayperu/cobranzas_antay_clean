@@ -198,6 +198,8 @@ def render_panel_informe(
         with col2:
             sec_d = st.checkbox("D · Resumen de Gestiones",         value=True,  key="inf_sec_d")
             sec_e = st.checkbox("E · Recomendaciones Automáticas",  value=True,  key="inf_sec_e")
+            sec_f = st.checkbox("F · Detalle de Recuperados",        value=False, key="inf_sec_f",
+                                help="Lista cada documento cobrado o amortizado entre ciclos (sustento de Tarjeta 2)")
 
         secciones_sel = set()
         if sec_a: secciones_sel.add("A")
@@ -205,6 +207,7 @@ def render_panel_informe(
         if sec_c: secciones_sel.add("C")
         if sec_d: secciones_sel.add("D")
         if sec_e: secciones_sel.add("E")
+        if sec_f: secciones_sel.add("F")
 
         if not secciones_sel:
             st.warning("Selecciona al menos una sección.")
@@ -264,6 +267,14 @@ def render_panel_informe(
                 _gestiones = dbm.get_resumen_gestiones_ciclo(selected_cycle, solo_notificable=solo_notificable)
                 _recovery  = dbm.get_recovery_stats(selected_cycle, solo_notificable=solo_notificable)
 
+            # Sección F — solo si fue seleccionada (query adicional)
+            _docs_rec = []
+            if "F" in secciones_sel:
+                with st.spinner("Cargando detalle de documentos recuperados…"):
+                    _docs_rec = dbm.get_docs_recuperados_detalle(
+                        selected_cycle, solo_notificable=solo_notificable
+                    )
+
             with st.spinner("Generando PDF…"):
                 pdf_bytes = InformeGerencial(
                     cycle_id=selected_cycle,
@@ -275,6 +286,7 @@ def render_panel_informe(
                     secciones=secciones_sel,
                     recovery=_recovery,
                     scope=scope,
+                    docs_recuperados=_docs_rec,
                 ).generate()
 
             fecha_str = datetime.now().strftime("%Y%m%d_%H%M")

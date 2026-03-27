@@ -111,11 +111,12 @@ ST_BODY        = _style("RC_Body",    "Normal",  fontSize=9,  leading=12, textCo
 ST_BODY_BOLD   = _style("RC_BodyB",   "Normal",  fontSize=9,  leading=12, textColor=C_TEXT,     fontName=_F_BOLD)
 ST_SMALL       = _style("RC_Small",   "Normal",  fontSize=7.5, leading=10, textColor=C_MUTED,   fontName=_F_BODY)
 ST_CENTER      = _style("RC_Center",  "Normal",  fontSize=9,  leading=12, textColor=C_TEXT,     fontName=_F_BODY,    alignment=TA_CENTER)
-ST_CARD_VAL    = _style("RC_CardVal",  "Normal",  fontSize=16, leading=20, textColor=C_PRIMARY,  fontName=_F_HEADING, alignment=TA_CENTER)
-ST_CARD_LBL    = _style("RC_CardLbl",  "Normal",  fontSize=8,  leading=10, textColor=C_MUTED,    fontName=_F_BODY,    alignment=TA_CENTER)
-ST_CARD_LBL_W  = _style("RC_CardLblW", "Normal",  fontSize=7.5, leading=9.5, textColor=C_WHITE,  fontName=_F_BOLD,    alignment=TA_CENTER)
-ST_CARD_SUB    = _style("RC_CardSub",  "Normal",  fontSize=7.5, leading=10, textColor=C_MUTED,   fontName=_F_BODY,    alignment=TA_CENTER)
+ST_CARD_VAL    = _style("RC_CardVal",  "Normal",  fontSize=13, leading=17, textColor=C_PRIMARY,  fontName=_F_HEADING, alignment=TA_CENTER)
+ST_CARD_LBL    = _style("RC_CardLbl",  "Normal",  fontSize=7,  leading=9,  textColor=C_MUTED,    fontName=_F_BODY,    alignment=TA_CENTER)
+ST_CARD_LBL_W  = _style("RC_CardLblW", "Normal",  fontSize=6.5, leading=8.5, textColor=C_WHITE,  fontName=_F_BOLD,    alignment=TA_CENTER)
+ST_CARD_SUB    = _style("RC_CardSub",  "Normal",  fontSize=6.5, leading=9,  textColor=C_MUTED,   fontName=_F_BODY,    alignment=TA_CENTER)
 ST_TH          = _style("RC_TH",      "Normal",  fontSize=8.5, leading=11, textColor=C_WHITE,   fontName=_F_BOLD,    alignment=TA_CENTER)
+ST_TH_SM       = _style("RC_TH_SM",   "Normal",  fontSize=7,   leading=9,  textColor=C_WHITE,   fontName=_F_BOLD,    alignment=TA_CENTER)
 ST_TD          = _style("RC_TD",      "Normal",  fontSize=8.5, leading=11, textColor=C_TEXT,    fontName=_F_BODY,    alignment=TA_LEFT)
 ST_TD_RIGHT    = _style("RC_TDR",     "Normal",  fontSize=8.5, leading=11, textColor=C_TEXT,    fontName=_F_BODY,    alignment=TA_RIGHT)
 ST_TD_CENTER   = _style("RC_TDC",     "Normal",  fontSize=8.5, leading=11, textColor=C_TEXT,    fontName=_F_BODY,    alignment=TA_CENTER)
@@ -165,6 +166,18 @@ def _spacer(h: float = 0.3) -> Spacer:
     return Spacer(1, h * cm)
 
 
+_MESES_ES = {
+    1: "enero",      2: "febrero",   3: "marzo",     4: "abril",
+    5: "mayo",       6: "junio",     7: "julio",     8: "agosto",
+    9: "septiembre", 10: "octubre",  11: "noviembre", 12: "diciembre",
+}
+
+
+def _fecha_es(dt: datetime) -> str:
+    """Devuelve la fecha en español: '27 de marzo de 2026, 14:30 UTC'."""
+    return f"{dt.day} de {_MESES_ES[dt.month]} de {dt.year}, {dt.strftime('%H:%M')} UTC"
+
+
 def _section_title(text: str, page_w: float = None) -> List:
     if page_w is None:
         return [
@@ -198,7 +211,8 @@ class InformeGerencial:
         aging:      List de get_aging_distribution()
         gestiones:  Dict de get_resumen_gestiones_ciclo()
         empresa:    Nombre de la empresa cliente (aparece en el encabezado)
-        secciones:  Conjunto de letras de secciones a incluir; None = todas
+        secciones:         Conjunto de letras de secciones a incluir; None = todas
+        docs_recuperados:  Lista de get_docs_recuperados_detalle() para Sección F
     """
 
     LOGO_PATH = os.path.join(
@@ -217,16 +231,18 @@ class InformeGerencial:
         secciones: Optional[set] = None,
         recovery: Optional[Dict[str, Any]] = None,
         scope: str = "activa",
+        docs_recuperados: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
-        self.cycle_id  = cycle_id
-        self.funnel    = funnel
-        self.criticos  = criticos
-        self.aging     = aging
-        self.gestiones = gestiones
-        self.empresa   = empresa
-        self.secciones = secciones or {"A", "B", "C", "D", "E"}
-        self.recovery  = recovery or {}
-        self.scope     = scope   # "activa" | "general"
+        self.cycle_id         = cycle_id
+        self.funnel           = funnel
+        self.criticos         = criticos
+        self.aging            = aging
+        self.gestiones        = gestiones
+        self.empresa          = empresa
+        self.secciones        = secciones or {"A", "B", "C", "D", "E"}
+        self.recovery         = recovery or {}
+        self.scope            = scope   # "activa" | "general"
+        self.docs_recuperados = docs_recuperados or []
         self.generated_at = datetime.now(timezone.utc)
         # Ancho disponible para contenido (A4 portrait con márgenes 1.8cm)
         self._page_w = A4[0] - 2 * 1.8 * cm
@@ -275,6 +291,10 @@ class InformeGerencial:
 
         if "E" in self.secciones:
             story += self._seccion_e_recomendaciones()
+            story.append(_spacer(0.5))
+
+        if "F" in self.secciones:
+            story += self._seccion_f_recuperados()
 
         # Nota al pie del informe
         story.append(_spacer(0.8))
@@ -465,7 +485,7 @@ class InformeGerencial:
         resumen_data = [
             ["Empresa", self.empresa],
             ["Ciclo analizado", self.cycle_id],
-            ["Fecha de generación", self.generated_at.strftime("%d de %B de %Y, %H:%M UTC")],
+            ["Fecha de generación", _fecha_es(self.generated_at)],
             ["Alcance del informe", scope_label],
             ["Total cartera del ciclo", f"{cartera_total} clientes"],
             ["Cartera activa (notificable)", f"{cartera} clientes"],
@@ -536,11 +556,12 @@ class InformeGerencial:
         legal            = gestiones.get("legal", 0)
 
         # Recuperacion real desde resumen_ciclo (comparacion CxC entre ciclos)
-        rec_sol    = self.recovery.get("monto_recuperado_sol", 0.0)
-        rec_usd    = self.recovery.get("monto_recuperado_usd", 0.0)
-        docs_rec   = self.recovery.get("docs_recuperados", 0)
-        tasa_recup = self.recovery.get("tasa_recuperacion", 0.0)
-        tiene_ant  = self.recovery.get("tiene_anterior", False)
+        rec_sol      = self.recovery.get("monto_recuperado_sol", 0.0)
+        rec_usd      = self.recovery.get("monto_recuperado_usd", 0.0)
+        docs_rec     = self.recovery.get("docs_recuperados", 0)
+        docs_amort   = self.recovery.get("docs_amortizados", 0)
+        tasa_recup   = self.recovery.get("tasa_recuperacion", 0.0)
+        tiene_ant    = self.recovery.get("tiene_anterior", False)
 
         saldo_pendiente_sol = max(total_sol - rec_sol, 0.0)
         saldo_pendiente_usd = max(total_usd - rec_usd, 0.0)
@@ -551,36 +572,53 @@ class InformeGerencial:
         def _card(label: str, value: str, sub: str, color: Any) -> Table:
             pad = 0.3 * cm
             inner = [
-                [Paragraph(label, ST_CARD_LBL_W)],
+                [Paragraph(label, ST_CARD_LBL)],
                 [Paragraph(value, ST_CARD_VAL)],
                 [Paragraph(sub,   ST_CARD_SUB)],
             ]
-            t = Table(inner, colWidths=[self._page_w / 4 - 0.4 * cm])
+            t = Table(inner, colWidths=[self._page_w / 4 - 0.35 * cm])
             t.setStyle(TableStyle([
-                ("BACKGROUND",    (0, 0), (-1, 0),  color),
-                ("BACKGROUND",    (0, 1), (-1, -1), C_WHITE),
-                ("TOPPADDING",    (0, 0), (-1, -1), pad),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), pad),
+                ("BACKGROUND",    (0, 0), (-1, -1), C_WHITE),
+                ("TOPPADDING",    (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
                 ("LEFTPADDING",   (0, 0), (-1, -1), pad),
                 ("RIGHTPADDING",  (0, 0), (-1, -1), pad),
-                ("BOX",           (0, 0), (-1, -1), 1.5, C_ACCENT),
-                ("LINEBELOW",     (0, 0), (-1, 0),  1.5, color),
+                ("TOPPADDING",    (0, 0), (0, 0),   pad),       # espacio extra arriba del label
+                ("BOTTOMPADDING", (0, 2), (-1, 2),  pad),       # espacio extra abajo del sub
+                ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+                ("LINEABOVE",     (0, 0), (-1, 0),  4,   color),
             ]))
             return t
 
         # --- FRD v4.0 Sección A — 4 tarjetas exactas ---
-        # Tarjeta 1: Cartera Vencida Total
-        sub1 = _fmt_usd(total_usd) if total_usd > 0 else f"{cartera} clientes activos"
+        # Tarjeta 1: Cartera Vencida Total — mostrar nro de documentos por moneda
+        total_docs_sol = sum(b.get("docs_sol", 0) for b in aging)
+        total_docs_usd = sum(b.get("docs_usd", 0) for b in aging)
+        _sub1_parts = []
+        if total_docs_sol > 0:
+            _sub1_parts.append(f"{total_docs_sol} docs S/")
+        if total_docs_usd > 0:
+            _sub1_parts.append(f"{total_docs_usd} docs US$")
+        sub1 = "  ·  ".join(_sub1_parts) if _sub1_parts else f"{cartera} clientes"
+
+        # Tarjeta 1: Cartera Vencida Total — valor con salto de línea si hay ambas monedas
+        val1 = _fmt_sol(total_sol)
+        if total_usd > 0:
+            val1 += f"<br/>{_fmt_usd(total_usd)}"
 
         # Tarjeta 2: Recuperado en el Período (fuente: resumen_ciclo, diferencia CxC)
+        # monto_recuperado_sol ya es combinado (docs completos + amortizaciones parciales)
         if not tiene_ant:
             val2 = _fmt_sol(0)
             sub2 = "Sin ciclo anterior  ·  Meta: 55%"
         elif rec_sol > 0 or rec_usd > 0:
             val2 = _fmt_sol(rec_sol)
             if rec_usd > 0:
-                val2 += f"  /  {_fmt_usd(rec_usd)}"
-            sub2 = f"{docs_rec} docs  ·  Tasa: {tasa_recup:.1f}%  ·  Meta: 55%"
+                val2 += f"<br/>{_fmt_usd(rec_usd)}"
+            if docs_amort > 0:
+                sub2 = f"{docs_rec} docs + {docs_amort} amortiz.<br/>Tasa: {tasa_recup:.1f}%  ·  Meta: 55%"
+            else:
+                sub2 = f"{docs_rec} docs<br/>Tasa: {tasa_recup:.1f}%  ·  Meta: 55%"
         else:
             val2 = _fmt_sol(0)
             sub2 = f"Tasa: 0.0%  ·  Meta: 55%  ·  {docs_rec} docs"
@@ -588,7 +626,7 @@ class InformeGerencial:
         # Tarjeta 3: Saldo Pendiente (cartera - recuperado, por moneda)
         val3 = _fmt_sol(saldo_pendiente_sol) if saldo_pendiente_sol > 0 else _fmt_sol(total_sol)
         if saldo_pendiente_usd > 0:
-            val3 += f"  /  {_fmt_usd(saldo_pendiente_usd)}"
+            val3 += f"<br/>{_fmt_usd(saldo_pendiente_usd)}"
         sub3_parts = [f"{cartera} clientes"]
         if legal > 0:
             sub3_parts.append(f"{legal} en Legal")
@@ -606,10 +644,10 @@ class InformeGerencial:
             sub4 = "0 acuerdos activos"
 
         cards = [
-            _card("CARTERA VENCIDA TOTAL",    _fmt_sol(total_sol), sub1,  C_PRIMARY),
-            _card("RECUPERADO EN EL PERÍODO", val2,                sub2,  C_SUCCESS),
-            _card("SALDO PENDIENTE",          val3,                sub3,  C_WARNING),
-            _card("EN ACUERDOS DE PAGO",      val4,                sub4,  C_ACCENT),
+            _card("CARTERA VENCIDA",  val1,  sub1,  C_PRIMARY),
+            _card("RECUPERADO",       val2,  sub2,  C_SUCCESS),
+            _card("SALDO PENDIENTE",  val3,  sub3,  C_WARNING),
+            _card("EN ACUERDOS",      val4,  sub4,  C_ACCENT),
         ]
 
         cards_row = Table(
@@ -620,8 +658,8 @@ class InformeGerencial:
         cards_row.setStyle(TableStyle([
             ("ALIGN",   (0, 0), (-1, -1), "CENTER"),
             ("VALIGN",  (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING",  (0, 0), (-1, -1), 2),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ]))
         story.append(cards_row)
 
@@ -683,18 +721,22 @@ class InformeGerencial:
         total_sol = sum(b.get("saldo_sol", 0) for b in aging)
         total_usd = sum(b.get("saldo_usd", 0) for b in aging)
 
-        header = [
-            Paragraph("Segmento",   ST_TH),
-            Paragraph("Clientes",   ST_TH),
-            Paragraph("% Clientes", ST_TH),
-            Paragraph("Saldo S/",   ST_TH),
-            Paragraph("% Cartera",  ST_TH),
-            Paragraph("Saldo US$",  ST_TH),
-            Paragraph("Nivel Riesgo", ST_TH),
-        ]
+        total_docs = sum(b.get("documentos", 0) for b in aging)
 
+        # 8 columnas — anchos calibrados para que los encabezados no desborden
         w = self._page_w
-        col_w = [w * 0.24, w * 0.09, w * 0.09, w * 0.17, w * 0.09, w * 0.14, w * 0.18]
+        col_w = [w*0.21, w*0.08, w*0.07, w*0.07, w*0.16, w*0.08, w*0.13, w*0.20]
+
+        header = [
+            Paragraph("Segmento",  ST_TH),
+            Paragraph("Clientes",  ST_TH_SM),
+            Paragraph("% Cli.",    ST_TH_SM),
+            Paragraph("Docs",      ST_TH_SM),
+            Paragraph("Saldo S/",  ST_TH),
+            Paragraph("%",         ST_TH_SM),
+            Paragraph("Saldo US$", ST_TH),
+            Paragraph("Riesgo",    ST_TH_SM),
+        ]
 
         rows = [header]
         style_cmds = [
@@ -711,10 +753,12 @@ class InformeGerencial:
             riesgo = b.get("riesgo", "")
             bg = RIESGO_COLORS.get(riesgo, C_WHITE)
             tc = RIESGO_TEXT.get(riesgo, C_TEXT)
+            docs_b = b.get("documentos", b.get("docs_sol", 0) + b.get("docs_usd", 0))
             row = [
                 Paragraph(b.get("segmento", "—"), ST_TD),
                 Paragraph(str(b.get("clientes", 0)), ST_TD_CENTER),
                 Paragraph(_pct(b.get("clientes", 0), total_clientes), ST_TD_CENTER),
+                Paragraph(str(docs_b), ST_TD_CENTER),
                 Paragraph(_fmt_sol(b.get("saldo_sol", 0)), ST_TD_RIGHT),
                 Paragraph(f"{b.get('pct_sol', 0):.1f}%", ST_TD_CENTER),
                 Paragraph(_fmt_usd(b.get("saldo_usd", 0)), ST_TD_RIGHT),
@@ -728,6 +772,7 @@ class InformeGerencial:
             Paragraph("<b>TOTAL</b>", ST_TD_CENTER),
             Paragraph(f"<b>{total_clientes}</b>", ST_TD_CENTER),
             Paragraph("<b>100%</b>", ST_TD_CENTER),
+            Paragraph(f"<b>{total_docs}</b>", ST_TD_CENTER),
             Paragraph(f"<b>{_fmt_sol(total_sol)}</b>", ST_TD_RIGHT),
             Paragraph("<b>100%</b>", ST_TD_CENTER),
             Paragraph(f"<b>{_fmt_usd(total_usd)}</b>", ST_TD_RIGHT),
@@ -786,18 +831,20 @@ class InformeGerencial:
             ))
             return story
 
+        # 8 columnas — anchos calibrados para caber en A4
+        w = self._page_w
+        col_w = [w*0.04, w*0.25, w*0.08, w*0.12, w*0.10, w*0.06, w*0.07, w*0.28]
+
         header = [
-            Paragraph("#", ST_TH),
-            Paragraph("Cliente", ST_TH),
-            Paragraph("Días mora", ST_TH),
-            Paragraph("Saldo S/", ST_TH),
-            Paragraph("Saldo US$", ST_TH),
-            Paragraph("Gestiones", ST_TH),
+            Paragraph("#",             ST_TH_SM),
+            Paragraph("Cliente",       ST_TH),
+            Paragraph("Días mora",     ST_TH_SM),
+            Paragraph("Saldo S/",      ST_TH),
+            Paragraph("Saldo US$",     ST_TH),
+            Paragraph("Docs",          ST_TH_SM),
+            Paragraph("Gest.",         ST_TH_SM),
             Paragraph("Recomendación", ST_TH),
         ]
-
-        w = self._page_w
-        col_w = [w * 0.04, w * 0.30, w * 0.09, w * 0.13, w * 0.11, w * 0.09, w * 0.24]
 
         rows = [header]
         style_cmds = [
@@ -811,19 +858,21 @@ class InformeGerencial:
         ]
 
         for i, c in enumerate(criticos_alerta, start=1):
-            mora = int(c.get("dias_mora_max", 0))
-            gest = int(c.get("gestiones_count", 0))
+            mora      = int(c.get("dias_mora_max", 0))
+            gest      = int(c.get("gestiones_count", 0))
+            docs_c    = int(c.get("docs_count", c.get("docs_sol", 0) + c.get("docs_usd", 0)))
             saldo_sol = float(c.get("saldo_sol", 0))
             saldo_usd = float(c.get("saldo_usd", 0))
-            nombre    = str(c.get("nombre") or c.get("cliente_id") or "—")[:45]
+            nombre    = str(c.get("nombre") or c.get("cliente_id") or "—")[:40]
             rec = _accion_pdf(mora, gest)
             bg = RIESGO_COLORS["CRÍTICO"] if mora > 90 else RIESGO_COLORS["ALTO"]
             row = [
                 Paragraph(str(i), ST_TD_CENTER),
                 Paragraph(nombre, ST_TD),
-                Paragraph(f"{mora} días", ST_TD_CENTER),
+                Paragraph(f"{mora}d", ST_TD_CENTER),
                 Paragraph(_fmt_sol(saldo_sol), ST_TD_RIGHT),
                 Paragraph(_fmt_usd(saldo_usd) if saldo_usd > 0 else "—", ST_TD_RIGHT),
+                Paragraph(str(docs_c), ST_TD_CENTER),
                 Paragraph(str(gest), ST_TD_CENTER),
                 Paragraph(rec, ST_TD),
             ]
@@ -1069,6 +1118,230 @@ class InformeGerencial:
             ]))
             story.append(KeepTogether([cat_tbl, txt_tbl]))
             story.append(_spacer(0.2))
+
+        return story
+
+    # ------------------------------------------------------------------
+    # Sección F — Sustento de Recuperados (RC-BUG-070)
+    # ------------------------------------------------------------------
+
+    def _seccion_f_recuperados(self) -> List:
+        """Tabla de documentos cobrados total o parcialmente entre ciclos."""
+        story: List = []
+        C_COMPL  = C_SUCCESS   # verde para docs completos
+        C_AMORT  = C_ACCENT    # teal para amortizaciones
+
+        # Cabecera de sección
+        story += _section_title(
+            "F.  Sustento — Recuperado en el Período",
+            self._page_w,
+        )
+        story.append(_spacer(0.3))
+
+        cycle_ant = self.recovery.get("cycle_id_anterior")
+        scope_label = "Cartera Activa" if self.scope == "activa" else "Cartera General"
+        nota = (
+            f"Documentos del ciclo anterior ({cycle_ant or 'N/D'}) cobrados total o "
+            f"parcialmente en {self.cycle_id} · Vista: {scope_label}"
+        )
+        story.append(Paragraph(nota, ST_SMALL))
+        story.append(_spacer(0.3))
+
+        docs = self.docs_recuperados
+        if not docs:
+            story.append(Paragraph(
+                "Sin documentos recuperados para mostrar. "
+                "Verifique que exista un ciclo anterior y que la migración 104 esté ejecutada en Supabase.",
+                ST_BODY,
+            ))
+            return story
+
+        # ---- Construcción de la tabla ----
+        _MONEDAS_USD = {"USD", "US$", "$", "DOLARES", "DÓLARES"}
+
+        def _fmt_m(val: float, moneda: str) -> str:
+            sym = "US$" if moneda in _MONEDAS_USD else "S/"
+            return f"{sym} {val:,.2f}"
+
+        # Anchos de columna (proporciones suman 1.0)
+        w = self._page_w
+        col_w = [
+            w * 0.05,    # # — suficiente para 2 dígitos
+            w * 0.22,    # Cliente
+            w * 0.21,    # Documento
+            w * 0.12,    # Tipo
+            w * 0.075,   # Moneda
+            w * 0.165,   # Saldo anterior
+            w * 0.16,    # Recuperado
+        ]
+
+        ST_TH_C = ST_TH   # reutiliza el estilo de encabezado de tabla
+
+        header = [
+            Paragraph("#",             ST_TH_C),
+            Paragraph("Cliente",       ST_TH_C),
+            Paragraph("Documento",     ST_TH_C),
+            Paragraph("Tipo",          ST_TH_C),
+            Paragraph("Moneda",        ST_TH_C),
+            Paragraph("Saldo Ant.",    ST_TH_C),
+            Paragraph("Recuperado",    ST_TH_C),
+        ]
+
+        rows = [header]
+        row_styles: List = []
+        # Header style
+        row_styles += [
+            ("BACKGROUND",    (0, 0), (-1, 0), C_PRIMARY),
+            ("TOPPADDING",    (0, 0), (-1, 0), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+        ]
+
+        # Contadores para totales
+        tot_sol_compl = tot_usd_compl = 0.0
+        tot_sol_amort = tot_usd_amort = 0.0
+        n_compl = n_amort = 0
+        n_docs_sol = n_docs_usd = 0   # para la fila de totales por moneda
+        current_tipo = None
+        idx = 0
+
+        for doc in docs:
+            tipo = doc["tipo"]
+            moneda = str(doc.get("moneda", "PEN")).upper().strip()
+            es_usd = moneda in _MONEDAS_USD
+            monto = doc["monto_recuperado"]
+            saldo_ant = doc["saldo_anterior"]
+            r = len(rows)  # índice fila en la tabla
+
+            # Separador de grupo cuando cambia el tipo
+            if tipo != current_tipo:
+                current_tipo = tipo
+                tipo_label = "Documentos cobrados al 100%" if tipo == "COMPLETO" else "Amortizaciones parciales"
+                tipo_color = C_COMPL if tipo == "COMPLETO" else C_AMORT
+                sep_row = [
+                    Paragraph(f"  {tipo_label}", _style(
+                        f"RC_GrpHdr_{tipo}", "Normal",
+                        fontSize=7.5, leading=9.5, textColor=C_WHITE, fontName=_F_BOLD
+                    )),
+                    "", "", "", "", "", "",
+                ]
+                rows.append(sep_row)
+                sep_r = len(rows) - 1
+                row_styles += [
+                    ("BACKGROUND",   (0, sep_r), (-1, sep_r), tipo_color),
+                    ("SPAN",         (0, sep_r), (-1, sep_r)),
+                    ("TOPPADDING",   (0, sep_r), (-1, sep_r), 4),
+                    ("BOTTOMPADDING",(0, sep_r), (-1, sep_r), 4),
+                    ("LEFTPADDING",  (0, sep_r), (-1, sep_r), 6),
+                ]
+
+            idx += 1
+            tipo_cell = "✔ Completo" if tipo == "COMPLETO" else "↓ Amortiz."
+            tipo_st = _style(
+                f"RC_Tipo_{tipo}_{idx}", "Normal",
+                fontSize=7, leading=9,
+                textColor=C_COMPL if tipo == "COMPLETO" else C_AMORT,
+                fontName=_F_BOLD, alignment=TA_CENTER
+            )
+            nombre = doc.get("nombre", doc.get("cliente_id", "—"))
+            if len(nombre) > 28:
+                nombre = nombre[:26] + "…"
+            mk = doc.get("match_key", "—")
+            if len(mk) > 26:
+                mk = mk[:24] + "…"
+
+            rows.append([
+                Paragraph(str(idx), ST_TD_CENTER),
+                Paragraph(nombre,   ST_TD),
+                Paragraph(mk,       ST_TD),
+                Paragraph(tipo_cell, tipo_st),
+                Paragraph("US$" if es_usd else "S/", ST_TD_CENTER),
+                Paragraph(_fmt_m(saldo_ant, moneda), ST_TD_RIGHT),
+                Paragraph(_fmt_m(monto, moneda),     ST_TD_RIGHT),
+            ])
+            r = len(rows) - 1
+            # Zebra stripe
+            if idx % 2 == 0:
+                row_styles.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#F7FAFC")))
+
+            # Acumular totales
+            if tipo == "COMPLETO":
+                n_compl += 1
+                if es_usd: tot_usd_compl += monto
+                else:      tot_sol_compl += monto
+            else:
+                n_amort += 1
+                if es_usd: tot_usd_amort += monto
+                else:      tot_sol_amort += monto
+            # Conteo por moneda (para filas finales)
+            if es_usd: n_docs_usd += 1
+            else:      n_docs_sol += 1
+
+        # --- Filas de total por moneda ---
+        tot_sol = tot_sol_compl + tot_sol_amort
+        tot_usd = tot_usd_compl + tot_usd_amort
+
+        _st_tot_lbl = _style("RC_TotLbl", "Normal",
+                             fontSize=8, leading=10, textColor=C_WHITE, fontName=_F_BOLD)
+        _st_tot_val = _style("RC_TotVal", "Normal",
+                             fontSize=8, leading=10, textColor=C_WHITE, fontName=_F_BOLD,
+                             alignment=TA_RIGHT)
+
+        def _add_tot_row(label: str, monto_str: str, bg_color: Any) -> None:
+            rows.append([
+                Paragraph(label, _st_tot_lbl),
+                "", "", "", "", "",
+                Paragraph(monto_str, _st_tot_val),
+            ])
+            r = len(rows) - 1
+            row_styles.extend([
+                ("BACKGROUND",    (0, r), (-1, r), bg_color),
+                ("SPAN",          (0, r), (5, r)),
+                ("TOPPADDING",    (0, r), (-1, r), 6),
+                ("BOTTOMPADDING", (0, r), (-1, r), 6),
+                ("LEFTPADDING",   (0, r), (-1, r), 8),
+            ])
+
+        # Siempre mostrar la fila de Soles
+        _n_s = n_docs_sol
+        _sol_lbl = (
+            f"TOTAL S/ — {_n_s} documento{'s' if _n_s != 1 else ''}"
+            if tot_usd > 0
+            else f"TOTAL RECUPERADO — {_n_s} documento{'s' if _n_s != 1 else ''} en Soles"
+        )
+        _add_tot_row(_sol_lbl, _fmt_m(tot_sol, "PEN"), C_PRIMARY)
+
+        # Fila de Dólares solo si hay documentos en esa moneda
+        if tot_usd > 0:
+            _n_u = n_docs_usd
+            _usd_lbl = f"TOTAL US$ — {_n_u} documento{'s' if _n_u != 1 else ''}"
+            _add_tot_row(_usd_lbl, _fmt_m(tot_usd, "USD"), C_ACCENT)
+
+        # Estilos comunes de todas las filas
+        common_styles = [
+            ("FONTSIZE",      (0, 0), (-1, -1), 7.5),
+            ("ROWBACKGROUND", (0, 1), (-1, -2), [C_WHITE, colors.HexColor("#F7FAFC")]),
+            ("TOPPADDING",    (0, 1), (-1, -2), 3),
+            ("BOTTOMPADDING", (0, 1), (-1, -2), 3),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+            ("GRID",          (0, 0), (-1, -1), 0.3, colors.HexColor("#D9E2EC")),
+            ("ALIGN",         (5, 1), (-1, -1), "RIGHT"),
+            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+        ]
+
+        tbl = Table(rows, colWidths=col_w, repeatRows=1)
+        tbl.setStyle(TableStyle(common_styles + row_styles))
+        story.append(tbl)
+
+        # Nota de validación
+        story.append(_spacer(0.2))
+        story.append(Paragraph(
+            f"✔ {n_compl} doc(s) cobrados al 100%  ·  "
+            f"↓ {n_amort} doc(s) amortizados parcialmente  ·  "
+            f"Total S/: {_fmt_m(tot_sol, 'PEN')}"
+            + (f"  ·  Total US$: {_fmt_m(tot_usd, 'USD')}" if tot_usd > 0 else ""),
+            ST_NOTE,
+        ))
 
         return story
 

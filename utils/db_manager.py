@@ -1656,6 +1656,33 @@ def reconcile_ciclo_recovery(
                            if str(d.get("enviar_email", "")).upper() == _ACTIVA}
         keys_rec_activa = set(keys_ant_activa.keys()) - set(keys_nue_activa.keys())
 
+        # RC-BUG-070: Amortizaciones parciales (match_key común, saldo_real bajó)
+        keys_comunes = set(keys_ant.keys()) & set(keys_nue.keys())
+        amort_general: Dict[str, Dict] = {}
+        for mk in keys_comunes:
+            saldo_ant = float(keys_ant[mk].get("saldo_real") or 0)
+            saldo_nue = float(keys_nue[mk].get("saldo_real") or 0)
+            diff = saldo_ant - saldo_nue
+            if diff > 0.01:  # umbral para evitar ruido de redondeo
+                amort_general[mk] = {
+                    "monto_amortizado": diff,
+                    "moneda": str(keys_ant[mk].get("moneda") or "").upper().strip(),
+                    "es_activa": str(keys_ant[mk].get("enviar_email", "")).upper() == _ACTIVA,
+                }
+
+        total_monto_amort_sol = total_monto_amort_usd = 0.0
+        total_monto_amort_sol_activa = total_monto_amort_usd_activa = 0.0
+        for amort in amort_general.values():
+            m = amort["monto_amortizado"]
+            if amort["moneda"] in {"USD", "US$", "$", "DOLARES", "DÓLARES"}:
+                total_monto_amort_usd += m
+                if amort["es_activa"]:
+                    total_monto_amort_usd_activa += m
+            else:
+                total_monto_amort_sol += m
+                if amort["es_activa"]:
+                    total_monto_amort_sol_activa += m
+
         # Build per-client stats for cycle_id_nuevo
         cliente_nuevo: Dict[str, Dict[str, Any]] = {}
         for doc in docs_nue:
@@ -1749,7 +1776,6 @@ def reconcile_ciclo_recovery(
 
         # Persist resumen_ciclo
         total_docs_rec  = sum(v["docs_recuperados"] for v in cliente_nuevo.values())
-        total_monto_rec = total_monto_rec_sol + total_monto_rec_usd
         total_docs_ant  = len(keys_ant)
         tasa = round(total_docs_rec / total_docs_ant * 100, 2) if total_docs_ant > 0 else 0.0
 
@@ -1759,6 +1785,13 @@ def reconcile_ciclo_recovery(
         tasa_activa = round(
             total_docs_rec_activa / total_docs_ant_activa * 100, 2
         ) if total_docs_ant_activa > 0 else 0.0
+
+        # RC-BUG-070: totales combinados (full recovery + amortizaciones parciales)
+        total_monto_rec_sol_comb        = total_monto_rec_sol        + total_monto_amort_sol
+        total_monto_rec_usd_comb        = total_monto_rec_usd        + total_monto_amort_usd
+        total_monto_rec_sol_activa_comb = total_monto_rec_sol_activa + total_monto_amort_sol_activa
+        total_monto_rec_usd_activa_comb = total_monto_rec_usd_activa + total_monto_amort_usd_activa
+        total_monto_rec = total_monto_rec_sol_comb + total_monto_rec_usd_comb
 
         total_gestiones = len(gestiones_nuevas)
         total_acuerdos_resp = _safe_execute(
@@ -1773,15 +1806,24 @@ def reconcile_ciclo_recovery(
             "docs_total": len(keys_nue),
             "monto_total": round(sum(v["monto_total"] for v in cliente_nuevo.values()), 2),
             "clientes_recuperados": sum(1 for v in cliente_nuevo.values() if v["docs_recuperados"] > 0),
+            # docs_recuperados y tasa solo cuentan docs completos (para la sub-línea del PDF)
             "docs_recuperados": total_docs_rec,
-            "monto_recuperado":     round(total_monto_rec, 2),
-            "monto_recuperado_sol": round(total_monto_rec_sol, 2),
-            "monto_recuperado_usd": round(total_monto_rec_usd, 2),
             "tasa_recuperacion": tasa,
-            "monto_recuperado_sol_activa": round(total_monto_rec_sol_activa, 2),
-            "monto_recuperado_usd_activa": round(total_monto_rec_usd_activa, 2),
-            "docs_recuperados_activa": total_docs_rec_activa,
-            "tasa_recuperacion_activa": tasa_activa,
+            # monto_recuperado_* = combinado (full + amortizaciones parciales) → Tarjeta 2
+            "monto_recuperado":              round(total_monto_rec, 2),
+            "monto_recuperado_sol":          round(total_monto_rec_sol_comb, 2),
+            "monto_recuperado_usd":          round(total_monto_rec_usd_comb, 2),
+            "monto_recuperado_sol_activa":   round(total_monto_rec_sol_activa_comb, 2),
+            "monto_recuperado_usd_activa":   round(total_monto_rec_usd_activa_comb, 2),
+            "docs_recuperados_activa":       total_docs_rec_activa,
+            "tasa_recuperacion_activa":      tasa_activa,
+            # RC-BUG-070: detalle de amortizaciones (auditoría)
+            "docs_amortizados":              len(amort_general),
+            "monto_amortizado_sol":          round(total_monto_amort_sol, 2),
+            "monto_amortizado_usd":          round(total_monto_amort_usd, 2),
+            "docs_amortizados_activa":       sum(1 for a in amort_general.values() if a["es_activa"]),
+            "monto_amortizado_sol_activa":   round(total_monto_amort_sol_activa, 2),
+            "monto_amortizado_usd_activa":   round(total_monto_amort_usd_activa, 2),
             "gestiones_total": total_gestiones,
             "acuerdos_total": total_acuerdos or 0,
             "updated_at": ahora,
@@ -1829,7 +1871,9 @@ def get_recovery_stats(cycle_id: str, solo_notificable: bool = False) -> Dict[st
             .select(
                 "monto_recuperado_sol,monto_recuperado_usd,docs_recuperados,tasa_recuperacion,"
                 "monto_recuperado_sol_activa,monto_recuperado_usd_activa,"
-                "docs_recuperados_activa,tasa_recuperacion_activa,cycle_id_anterior"
+                "docs_recuperados_activa,tasa_recuperacion_activa,cycle_id_anterior,"
+                "docs_amortizados,monto_amortizado_sol,monto_amortizado_usd,"
+                "docs_amortizados_activa,monto_amortizado_sol_activa,monto_amortizado_usd_activa"
             )
             .eq("cycle_id", str(cycle_id))
             .limit(1)
@@ -1843,6 +1887,7 @@ def get_recovery_stats(cycle_id: str, solo_notificable: bool = False) -> Dict[st
                 "monto_recuperado_usd": float(row.get("monto_recuperado_usd_activa") or 0),
                 "docs_recuperados":     int(row.get("docs_recuperados_activa") or 0),
                 "tasa_recuperacion":    float(row.get("tasa_recuperacion_activa") or 0),
+                "docs_amortizados":     int(row.get("docs_amortizados_activa") or 0),
                 "cycle_id_anterior":    row.get("cycle_id_anterior"),
                 "tiene_anterior":       row.get("cycle_id_anterior") is not None,
             }
@@ -1851,6 +1896,7 @@ def get_recovery_stats(cycle_id: str, solo_notificable: bool = False) -> Dict[st
             "monto_recuperado_usd": float(row.get("monto_recuperado_usd") or 0),
             "docs_recuperados":     int(row.get("docs_recuperados") or 0),
             "tasa_recuperacion":    float(row.get("tasa_recuperacion") or 0),
+            "docs_amortizados":     int(row.get("docs_amortizados") or 0),
             "cycle_id_anterior":    row.get("cycle_id_anterior"),
             "tiene_anterior":       row.get("cycle_id_anterior") is not None,
         }
@@ -1878,9 +1924,122 @@ def _recovery_zero() -> Dict[str, Any]:
         "monto_recuperado_usd": 0.0,
         "docs_recuperados": 0,
         "tasa_recuperacion": 0.0,
+        "docs_amortizados": 0,
         "cycle_id_anterior": None,
         "tiene_anterior": False,
     }
+
+
+# ---------------------------------------------------------------------------
+# RC-BUG-070: Detalle de documentos recuperados para Sección F del PDF
+# ---------------------------------------------------------------------------
+
+def get_docs_recuperados_detalle(
+    cycle_id: str, solo_notificable: bool = False
+) -> List[Dict[str, Any]]:
+    """Retorna el detalle de documentos recuperados entre el ciclo anterior y el actual.
+
+    Incluye dos tipos:
+      - COMPLETO   : documento estaba en el ciclo anterior y desapareció (cobrado al 100%)
+      - AMORTIZACION: documento persiste pero con saldo_real reducido > S/0.01
+
+    Args:
+        cycle_id:         Ciclo actual (ej: 'CIC-20260324-1840')
+        solo_notificable: True = solo clientes con enviar_email='SI' (Cartera Activa)
+
+    Returns:
+        Lista de dicts ordenada COMPLETO primero, luego AMORTIZACION, cada grupo
+        por monto_recuperado DESC. Cada dict tiene:
+            cliente_id, nombre, match_key, moneda, tipo,
+            saldo_anterior, saldo_actual, monto_recuperado
+        Retorna [] si no hay ciclo anterior o no hay datos.
+    """
+    client = get_supabase_client()
+    if not client:
+        return []
+
+    try:
+        # Obtener cycle_id_anterior desde resumen_ciclo
+        prev_resp = _safe_execute(
+            client.table("resumen_ciclo")
+            .select("cycle_id_anterior")
+            .eq("cycle_id", str(cycle_id))
+            .limit(1)
+        )
+        if not prev_resp or not prev_resp.data:
+            return []
+        cycle_id_anterior = prev_resp.data[0].get("cycle_id_anterior")
+        if not cycle_id_anterior:
+            return []
+
+        _ACTIVA = "SI"
+        _MONEDAS_USD = {"USD", "US$", "$", "DOLARES", "DÓLARES"}
+
+        def _fetch_docs(cid: str) -> Dict[str, Dict]:
+            """Devuelve dict indexado por match_key con campos de documentos_ciclo."""
+            resp = _safe_execute(
+                client.table("documentos_ciclo")
+                .select("match_key,cod_cliente,empresa,saldo_real,moneda,enviar_email")
+                .eq("cycle_id", str(cid))
+                .not_.in_("tipo_pedido", ["DSP", "PAV"])
+            )
+            rows = resp.data if resp and resp.data else []
+            return {
+                str(r.get("match_key", "")): r
+                for r in rows
+                if r.get("match_key")
+            }
+
+        docs_ant = _fetch_docs(cycle_id_anterior)
+        docs_nue = _fetch_docs(cycle_id)
+
+        result: List[Dict[str, Any]] = []
+
+        # Documentos recuperados al 100% (desaparecieron del ciclo actual)
+        for mk in set(docs_ant.keys()) - set(docs_nue.keys()):
+            doc = docs_ant[mk]
+            if solo_notificable and str(doc.get("enviar_email", "")).upper() != _ACTIVA:
+                continue
+            saldo = float(doc.get("saldo_real") or 0)
+            result.append({
+                "cliente_id":     str(doc.get("cod_cliente", "")),
+                "nombre":         str(doc.get("empresa") or doc.get("cod_cliente", "")),
+                "match_key":      mk,
+                "moneda":         str(doc.get("moneda") or "PEN").upper().strip(),
+                "tipo":           "COMPLETO",
+                "saldo_anterior": round(saldo, 2),
+                "saldo_actual":   0.0,
+                "monto_recuperado": round(saldo, 2),
+            })
+
+        # Amortizaciones parciales (mismo match_key, saldo bajó)
+        for mk in set(docs_ant.keys()) & set(docs_nue.keys()):
+            doc_ant = docs_ant[mk]
+            doc_nue = docs_nue[mk]
+            if solo_notificable and str(doc_ant.get("enviar_email", "")).upper() != _ACTIVA:
+                continue
+            saldo_ant = float(doc_ant.get("saldo_real") or 0)
+            saldo_nue = float(doc_nue.get("saldo_real") or 0)
+            diff = saldo_ant - saldo_nue
+            if diff > 0.01:
+                result.append({
+                    "cliente_id":     str(doc_ant.get("cod_cliente", "")),
+                    "nombre":         str(doc_ant.get("empresa") or doc_ant.get("cod_cliente", "")),
+                    "match_key":      mk,
+                    "moneda":         str(doc_ant.get("moneda") or "PEN").upper().strip(),
+                    "tipo":           "AMORTIZACION",
+                    "saldo_anterior": round(saldo_ant, 2),
+                    "saldo_actual":   round(saldo_nue, 2),
+                    "monto_recuperado": round(diff, 2),
+                })
+
+        # Ordenar: COMPLETO primero, luego AMORTIZACION; dentro de cada grupo por monto DESC
+        result.sort(key=lambda x: (0 if x["tipo"] == "COMPLETO" else 1, -x["monto_recuperado"]))
+        return result
+
+    except Exception as e:
+        print(f"get_docs_recuperados_detalle error: {e}")
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -2570,17 +2729,21 @@ def get_aging_distribution(cycle_id: str, solo_notificable: bool = False) -> Lis
             moneda = str(d.get("moneda") or "S/").strip().upper()
             saldo  = float(d.get("saldo_real") or 0)
             if cod not in clientes:
-                clientes[cod] = {"dias_mora": mora, "saldo_sol": 0.0, "saldo_usd": 0.0}
+                clientes[cod] = {"dias_mora": mora, "saldo_sol": 0.0, "saldo_usd": 0.0,
+                                 "docs_sol": 0, "docs_usd": 0}
             else:
                 clientes[cod]["dias_mora"] = max(clientes[cod]["dias_mora"], mora)
             if moneda in ("USD", "US$", "$", "DOLARES", "DÓLARES"):
                 clientes[cod]["saldo_usd"] += saldo
+                clientes[cod]["docs_usd"]  += 1
             else:
                 clientes[cod]["saldo_sol"] += saldo
+                clientes[cod]["docs_sol"]  += 1
 
         # Acumular en buckets
         buckets: Dict[str, Dict] = {
-            label: {"clientes": 0, "saldo_sol": 0.0, "saldo_usd": 0.0, "riesgo": riesgo}
+            label: {"clientes": 0, "saldo_sol": 0.0, "saldo_usd": 0.0,
+                    "docs_sol": 0, "docs_usd": 0, "riesgo": riesgo}
             for _, _, label, riesgo in _AGING_BUCKETS
         }
         for c in clientes.values():
@@ -2590,6 +2753,8 @@ def get_aging_distribution(cycle_id: str, solo_notificable: bool = False) -> Lis
                     buckets[label]["clientes"] += 1
                     buckets[label]["saldo_sol"] += c["saldo_sol"]
                     buckets[label]["saldo_usd"] += c["saldo_usd"]
+                    buckets[label]["docs_sol"]  += c["docs_sol"]
+                    buckets[label]["docs_usd"]  += c["docs_usd"]
                     break
 
         total_sol = sum(b["saldo_sol"] for b in buckets.values())
@@ -2598,12 +2763,15 @@ def get_aging_distribution(cycle_id: str, solo_notificable: bool = False) -> Lis
             b = buckets[label]
             pct = round(b["saldo_sol"] / total_sol * 100, 1) if total_sol > 0 else 0.0
             result.append({
-                "segmento":  label,
-                "riesgo":    b["riesgo"],
-                "clientes":  b["clientes"],
-                "saldo_sol": round(b["saldo_sol"], 2),
-                "saldo_usd": round(b["saldo_usd"], 2),
-                "pct_sol":   pct,
+                "segmento":   label,
+                "riesgo":     b["riesgo"],
+                "clientes":   b["clientes"],
+                "docs_sol":   b["docs_sol"],
+                "docs_usd":   b["docs_usd"],
+                "documentos": b["docs_sol"] + b["docs_usd"],
+                "saldo_sol":  round(b["saldo_sol"], 2),
+                "saldo_usd":  round(b["saldo_usd"], 2),
+                "pct_sol":    pct,
             })
         return result
     except Exception as e:
