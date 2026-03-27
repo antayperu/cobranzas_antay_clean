@@ -73,18 +73,29 @@ WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'
 
 
 -- ② TARJETA 2: RECUPERADO EN EL PERÍODO
---    Fuente: resumen_ciclo (comparación CxC entre ciclos, nivel de ciclo completo).
---    Este valor es el mismo para Cartera Activa y Cartera General.
+--    Fuente: resumen_ciclo — diferencia CxC entre ciclo anterior y ciclo actual.
+--    Cartera Activa  → columnas *_activa  (solo clientes con enviar_email = 'SI')
+--    Cartera General → columnas sin sufijo (todos los clientes)
 SELECT
-    monto_recuperado_sol,
-    monto_recuperado_usd,
-    docs_recuperados,
-    tasa_recuperacion,
+    -- Cartera General
+    monto_recuperado_sol                AS recuperado_sol_general,
+    monto_recuperado_usd                AS recuperado_usd_general,
+    docs_recuperados                    AS docs_recuperados_general,
+    tasa_recuperacion                   AS tasa_general,
+    -- Cartera Activa (solo enviar_email = 'SI')
+    monto_recuperado_sol_activa         AS recuperado_sol_activa,
+    monto_recuperado_usd_activa         AS recuperado_usd_activa,
+    docs_recuperados_activa             AS docs_recuperados_activa,
+    tasa_recuperacion_activa            AS tasa_activa,
+    -- Referencia
     cycle_id_anterior
 FROM resumen_ciclo
 WHERE cycle_id = 'CIC-YYYYMMDD-HHMM';
--- Si no hay fila → lazy reconciliation pendiente (generar el PDF una vez para activarlo)
--- PDF muestra: "S/ X,XXX / US$ X,XXX" con "N docs · Tasa: X.X% · Meta: 55%"
+-- Si no hay fila       → ejecutar primero: DELETE FROM resumen_ciclo WHERE cycle_id = '...'
+--                        y luego generar el PDF (lazy reconciliation re-calcula).
+-- Si activa = 0 y general > 0 → fila antigua sin columnas activa: repetir DELETE + PDF.
+-- PDF Cartera Activa  muestra: recuperado_sol_activa / recuperado_usd_activa
+-- PDF Cartera General muestra: recuperado_sol_general / recuperado_usd_general
 
 
 -- ③ TARJETA 3: SALDO PENDIENTE
