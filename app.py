@@ -250,8 +250,10 @@ if wizard_action == "PROCESS_TRIGGERED":
                         )
 
                     # --- RC-FEAT-023: TRAZABILIDAD — reconcile recovery vs ciclo anterior ---
-                    _prev_cycle = st.session_state.get("prev_cycle_id")
-                    if _prev_cycle and _prev_cycle != cycle_id:
+                    # Lee el ciclo anterior desde Supabase (no session_state) para que
+                    # funcione aunque la app se haya reiniciado entre cargas de ciclos.
+                    _prev_cycle = dbm.get_prev_cycle_id(cycle_id)
+                    if _prev_cycle:
                         _rec_result = dbm.reconcile_ciclo_recovery(
                             cycle_id_anterior=_prev_cycle,
                             cycle_id_nuevo=cycle_id,
@@ -263,7 +265,6 @@ if wizard_action == "PROCESS_TRIGGERED":
                                 f"({_s.get('tasa_recuperacion', 0)}%)",
                                 icon="📊",
                             )
-                    st.session_state["prev_cycle_id"] = cycle_id
 
                     
                     # Mark session start

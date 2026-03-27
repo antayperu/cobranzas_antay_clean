@@ -2397,6 +2397,37 @@ def get_kpis_periodo(date_from: str, date_to: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# RC-FEAT-023 — get_prev_cycle_id: ciclo anterior desde Supabase (no session_state)
+# ---------------------------------------------------------------------------
+
+def get_prev_cycle_id(cycle_id_actual: str) -> Optional[str]:
+    """Devuelve el cycle_id más reciente anterior al ciclo dado, leyendo
+    ciclos_procesamiento en Supabase.  Retorna None si no existe ciclo previo.
+
+    Reemplaza el patrón session_state["prev_cycle_id"] que fallaba cuando
+    la app se reiniciaba entre cargas de ciclos consecutivos.
+    """
+    client = get_supabase_client()
+    if not client or not cycle_id_actual:
+        return None
+    try:
+        res = _safe_execute(
+            client.table("ciclos_procesamiento")
+            .select("cycle_id, created_at")
+            .neq("cycle_id", cycle_id_actual)
+            .order("created_at", desc=True)
+            .limit(1)
+        )
+        rows = res.data or []
+        if rows:
+            return rows[0]["cycle_id"]
+        return None
+    except Exception as e:
+        print(f"get_prev_cycle_id Error: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
 # RC-FEAT-039 — Informe Gerencial: funciones de datos
 # ---------------------------------------------------------------------------
 
