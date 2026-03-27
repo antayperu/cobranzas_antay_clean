@@ -2573,23 +2573,45 @@ def get_aging_distribution(cycle_id: str, solo_notificable: bool = False) -> Lis
         return []
 
 
-def get_resumen_gestiones_ciclo(cycle_id: str) -> Dict[str, Any]:
+def get_resumen_gestiones_ciclo(cycle_id: str, solo_notificable: bool = False) -> Dict[str, Any]:
     """Resumen de actividad de gestión para el ciclo dado.
 
     Retorna conteos por canal (WA, email, llamadas, visitas, notas),
     escalamientos a legal, acuerdos firmados y cuotas cobradas.
+
+    Si solo_notificable=True, filtra solo los clientes con enviar_email='SI'
+    en documentos_ciclo (Cartera Activa). Si False, incluye toda la cartera
+    (Cartera General).
     """
     client = get_supabase_client()
     if not client:
         return {}
     try:
+        # Obtener set de clientes notificables si aplica el filtro de scope
+        clientes_scope: Optional[set] = None
+        if solo_notificable:
+            resp_not = _safe_execute(
+                client.table("documentos_ciclo")
+                .select("cod_cliente")
+                .eq("cycle_id", cycle_id)
+                .eq("enviar_email", "SI")
+                .limit(5000)
+            )
+            clientes_scope = {r["cod_cliente"] for r in (resp_not.data or [])}
+
         res = _safe_execute(
             client.table("gestiones")
-            .select("tipo_registro, tipo_gestion, resultado")
+            .select("tipo_registro, tipo_gestion, resultado, cliente_id")
             .eq("cycle_id", cycle_id)
             .limit(10000)
         )
-        gestiones = res.data or []
+        raw = res.data or []
+        # Aplicar filtro de scope si corresponde
+        gestiones = (
+            [g for g in raw if g.get("cliente_id") in clientes_scope]
+            if clientes_scope is not None
+            else raw
+        )
 
         wa_envios    = sum(1 for g in gestiones if g.get("tipo_registro") == "ENVIO"   and g.get("tipo_gestion") == "WHATSAPP")
         email_envios = sum(1 for g in gestiones if g.get("tipo_registro") == "ENVIO"   and g.get("tipo_gestion") == "EMAIL")
@@ -2603,11 +2625,16 @@ def get_resumen_gestiones_ciclo(cycle_id: str) -> Dict[str, Any]:
         # Acuerdos firmados en el ciclo (acuerdos_pago usa ciclo_id, no cycle_id)
         resp_a = _safe_execute(
             client.table("acuerdos_pago")
-            .select("id, monto_total, estado")
+            .select("id, monto_total, estado, cliente_id")
             .eq("ciclo_id", cycle_id)
             .limit(500)
         )
-        acuerdos = resp_a.data or []
+        raw_acuerdos = resp_a.data or []
+        acuerdos = (
+            [a for a in raw_acuerdos if a.get("cliente_id") in clientes_scope]
+            if clientes_scope is not None
+            else raw_acuerdos
+        )
         acuerdos_count   = len(acuerdos)
         acuerdos_monto   = sum(float(a.get("monto_total") or 0) for a in acuerdos)
         acuerdos_activos = sum(1 for a in acuerdos if a.get("estado") == "ACTIVO")

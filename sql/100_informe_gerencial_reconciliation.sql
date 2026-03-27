@@ -4,15 +4,51 @@
 -- Propósito : Validar que los números del PDF "Informe Gerencial" coincidan
 --             exactamente con la base de datos (Supabase).
 -- Uso       : Ejecutar en Supabase SQL Editor (staging o producción).
---             Reemplazar 'CIC-YYYYMMDD-HHMM' con el ciclo analizado.
+--
+-- PASO 1: Reemplazar 'CIC-YYYYMMDD-HHMM' con el ciclo analizado.
+-- PASO 2: Elegir el SCOPE según la vista del informe:
+--           • Cartera Activa  → descomentar:   AND enviar_email = 'SI'
+--           • Cartera General → dejar comentado: AND enviar_email = 'SI'
 --
 -- Lógica de la app:
 --   - Aging    : por CLIENTE ÚNICO (mora máxima), no por documento.
 --   - Saldos   : SUM(saldo_real) por moneda, excluye tipo_pedido IN ('DSP','PAV').
---   - Gestiones: filtradas por cycle_id.
+--   - Gestiones: filtradas por cycle_id + scope (solo_notificable).
 --   - Acuerdos : tabla acuerdos_pago usa ciclo_id (NO cycle_id) — trampa crítica.
 --   - Cuotas   : cuotas_acuerdo JOIN acuerdos_pago WHERE ciclo_id = X AND estado='PAGADA'.
 -- =============================================================================
+
+
+-- ===========================================================================
+-- SECCIÓN 0 — DIAGNÓSTICO PREVIO: ¿qué ciclos y scopes hay disponibles?
+-- ===========================================================================
+
+-- 0a. Ciclos disponibles
+SELECT cycle_id, row_count, created_at
+FROM ciclos_procesamiento
+ORDER BY created_at DESC;
+
+-- 0b. ¿Cuántos clientes notificables vs. total en el ciclo?
+SELECT
+    COUNT(DISTINCT cod_cliente)                                   AS total_clientes,
+    COUNT(DISTINCT cod_cliente) FILTER (WHERE enviar_email = 'SI') AS cartera_activa,
+    COUNT(DISTINCT cod_cliente) FILTER (WHERE enviar_email != 'SI'
+        OR enviar_email IS NULL)                                   AS cartera_especiales
+FROM documentos_ciclo
+WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'
+  AND tipo_pedido NOT IN ('DSP','PAV');
+-- Cartera Activa  = clientes con enviar_email = 'SI'
+-- Cartera General = total_clientes
+
+-- 0c. Estado de resumen_ciclo (fuente del "Recuperado en el Período")
+SELECT
+    cycle_id, cycle_id_anterior,
+    clientes_total, docs_recuperados,
+    monto_recuperado_sol, monto_recuperado_usd,
+    tasa_recuperacion, updated_at
+FROM resumen_ciclo
+WHERE cycle_id = 'CIC-YYYYMMDD-HHMM';
+-- Si vacío → el lazy reconciliation se ejecutará al generar el PDF por primera vez.
 
 
 -- ===========================================================================
@@ -20,8 +56,8 @@
 -- ===========================================================================
 
 -- ① TARJETA 1: CARTERA VENCIDA TOTAL
---    = SUM(saldo_real) por moneda de documentos válidos del ciclo.
---    La app suma saldo_sol y saldo_usd del resultado de get_aging_distribution().
+--    Cartera Activa  → agregar: AND enviar_email = 'SI'
+--    Cartera General → sin filtro adicional
 SELECT
     SUM(saldo_real) FILTER (WHERE moneda NOT IN ('USD','US$','$','DOLARES','DÓLARES'))
                                     AS cartera_vencida_sol,
@@ -30,15 +66,15 @@ SELECT
     COUNT(DISTINCT cod_cliente)     AS clientes_activos
 FROM documentos_ciclo
 WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'
-  AND tipo_pedido NOT IN ('DSP','PAV');
+  AND tipo_pedido NOT IN ('DSP','PAV')
+  -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+;
 -- PDF muestra: "S/ X,XXX" (sol) y "N clientes activos" ó "US$ X,XXX" si existe deuda USD
 
 
 -- ② TARJETA 2: RECUPERADO EN EL PERÍODO
---    = monto_recuperado_sol / monto_recuperado_usd de resumen_ciclo.
---    Representa documentos que estaban en el CxC anterior y desaparecieron
---    en el CxC actual → fueron cobrados en el ERP y reflejados en Cobranza.xlsx.
---    NOTA: requiere que exista un ciclo anterior (cycle_id_anterior no nulo).
+--    Fuente: resumen_ciclo (comparación CxC entre ciclos, nivel de ciclo completo).
+--    Este valor es el mismo para Cartera Activa y Cartera General.
 SELECT
     monto_recuperado_sol,
     monto_recuperado_usd,
@@ -47,29 +83,42 @@ SELECT
     cycle_id_anterior
 FROM resumen_ciclo
 WHERE cycle_id = 'CIC-YYYYMMDD-HHMM';
--- Si no hay fila o cycle_id_anterior es NULL → primer ciclo → recuperado = 0 (correcto)
+-- Si no hay fila → lazy reconciliation pendiente (generar el PDF una vez para activarlo)
 -- PDF muestra: "S/ X,XXX / US$ X,XXX" con "N docs · Tasa: X.X% · Meta: 55%"
--- La tasa = docs_recuperados / docs_total_ciclo_anterior * 100
 
 
 -- ③ TARJETA 3: SALDO PENDIENTE
---    = cartera_vencida_sol  −  recuperado_sol
---    Se deriva de las tarjetas 1 y 2 — no hay query directa; es cálculo de la app.
--- Fórmula: saldo_pendiente = MAX(cartera_vencida_sol - recuperado_sol, 0)
--- También se muestra: clientes activos + cuántos están en Legal (ESCALAR_LEGAL)
-SELECT COUNT(DISTINCT cliente_id) AS derivados_a_legal
-FROM gestiones
-WHERE cycle_id  = 'CIC-YYYYMMDD-HHMM'
-  AND resultado = 'ESCALAR_LEGAL';
+--    = cartera_vencida_sol − recuperado_sol (calculado por la app, no hay query directa)
+-- Sub-métrica: clientes derivados a legal (misma lógica de scope que gestiones)
+WITH clientes_scope AS (
+    SELECT DISTINCT cod_cliente
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'
+    -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+)
+SELECT COUNT(DISTINCT g.cliente_id) AS derivados_a_legal
+FROM gestiones g
+INNER JOIN clientes_scope cs ON cs.cod_cliente = g.cliente_id
+WHERE g.cycle_id  = 'CIC-YYYYMMDD-HHMM'
+  AND g.resultado = 'ESCALAR_LEGAL';
 
 
 -- ④ TARJETA 4: EN ACUERDOS DE PAGO
+--    Cartera Activa  → filtra acuerdos de clientes con enviar_email = 'SI'
+--    Cartera General → todos los acuerdos del ciclo
+WITH clientes_scope AS (
+    SELECT DISTINCT cod_cliente
+    FROM documentos_ciclo
+    WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'
+    -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+)
 SELECT
-    COUNT(*)              AS acuerdos_totales_ciclo,
-    COUNT(*) FILTER (WHERE estado = 'ACTIVO')   AS acuerdos_activos,
-    SUM(monto_total)      AS monto_comprometido_sol
-FROM acuerdos_pago
-WHERE ciclo_id = 'CIC-YYYYMMDD-HHMM';   -- ← OJO: ciclo_id, NO cycle_id
+    COUNT(ap.id)                                                  AS acuerdos_totales_ciclo,
+    COUNT(ap.id) FILTER (WHERE ap.estado = 'ACTIVO')              AS acuerdos_activos,
+    ROUND(COALESCE(SUM(ap.monto_total), 0)::NUMERIC, 2)           AS monto_comprometido_sol
+FROM acuerdos_pago ap
+INNER JOIN clientes_scope cs ON cs.cod_cliente = ap.cliente_id
+WHERE ap.ciclo_id = 'CIC-YYYYMMDD-HHMM';  -- ← OJO: ciclo_id, NO cycle_id
 -- PDF muestra: "S/ X,XXX" (monto_comprometido) y "N acuerdo(s) activo(s)"
 
 
@@ -77,7 +126,7 @@ WHERE ciclo_id = 'CIC-YYYYMMDD-HHMM';   -- ← OJO: ciclo_id, NO cycle_id
 -- SECCIÓN B — Distribución de Cartera por Antigüedad de Deuda (Aging)
 -- ===========================================================================
 -- La app agrupa por CLIENTE ÚNICO usando la mora MÁXIMA de sus documentos.
--- Los buckets son: 0-14 (BAJO), 15-30 (MEDIO), 31-60 (ALTO), 61+ (CRÍTICO).
+-- Buckets: 0-14 (BAJO), 15-30 (MEDIO), 31-60 (ALTO), 61+ (CRÍTICO).
 
 -- ⑤ Aging por cliente único — mora máxima y saldo acumulado
 WITH cliente_mora AS (
@@ -93,6 +142,7 @@ WITH cliente_mora AS (
     FROM documentos_ciclo
     WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'
       AND tipo_pedido NOT IN ('DSP','PAV')
+      -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
     GROUP BY cod_cliente
 ),
 total AS (
@@ -126,7 +176,7 @@ ORDER BY MIN(mora_max);
 -- SECCIÓN C — Clientes Críticos (mora > 60 días)
 -- ===========================================================================
 
--- ⑥ Top clientes con mora > 60 días (misma lógica que get_top_clientes_criticos)
+-- ⑥ Top clientes con mora > 60 días
 SELECT
     dc.cod_cliente                                          AS cliente_id,
     MAX(dc.empresa)                                         AS nombre,
@@ -145,6 +195,7 @@ LEFT JOIN gestiones g
 WHERE dc.cycle_id   = 'CIC-YYYYMMDD-HHMM'
   AND dc.tipo_pedido NOT IN ('DSP','PAV')
   AND CAST(NULLIF(dc.dias_mora, '') AS INTEGER) > 60
+  -- AND dc.enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
 GROUP BY dc.cod_cliente
 ORDER BY saldo_sol DESC NULLS LAST
 LIMIT 8;
@@ -156,136 +207,82 @@ LIMIT 8;
 -- ===========================================================================
 
 -- ⑦ Conteo por canal y tipo de registro
+--    Cartera Activa  → solo gestiones de clientes con enviar_email = 'SI'
+--    Cartera General → todas las gestiones del ciclo
+WITH clientes_scope AS (
+    SELECT DISTINCT cod_cliente
+    FROM documentos_ciclo
+    WHERE cycle_id = 'CIC-YYYYMMDD-HHMM'
+    -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+)
 SELECT
-    tipo_registro,
-    tipo_gestion,
-    COUNT(*)  AS registros
-FROM gestiones
-WHERE cycle_id = 'CIC-YYYYMMDD-HHMM'
-GROUP BY tipo_registro, tipo_gestion
-ORDER BY tipo_registro, tipo_gestion;
+    g.tipo_registro,
+    g.tipo_gestion,
+    COUNT(*) AS registros
+FROM gestiones g
+INNER JOIN clientes_scope cs ON cs.cod_cliente = g.cliente_id
+WHERE g.cycle_id = 'CIC-YYYYMMDD-HHMM'
+GROUP BY g.tipo_registro, g.tipo_gestion
+ORDER BY g.tipo_registro, g.tipo_gestion;
 -- PDF mapea:
 --   ENVIO  / WHATSAPP → "WA enviados (masivo)"
 --   ENVIO  / EMAIL    → "Emails enviados"
 --   GESTION/ LLAMADA  → "Llamadas registradas"
 --   GESTION/ VISITA   → "Visitas presenciales"
 --   GESTION/ NOTA     → "Notas y observaciones"
---   GESTION/ OTRO     → incluido en "otros" (no mostrado por separado en PDF)
 
 -- ⑧ Resultados de gestión (derivados a legal y exitosos)
+WITH clientes_scope AS (
+    SELECT DISTINCT cod_cliente
+    FROM documentos_ciclo
+    WHERE cycle_id = 'CIC-YYYYMMDD-HHMM'
+    -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+)
 SELECT
-    resultado,
+    g.resultado,
     COUNT(*) AS cantidad
-FROM gestiones
-WHERE cycle_id = 'CIC-YYYYMMDD-HHMM'
-  AND resultado IN ('ESCALAR_LEGAL','EXITOSO','PROMESA_PAGO')
-GROUP BY resultado;
+FROM gestiones g
+INNER JOIN clientes_scope cs ON cs.cod_cliente = g.cliente_id
+WHERE g.cycle_id  = 'CIC-YYYYMMDD-HHMM'
+  AND g.resultado IN ('ESCALAR_LEGAL','EXITOSO','PROMESA_PAGO')
+GROUP BY g.resultado;
 -- PDF: legal = ESCALAR_LEGAL, exitosos = EXITOSO + PROMESA_PAGO
 
--- ⑨ Acuerdos de pago del ciclo (sección "Acuerdos de Pago" columna derecha)
+-- ⑨ Acuerdos de pago del ciclo
+WITH clientes_scope AS (
+    SELECT DISTINCT cod_cliente
+    FROM documentos_ciclo
+    WHERE cycle_id = 'CIC-YYYYMMDD-HHMM'
+    -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+)
 SELECT
-    COUNT(*)                                          AS acuerdos_firmados,
-    COUNT(*) FILTER (WHERE estado = 'ACTIVO')         AS acuerdos_activos,
-    ROUND(COALESCE(SUM(monto_total), 0)::NUMERIC, 2) AS monto_comprometido_sol
-FROM acuerdos_pago
-WHERE ciclo_id = 'CIC-YYYYMMDD-HHMM';   -- ← OJO: ciclo_id, NO cycle_id
+    COUNT(ap.id)                                              AS acuerdos_firmados,
+    COUNT(ap.id) FILTER (WHERE ap.estado = 'ACTIVO')          AS acuerdos_activos,
+    ROUND(COALESCE(SUM(ap.monto_total), 0)::NUMERIC, 2)       AS monto_comprometido_sol
+FROM acuerdos_pago ap
+INNER JOIN clientes_scope cs ON cs.cod_cliente = ap.cliente_id
+WHERE ap.ciclo_id = 'CIC-YYYYMMDD-HHMM';   -- ← OJO: ciclo_id, NO cycle_id
 
 -- ⑩ Cuotas cobradas de esos acuerdos
+WITH clientes_scope AS (
+    SELECT DISTINCT cod_cliente
+    FROM documentos_ciclo
+    WHERE cycle_id = 'CIC-YYYYMMDD-HHMM'
+    -- AND enviar_email = 'SI'   ← DESCOMENTAR para Cartera Activa
+)
 SELECT
     ROUND(COALESCE(SUM(ca.monto_cuota), 0)::NUMERIC, 2)  AS cuotas_pagadas_sol,
     COUNT(*)                                               AS cuotas_pagadas_count
 FROM cuotas_acuerdo ca
 INNER JOIN acuerdos_pago ap ON ca.acuerdo_id = ap.id
+INNER JOIN clientes_scope cs ON cs.cod_cliente = ap.cliente_id
 WHERE ap.ciclo_id = 'CIC-YYYYMMDD-HHMM'
   AND ca.estado   = 'PAGADA';
 
 
 -- ===========================================================================
--- RESUMEN EJECUTIVO — Todos los indicadores del informe en una sola vista
--- ===========================================================================
-
-WITH
--- Base aging
-docs_validos AS (
-    SELECT cod_cliente, saldo_real, moneda,
-           CAST(NULLIF(dias_mora, '') AS INTEGER) AS dias_mora
-    FROM documentos_ciclo
-    WHERE cycle_id   = 'CIC-YYYYMMDD-HHMM'
-      AND tipo_pedido NOT IN ('DSP','PAV')
-),
-cliente_mora AS (
-    SELECT cod_cliente,
-           MAX(dias_mora)                            AS mora_max,
-           SUM(saldo_real) FILTER (WHERE moneda NOT IN ('USD','US$','$','DOLARES','DÓLARES')) AS saldo_sol,
-           SUM(saldo_real) FILTER (WHERE moneda IN    ('USD','US$','$','DOLARES','DÓLARES'))  AS saldo_usd
-    FROM docs_validos
-    GROUP BY cod_cliente
-),
--- Acuerdos
-acuerdos AS (
-    SELECT ap.id, ap.monto_total, ap.estado
-    FROM acuerdos_pago ap
-    WHERE ap.ciclo_id = 'CIC-YYYYMMDD-HHMM'
-),
--- Cuotas cobradas
-cuotas AS (
-    SELECT COALESCE(SUM(ca.monto_cuota), 0) AS total_cobrado
-    FROM cuotas_acuerdo ca
-    INNER JOIN acuerdos a ON ca.acuerdo_id = a.id
-    WHERE ca.estado = 'PAGADA'
-),
--- Gestiones
-gest AS (
-    SELECT tipo_registro, tipo_gestion, resultado
-    FROM gestiones
-    WHERE cycle_id = 'CIC-YYYYMMDD-HHMM'
-)
-SELECT
-    -- === Sección A ===
-    ROUND(COALESCE(SUM(cm.saldo_sol), 0)::NUMERIC, 2)               AS "A1_cartera_total_sol",
-    ROUND(COALESCE(SUM(cm.saldo_usd), 0)::NUMERIC, 2)               AS "A1_cartera_total_usd",
-    COUNT(DISTINCT cm.cod_cliente)                                   AS "A1_clientes_activos",
-    ROUND((SELECT total_cobrado FROM cuotas)::NUMERIC, 2)            AS "A2_recuperado_sol",
-    ROUND(
-        GREATEST(
-            COALESCE(SUM(cm.saldo_sol), 0)
-            - (SELECT total_cobrado FROM cuotas), 0
-        )::NUMERIC, 2
-    )                                                                AS "A3_saldo_pendiente_sol",
-    (SELECT COUNT(*) FROM acuerdos WHERE estado = 'ACTIVO')          AS "A4_acuerdos_activos",
-    ROUND(COALESCE((SELECT SUM(monto_total) FROM acuerdos), 0)::NUMERIC, 2)
-                                                                     AS "A4_monto_acuerdos_sol",
-    -- === Sección D — Canales ===
-    COUNT(*) FILTER (
-        WHERE g.tipo_registro = 'ENVIO' AND g.tipo_gestion = 'WHATSAPP'
-    ) OVER ()                                                        AS "D_wa_envios",
-    COUNT(*) FILTER (
-        WHERE g.tipo_registro = 'ENVIO' AND g.tipo_gestion = 'EMAIL'
-    ) OVER ()                                                        AS "D_email_envios",
-    COUNT(*) FILTER (
-        WHERE g.tipo_gestion = 'LLAMADA'
-    ) OVER ()                                                        AS "D_llamadas",
-    COUNT(*) FILTER (
-        WHERE g.tipo_gestion = 'VISITA'
-    ) OVER ()                                                        AS "D_visitas",
-    COUNT(*) FILTER (
-        WHERE g.resultado = 'ESCALAR_LEGAL'
-    ) OVER ()                                                        AS "D_legal",
-    COUNT(*) FILTER (
-        WHERE g.resultado IN ('EXITOSO','PROMESA_PAGO')
-    ) OVER ()                                                        AS "D_exitosos"
-FROM cliente_mora cm, gest g
-GROUP BY g.tipo_registro, g.tipo_gestion, g.resultado
-LIMIT 1;
--- Si la consulta anterior falla por el CROSS JOIN, usar las queries individuales (① al ⑩).
--- Las queries individuales son más claras para validar valor a valor.
-
-
--- ===========================================================================
 -- DIAGNÓSTICO: tabla acuerdos_pago — verificar campo ciclo_id vs cycle_id
 -- ===========================================================================
--- TRAMPA CRÍTICA: la tabla acuerdos_pago usa 'ciclo_id' (NO 'cycle_id').
--- Si el ciclo no aparece aquí, verifica que el ciclo_id coincida exactamente.
 SELECT ciclo_id, estado, COUNT(*) AS cantidad, SUM(monto_total) AS monto_total
 FROM acuerdos_pago
 GROUP BY ciclo_id, estado
