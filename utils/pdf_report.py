@@ -1582,43 +1582,33 @@ class EstadoCuentaCliente:
         return story
 
     def _build_salutation(self) -> List:
-        """Bloque destinatario (tarjeta estilizada) + saludo + presente configurable."""
-        _tmpl      = self.settings.get("email_template", {})
-        raw_saludo = (_tmpl.get("pdf_saludo") or "Señores:").strip()
-        saludo_txt = raw_saludo.replace("{CLIENTE}", self.empresa).replace("{cliente}", self.empresa)
+        """Bloque destinatario premium (tipografía limpia) + saludo + presente."""
+        _tmpl        = self.settings.get("email_template", {})
+        raw_saludo   = (_tmpl.get("pdf_saludo") or "Estimado cliente,").strip()
+        saludo_txt   = raw_saludo.replace("{CLIENTE}", self.empresa).replace("{cliente}", self.empresa)
         pdf_presente = (_tmpl.get("pdf_presente") or "Presente.-").strip()
 
         story = []
 
-        # ── Tarjeta de destinatario con acento izquierdo ──────────────────────
-        lbl_rc = _style("EC_RcLbl", "Normal", fontSize=7, leading=9,
-                        textColor=C_MUTED, fontName=_F_BOLD, spaceAfter=1)
-        val_rc = _style("EC_RcNm",  "Normal", fontSize=11, leading=14,
-                        textColor=C_TEXT, fontName=_F_HEADING)
-        cod_rc = _style("EC_RcCod", "Normal", fontSize=8, leading=11,
-                        textColor=C_MUTED, fontName=_F_BODY)
+        # ── Identificación del destinatario — tipografía pura, sin cajas ──────
+        empresa_st = _style("EC_EmpB",  "Normal", fontSize=14, leading=18,
+                            textColor=C_PRIMARY, fontName=_F_HEADING)
+        cod_st     = _style("EC_CodB",  "Normal", fontSize=8.5, leading=12,
+                            textColor=C_MUTED, fontName=_F_BODY)
 
-        inner = [
-            Paragraph("DIRIGIDO A", lbl_rc),
-            Paragraph(self.empresa, val_rc),
-            Paragraph(f"Código de cliente: {self.cod_cliente}", cod_rc),
-        ]
-        # Franja azul izquierda + fondo claro
-        card = Table([[inner]], colWidths=[self._page_w])
-        card.setStyle(TableStyle([
-            ("BACKGROUND",    (0, 0), (-1, -1), C_LIGHT_ROW),
-            ("LINEBEFORE",    (0, 0), (-1, -1), 4, C_ACCENT),
-            ("TOPPADDING",    (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 14),
-            ("RIGHTPADDING",  (0, 0), (-1, -1), 14),
-            ("LINEBELOW",     (0, 0), (-1, -1), 0.5, C_BORDER),
-        ]))
-        story.append(card)
+        story.append(Paragraph(self.empresa, empresa_st))
+        story.append(Paragraph(f"Código de cliente: {self.cod_cliente}", cod_st))
+        story.append(_spacer(0.2))
+        # Línea de acento teal (2pt) — divide el destinatario del cuerpo de la carta
+        story.append(_hr(C_ACCENT, 2.0))
         story.append(_spacer(0.35))
-        story.append(Paragraph(saludo_txt, ST_BODY))
-        story.append(Paragraph(pdf_presente, ST_BODY))
-        story.append(_spacer(0.35))
+
+        # ── Saludo + Presente ─────────────────────────────────────────────────
+        saludo_st = _style("EC_Sal", "Normal", fontSize=9.5, leading=13,
+                           textColor=C_TEXT, fontName=_F_BODY)
+        story.append(Paragraph(saludo_txt, saludo_st))
+        story.append(Paragraph(pdf_presente, saludo_st))
+        story.append(_spacer(0.4))
         return story
 
     def _build_intro(self) -> List:
@@ -1855,6 +1845,7 @@ class EstadoCuentaCliente:
             return []
 
         story = []
+        story += _section_title("INFORMACIÓN DE PAGO", self._page_w)
         story.append(_spacer(0.15))
 
         hdr_st  = _style("EC_PayHdr", "Normal", fontSize=8, leading=10,
@@ -1940,11 +1931,22 @@ class EstadoCuentaCliente:
         story = []
         if not raw:
             return story
-        story.append(_hr(C_BORDER, 0.5))
-        story.append(_spacer(0.15))
-        for line in raw.split("\n"):
-            story.append(Paragraph(line or " ", ST_SMALL))
         story.append(_spacer(0.2))
+        # Caja sutil para el texto de cierre (evitar confusión con el cuerpo)
+        note_st = _style("EC_Note", "Normal", fontSize=7.5, leading=11,
+                         textColor=C_MUTED, fontName=_F_BODY)
+        lines = [Paragraph(line or " ", note_st) for line in raw.split("\n")]
+        box = Table([[lines]], colWidths=[self._page_w])
+        box.setStyle(TableStyle([
+            ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+            ("BACKGROUND",    (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+            ("TOPPADDING",    (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 12),
+        ]))
+        story.append(box)
+        story.append(_spacer(0.25))
         return story
 
     def _build_signature(self) -> List:

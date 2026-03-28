@@ -26,7 +26,7 @@ DEFAULT_SETTINGS = {
         # --- PDF: CABECERA ---
         "pdf_title": "ESTADO DE CUENTA",
         # --- PDF: CUERPO DE LA CARTA ---
-        "pdf_saludo": "Estimado cliente: {CLIENTE},",
+        "pdf_saludo": "Estimado cliente,",
         "pdf_presente": "Presente.-",
         "intro_text": (
             "Le informamos que a la fecha presenta documentos pendientes de pago.\n"
