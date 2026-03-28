@@ -130,16 +130,13 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
 
     # ── Logo ──────────────────────────────────────────────────────────────────
     has_logo = bool(branding_config.get("logo_path") or branding_config.get("logo_bytes"))
-    logo_block = ""
-    if has_logo:
-        logo_block = (
-            '<tr>'
-            f'<td style="padding:32px 48px 8px;text-align:center">'
-            f'<img src="cid:logo_dacta" width="180" alt="{html.escape(company_name)}"'
-            ' style="max-width:180px;height:auto;display:block;margin:0 auto">'
-            '</td>'
-            '</tr>'
-        )
+    logo_img = (
+        f'<img src="cid:logo_dacta" width="160" alt="{html.escape(company_name)}"'
+        ' style="max-width:160px;max-height:64px;height:auto;display:block;margin:0 auto">'
+        if has_logo else
+        f'<div style="font-size:22px;font-weight:700;color:#FFFFFF;'
+        f'letter-spacing:1px;font-family:Georgia,serif">{html.escape(company_name)}</div>'
+    )
 
     # ── Barra inferior empresa ────────────────────────────────────────────────
     company_parts = [html.escape(company_name)]
@@ -147,7 +144,7 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
         company_parts.append(f"RUC {html.escape(company_ruc)}")
     if phone:
         company_parts.append(html.escape(phone))
-    company_line = " &nbsp;|&nbsp; ".join(company_parts)
+    company_line = " &nbsp;&nbsp;·&nbsp;&nbsp; ".join(company_parts)
 
     # ── KPI rows del resumen de cuenta ────────────────────────────────────────
     def _kpi_row(label: str, amount: str, qty: str, show: bool = True) -> str:
@@ -155,12 +152,13 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
             return ""
         return (
             f'<tr>'
-            f'<td style="padding:10px 0 10px;color:#4A6785;font-size:13px;'
-            f'border-bottom:1px solid #E8EEF5;font-weight:500">{label}</td>'
-            f'<td style="padding:10px 0 10px;text-align:right;'
-            f'border-bottom:1px solid #E8EEF5">'
-            f'<span style="font-weight:700;font-size:15px;color:{primary_color}">{amount}</span>'
-            f'<br><span style="font-size:11px;color:#8AA5C0">{qty}</span>'
+            f'<td style="padding:12px 0;color:#4A5568;font-size:13px;'
+            f'border-bottom:1px solid #EDF2F7;font-weight:400;'
+            f'font-family:\'Helvetica Neue\',Arial,sans-serif">{label}</td>'
+            f'<td style="padding:12px 0;text-align:right;border-bottom:1px solid #EDF2F7">'
+            f'<span style="font-weight:700;font-size:16px;color:{primary_color};'
+            f'font-family:Georgia,serif">{amount}</span>'
+            f'<br><span style="font-size:11px;color:#A0AEC0;font-family:\'Helvetica Neue\',Arial,sans-serif">{qty}</span>'
             f'</td>'
             f'</tr>'
         )
@@ -182,17 +180,18 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
             numero = html.escape(c.get("numero", "").strip())
             cci    = html.escape(c.get("cci",    "").strip())
             items_html += (
-                f'<div style="margin-bottom:10px">'
-                f'<span style="font-weight:700;color:#102A43">{banco}:</span>'
-                f' <span style="color:#2A4A6B">{numero}</span>'
-                + (f'<br><span style="font-size:11px;color:#6B8CAE">CCI: {cci}</span>' if cci else "")
-                + '</div>'
+                f'<p style="margin:0 0 8px;font-size:13px;color:#2D3748;'
+                f'font-family:\'Helvetica Neue\',Arial,sans-serif">'
+                f'<span style="font-weight:600">{banco}:</span> {numero}'
+                + (f'<br><span style="font-size:11px;color:#718096">CCI: {cci}</span>' if cci else "")
+                + '</p>'
             )
         return (
             f'<td style="padding:20px 24px;vertical-align:top;width:50%">'
-            f'<div style="font-size:11px;font-weight:700;letter-spacing:.5px;'
-            f'color:{primary_color};text-transform:uppercase;margin-bottom:12px">{titulo}</div>'
-            f'<div style="font-size:13px;line-height:20px">{items_html}</div>'
+            f'<p style="margin:0 0 10px;font-size:10px;font-weight:700;letter-spacing:1px;'
+            f'color:{primary_color};text-transform:uppercase;'
+            f'font-family:\'Helvetica Neue\',Arial,sans-serif">{titulo}</p>'
+            f'{items_html}'
             f'</td>'
         )
 
@@ -208,45 +207,51 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
         if _contact_email or _contact_phone:
             parts = []
             if _contact_email:
-                parts.append(f"Vouchers: <strong>{_contact_email}</strong>")
+                parts.append(f"Envío de vouchers: <strong>{_contact_email}</strong>")
             if _contact_phone:
                 parts.append(f"Tel: {_contact_phone}")
             contact_row = (
-                f'<tr><td colspan="2" style="padding:12px 24px 16px;'
-                f'font-size:12px;color:#4A6785;border-top:1px solid #E8EEF5">'
+                f'<tr><td colspan="2" style="padding:4px 24px 16px;font-size:12px;'
+                f'color:#718096;border-top:1px solid #EDF2F7;'
+                f'font-family:\'Helvetica Neue\',Arial,sans-serif">'
                 + " &nbsp;&bull;&nbsp; ".join(parts)
                 + "</td></tr>"
             )
         if _voucher_raw:
             contact_row += (
-                f'<tr><td colspan="2" style="padding:0 24px 16px;'
-                f'font-size:12px;color:#4A6785;font-style:italic">'
+                f'<tr><td colspan="2" style="padding:0 24px 16px;font-size:12px;'
+                f'color:#718096;font-family:\'Helvetica Neue\',Arial,sans-serif">'
                 + _nl2br(_voucher_raw) + "</td></tr>"
             )
         cuentas_block = f"""
-        <!-- Cuentas bancarias -->
         <tr>
-          <td style="padding:0 40px 0">
+          <td style="padding:0 44px 0">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                   style="background:#F7FAFC;border:1px solid #D9E8F5;border-radius:6px;
-                          border-top:3px solid {primary_color}">
+                   style="border:1px solid #E2E8F0;border-top:3px solid {primary_color}">
               <tr>
-                <td colspan="2" style="padding:16px 24px 4px">
-                  <span style="font-size:11px;font-weight:700;letter-spacing:.5px;
-                               color:{primary_color};text-transform:uppercase">
+                <td colspan="2" style="padding:14px 24px 8px">
+                  <span style="font-size:10px;font-weight:700;letter-spacing:1px;
+                               color:{primary_color};text-transform:uppercase;
+                               font-family:'Helvetica Neue',Arial,sans-serif">
                     Datos para el Pago
                   </span>
                 </td>
               </tr>
               <tr>
                 {_col_sol}
-                {_col_usd if _col_usd else '<td></td>'}
+                {_col_usd if _col_usd else '<td style="width:50%"></td>'}
               </tr>
               {contact_row}
             </table>
           </td>
         </tr>
-        <tr><td style="height:28px;font-size:0">&nbsp;</td></tr>"""
+        <tr><td style="height:32px;font-size:0">&nbsp;</td></tr>"""
+
+    # ── Mes en español para el encabezado ─────────────────────────────────────
+    _MESES = ["enero","febrero","marzo","abril","mayo","junio",
+              "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+    _now = datetime.now()
+    fecha_larga = f"{_now.day} de {_MESES[_now.month-1]} de {_now.year}"
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -255,63 +260,75 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Estado de Cuenta</title>
 </head>
-<body style="margin:0;padding:0;background:#F0F4F8;font-family:'Helvetica Neue',Arial,sans-serif">
+<body style="margin:0;padding:0;background:#E8ECF1;
+             font-family:'Helvetica Neue',Helvetica,Arial,sans-serif">
+
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
   <tr>
-    <td style="padding:32px 16px">
-      <table role="presentation" width="620" align="center" cellspacing="0" cellpadding="0" border="0"
-             style="max-width:620px;margin:0 auto;background:#FFFFFF;border-radius:8px;
-                    overflow:hidden;box-shadow:0 4px 20px rgba(13,59,102,.10)">
+    <td align="center" style="padding:36px 16px 48px">
 
-        <!-- Banda corporativa superior -->
+      <!-- ╔═══════════════ CARD 600px ═══════════════╗ -->
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0"
+             style="max-width:600px;width:100%;background:#FFFFFF;
+                    box-shadow:0 2px 4px rgba(0,0,0,.06),0 12px 40px rgba(0,0,0,.10)">
+
+        <!-- ── HEADER CORPORATIVO ─────────────────────────────────────── -->
         <tr>
-          <td style="background:{primary_color};height:5px;font-size:0;line-height:0">&nbsp;</td>
-        </tr>
+          <td align="center"
+              style="background:{primary_color};padding:36px 48px 32px">
 
-        {logo_block}
+            <!-- Logo o nombre empresa -->
+            {logo_img}
 
-        <!-- Título y fecha -->
-        <tr>
-          <td style="padding:{'' if has_logo else '36px '}0 0 48px">
-            {'<div style="height:20px"></div>' if has_logo else ''}
-            <div style="font-size:20px;font-weight:700;color:#0D2340;letter-spacing:-.3px">
+            <!-- Separador decorativo -->
+            <div style="width:48px;height:1px;background:rgba(255,255,255,.35);
+                        margin:24px auto 20px"></div>
+
+            <!-- Título principal -->
+            <div style="font-family:Georgia,'Times New Roman',serif;
+                        font-size:26px;font-weight:400;font-style:normal;
+                        color:#FFFFFF;letter-spacing:3px;text-transform:uppercase;
+                        line-height:1.2;margin-bottom:8px">
               Estado de Cuenta
             </div>
-            <div style="font-size:13px;color:#8AA5C0;margin-top:4px">Al {fecha_str}</div>
+
+            <!-- Fecha -->
+            <div style="font-family:'Helvetica Neue',Arial,sans-serif;
+                        font-size:12px;color:rgba(255,255,255,.60);
+                        letter-spacing:1px;text-transform:uppercase">
+              Al {fecha_larga}
+            </div>
+
           </td>
         </tr>
 
-        <!-- Separador -->
+        <!-- ── CUERPO DEL MENSAJE ─────────────────────────────────────── -->
         <tr>
-          <td style="padding:20px 48px 0">
-            <div style="height:1px;background:#E8EEF5"></div>
-          </td>
-        </tr>
-
-        <!-- Cuerpo del mensaje -->
-        <tr>
-          <td style="padding:24px 48px 0">
-            <p style="margin:0;font-size:14px;line-height:24px;color:#3D5A80">
+          <td align="center" style="padding:40px 52px 0">
+            <p style="margin:0;font-size:15px;line-height:27px;
+                      color:#4A5568;text-align:center;
+                      font-family:'Helvetica Neue',Arial,sans-serif">
               {body_html}
             </p>
           </td>
         </tr>
 
-        <!-- Resumen financiero -->
+        <!-- ── RESUMEN FINANCIERO ─────────────────────────────────────── -->
         <tr>
-          <td style="padding:24px 48px 0">
+          <td style="padding:32px 44px 0">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                   style="background:#F5F9FF;border-radius:6px;border-left:4px solid {primary_color}">
+                   style="border:1px solid #E2E8F0;border-top:3px solid {primary_color}">
               <tr>
-                <td style="padding:16px 20px 6px">
-                  <span style="font-size:10px;font-weight:700;letter-spacing:.8px;
-                               color:{primary_color};text-transform:uppercase">
+                <td style="padding:16px 24px 8px">
+                  <span style="font-size:10px;font-weight:700;letter-spacing:1px;
+                               color:{primary_color};text-transform:uppercase;
+                               font-family:'Helvetica Neue',Arial,sans-serif">
                     Resumen de Cuenta
                   </span>
                 </td>
               </tr>
               <tr>
-                <td style="padding:0 20px 16px">
+                <td style="padding:0 24px 16px">
                   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                     {resumen_rows}
                   </table>
@@ -321,14 +338,17 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
           </td>
         </tr>
 
-        <!-- Aviso PDF adjunto -->
+        <!-- ── AVISO PDF ADJUNTO ──────────────────────────────────────── -->
         <tr>
-          <td style="padding:20px 48px 0">
+          <td style="padding:20px 44px 0">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                   style="background:#FAFBFC;border:1px dashed #C8D8EC;border-radius:5px">
+                   style="border:1px dashed #CBD5E0;background:#F7FAFC">
               <tr>
-                <td style="padding:12px 18px;font-size:12px;color:#5A7A9A;line-height:19px">
-                  <strong style="color:#0D2340">&#128206; Estado de Cuenta adjunto en PDF</strong><br>
+                <td style="padding:14px 20px;font-size:13px;color:#718096;line-height:20px;
+                           font-family:'Helvetica Neue',Arial,sans-serif">
+                  <strong style="color:#2D3748;font-size:13px">
+                    &#128206; Estado de Cuenta adjunto en PDF
+                  </strong><br>
                   El documento adjunto incluye el detalle completo de sus facturas pendientes.
                   Puede abrirlo, imprimirlo o archivarlo para su registro.
                 </td>
@@ -337,38 +357,50 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
           </td>
         </tr>
 
-        <!-- Espaciado -->
-        <tr><td style="height:28px;font-size:0">&nbsp;</td></tr>
+        <!-- ── ESPACIADO ──────────────────────────────────────────────── -->
+        <tr><td style="height:32px;font-size:0;line-height:0">&nbsp;</td></tr>
 
         {cuentas_block}
 
-        <!-- Separador -->
+        <!-- ── SEPARADOR ─────────────────────────────────────────────── -->
         <tr>
-          <td style="padding:0 48px">
-            <div style="height:1px;background:#E8EEF5"></div>
+          <td style="padding:0 44px">
+            <div style="height:1px;background:#EDF2F7"></div>
           </td>
         </tr>
 
-        <!-- Pie de página y firma -->
+        <!-- ── PIE Y FIRMA ────────────────────────────────────────────── -->
         <tr>
-          <td style="padding:20px 48px 28px;font-size:13px;line-height:21px;color:#5A7A9A">
-            <p style="margin:0 0 16px">{footer_html}</p>
-            <p style="margin:0;color:#0D2340;font-weight:600">{firma_cargo}</p>
+          <td style="padding:24px 52px 32px;
+                     font-family:'Helvetica Neue',Arial,sans-serif">
+            <p style="margin:0 0 20px;font-size:13px;line-height:22px;color:#718096">
+              {footer_html}
+            </p>
+            <p style="margin:0;font-size:13px;font-weight:600;
+                      color:#2D3748;letter-spacing:.2px">
+              {firma_cargo}
+            </p>
           </td>
         </tr>
 
-        <!-- Barra empresa footer -->
+        <!-- ── FOOTER EMPRESA ─────────────────────────────────────────── -->
         <tr>
-          <td style="background:{primary_color};padding:14px 48px;font-size:11px;
-                     color:rgba(255,255,255,.70);text-align:center;letter-spacing:.2px">
+          <td align="center"
+              style="background:{primary_color};padding:16px 48px;
+                     font-size:11px;color:rgba(255,255,255,.55);
+                     letter-spacing:.5px;text-transform:uppercase;
+                     font-family:'Helvetica Neue',Arial,sans-serif">
             {company_line}
           </td>
         </tr>
 
       </table>
+      <!-- ╚═══════════════════════════════════════════════╝ -->
+
     </td>
   </tr>
 </table>
+
 </body>
 </html>"""
 
