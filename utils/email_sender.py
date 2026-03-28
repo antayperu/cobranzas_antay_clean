@@ -134,7 +134,7 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
         f'<img src="cid:logo_dacta" width="160" alt="{html.escape(company_name)}"'
         ' style="max-width:160px;max-height:64px;height:auto;display:block;margin:0 auto">'
         if has_logo else
-        f'<div style="font-size:22px;font-weight:700;color:#FFFFFF;'
+        f'<div style="font-size:20px;font-weight:700;color:{primary_color};'
         f'letter-spacing:1px;font-family:Georgia,serif">{html.escape(company_name)}</div>'
     )
 
@@ -272,21 +272,27 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
              style="max-width:600px;width:100%;background:#FFFFFF;
                     box-shadow:0 2px 4px rgba(0,0,0,.06),0 12px 40px rgba(0,0,0,.10)">
 
-        <!-- ── HEADER CORPORATIVO ─────────────────────────────────────── -->
+        <!-- ── LOGO (fondo blanco — siempre visible) ─────────────────── -->
         <tr>
           <td align="center"
-              style="background:{primary_color};padding:36px 48px 32px">
-
-            <!-- Logo o nombre empresa -->
+              style="background:#FFFFFF;padding:28px 48px 24px;
+                     border-bottom:1px solid #E2E8F0">
             {logo_img}
+          </td>
+        </tr>
+
+        <!-- ── HEADER CORPORATIVO (título + fecha) ──────────────────── -->
+        <tr>
+          <td align="center"
+              style="background:{primary_color};padding:28px 48px 26px">
 
             <!-- Separador decorativo -->
-            <div style="width:48px;height:1px;background:rgba(255,255,255,.35);
-                        margin:24px auto 20px"></div>
+            <div style="width:40px;height:1px;background:rgba(255,255,255,.30);
+                        margin:0 auto 18px"></div>
 
             <!-- Título principal -->
             <div style="font-family:Georgia,'Times New Roman',serif;
-                        font-size:26px;font-weight:400;font-style:normal;
+                        font-size:24px;font-weight:400;font-style:normal;
                         color:#FFFFFF;letter-spacing:3px;text-transform:uppercase;
                         line-height:1.2;margin-bottom:8px">
               Estado de Cuenta
@@ -294,8 +300,8 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
 
             <!-- Fecha -->
             <div style="font-family:'Helvetica Neue',Arial,sans-serif;
-                        font-size:12px;color:rgba(255,255,255,.60);
-                        letter-spacing:1px;text-transform:uppercase">
+                        font-size:11px;color:rgba(255,255,255,.60);
+                        letter-spacing:1.5px;text-transform:uppercase">
               Al {fecha_larga}
             </div>
 
