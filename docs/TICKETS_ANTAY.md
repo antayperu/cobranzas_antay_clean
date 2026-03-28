@@ -8,8 +8,8 @@
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
 | **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 062 |
-| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 062 |
-| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 002 |
+| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 071 |
+| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 003 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
 | **RC-TECH** | Deuda técnica | Estandarización de esquema, nomenclatura, contratos internos. | 001 |
@@ -108,6 +108,19 @@
 | **RC-BUG-053** | **Fix duplicados en historial al navegar entre sub-tabs WA — deduplicar por (CodCliente, Tipo)** | **P0** (Crítico) | **Done** | Antigravity | 2026-03-16 |
 | **RC-BUG-059** | **Fix tasa de recuperación Dashboard — denominador clientes únicos del funnel, no KPIs período** | **P0** (Crítico) | **Done** | Antigravity | 2026-03-23 |
 | **RC-FEAT-060** | **Dashboard: Cobertura/Intensidad/Resultados — funnel jerárquico, último resultado por cliente, Top Clientes 7 mejoras UX** | **P1** (Alto) | **Done** | Antigravity | 2026-03-23 |
+| **RC-UX-003** | **Filtro Cartera Activa / Cartera General en Informe Gerencial — selector scope en panel PDF** | **P1** (Alto) | **Done** | Claude | 2026-03-24 |
+| **RC-BUG-063** | **Fix SMTP leía session_state incorrecto — ahora usa config['smtp_config'] del Tab Configuración** | **P0** (Critico) | **Done** | Claude | 2026-03-24 |
+| **RC-BUG-064** | **Fix Footer y portada del PDF usaban empresa hardcodeada — ahora usa self.empresa** | **P1** (Alto) | **Done** | Claude | 2026-03-24 |
+| **RC-BUG-065** | **Fix Credenciales SMTP se perdían en cada refresco de Streamlit** | **P0** (Critico) | **Done** | Claude | 2026-03-24 |
+| **RC-BUG-066** | **Fix prev_cycle_id leído desde Supabase en lugar de session_state** | **P0** (Critico) | **Done** | Claude | 2026-03-24 |
+| **RC-BUG-067** | **Fix Lazy reconciliation en get_recovery_stats() — genera resumen si no existe** | **P0** (Critico) | **Done** | Claude | 2026-03-24 |
+| **RC-BUG-068** | **Fix Gestiones y acuerdos del Informe filtrados por scope activa/general** | **P0** (Critico) | **Done** | Claude | 2026-03-24 |
+| **RC-BUG-069** | **Fix Recovery y título del PDF respetan scope seleccionado (activa/general)** | **P0** (Critico) | **Done** | Claude | 2026-03-24 |
+| **RC-BUG-071** | **Fix Rediseño Semáforo Ejecutivo con AR Roll Forward — corrige doble sustracción en SALDO PENDIENTE** | **P0** (Critico) | **Done** | Claude | 2026-03-28 |
+| **RC-FEAT-027** | **Selección automática de plantilla WA según tramo de Aging del cliente** | **P1** (Alto) | **Backlog** | - | - |
+| **RC-FEAT-028** | **KPIs Expandidos de Efectividad de Cobranza en Dashboard** | **P1** (Alto) | **Backlog** | - | - |
+| **RC-FEAT-029** | **Registro de Pagos en Tiempo Real (sin esperar sincronización ERP)** | **P1** (Alto) | **Backlog** | - | - |
+| **RC-FEAT-030** | **Dashboard de Efectividad de Cobranza (analytics 7/15/30 días)** | **P1** (Alto) | **Backlog** | - | - |
 
 ---
 
