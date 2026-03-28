@@ -10,7 +10,7 @@
 
 **Proyecto:** ReporteCobranzas v1.7.3 | Antay Fábrica de Software
 **Product Owner:** Camilo Ortega F.R.
-**Rama activa:** `dev` | **Tag producción:** `v1.6.0` (141/141 tests)
+**Rama activa:** `dev` | **Tag producción:** `v2.1.0` (162/162 tests)
 **FRD maestro:** `docs/FRD_REPORTECOBRANZAS_v2.0.md`
 
 ---
