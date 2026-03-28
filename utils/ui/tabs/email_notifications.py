@@ -308,13 +308,13 @@ def render_tab(df_final, df_filtered, config):
                             components.html(cover_html, height=580, scrolling=True)
                         with tab_pdf:
                             if pdf_preview_b64:
-                                # PDF.js — renderiza PDF como canvas directo.
-                                # <embed>/<object> con PDF están bloqueados en iframes
-                                # sandboxed de Chromium; PDF.js no usa el plugin del
-                                # navegador y funciona en cualquier contexto.
+                                # PDF.js — renderiza PDF como canvas.
+                                # Fix: blob-worker trick para evitar el bloqueo de
+                                # workers cross-origin en iframes sandboxed de Chromium.
+                                # cMapUrl necesario para decodificar fonts TrueType embebidos.
+                                _CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174"
                                 pdf_js_html = f"""<!DOCTYPE html>
-<html>
-<head>
+<html><head>
 <meta charset="utf-8">
 <style>
   *{{margin:0;padding:0;box-sizing:border-box}}
@@ -328,49 +328,75 @@ def render_tab(df_final, df_filtered, config):
     font-family:sans-serif;
     overflow-y:auto;
   }}
-  canvas{{
-    display:block;
-    max-width:100%;
-    box-shadow:0 3px 16px rgba(0,0,0,.45);
-    background:#fff;
-  }}
-  #pdfjs-msg{{color:#ccc;font-size:13px;padding:40px 0;letter-spacing:.03em}}
+  canvas{{display:block;max-width:100%;box-shadow:0 3px 16px rgba(0,0,0,.45);background:#fff}}
+  #msg{{color:#ccc;font-size:13px;padding:40px 0;text-align:center;letter-spacing:.02em}}
 </style>
 </head>
 <body>
-<div id="pdfjs-msg">⏳ Cargando PDF…</div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
-  crossorigin="anonymous"></script>
+<div id="msg">⏳ Cargando vista previa…</div>
+<script src="{_CDN}/pdf.min.js" crossorigin="anonymous"></script>
 <script>
 (function(){{
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  var b64="{pdf_preview_b64}";
-  var raw=atob(b64), buf=new Uint8Array(raw.length);
-  for(var i=0;i<raw.length;i++) buf[i]=raw.charCodeAt(i);
-  pdfjsLib.getDocument({{data:buf}}).promise.then(function(pdf){{
-    document.getElementById('pdfjs-msg').remove();
-    var scale=Math.min(1.55,(window.innerWidth-28)/595);
-    function renderPage(n){{
-      pdf.getPage(n).then(function(page){{
-        var vp=page.getViewport({{scale:scale}});
-        var c=document.createElement('canvas');
-        c.width=vp.width; c.height=vp.height;
-        document.body.appendChild(c);
-        page.render({{canvasContext:c.getContext('2d'),viewport:vp}});
-        if(n<pdf.numPages) renderPage(n+1);
+  // Blob-worker: evita bloqueo cross-origin en iframe sandboxed de Chromium
+  var WORKER = '{_CDN}/pdf.worker.min.js';
+  try {{
+    var blob = new Blob(
+      ['importScripts("' + WORKER + '");'],
+      {{type:'application/javascript'}}
+    );
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+  }} catch(e) {{
+    pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER;
+  }}
+
+  var b64 = "{pdf_preview_b64}";
+  var raw = atob(b64), buf = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
+
+  pdfjsLib.getDocument({{
+    data: buf,
+    cMapUrl: '{_CDN}/cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: '{_CDN}/standard_fonts/',
+  }}).promise.then(function(pdf) {{
+    document.getElementById('msg').remove();
+    var scale = Math.min(1.55, (window.innerWidth - 28) / 595);
+    function renderPage(n) {{
+      pdf.getPage(n).then(function(page) {{
+        var vp = page.getViewport({{scale: scale}});
+        var canvas = document.createElement('canvas');
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        document.body.appendChild(canvas);
+        return page.render({{
+          canvasContext: canvas.getContext('2d'),
+          viewport: vp,
+        }}).promise;
+      }}).then(function() {{
+        if (n < pdf.numPages) renderPage(n + 1);
       }});
     }}
     renderPage(1);
-  }}).catch(function(e){{
-    var m=document.getElementById('pdfjs-msg');
-    m.style.color='#ff8a8a';
-    m.textContent='Error al renderizar: '+e.message;
+  }}).catch(function(e) {{
+    var m = document.getElementById('msg');
+    m.style.color = '#ff8080';
+    m.innerHTML = '⚠️ No se pudo renderizar el PDF.<br><small>' + e.message + '</small>';
   }});
 }})();
 </script>
 </body></html>"""
                                 components.html(pdf_js_html, height=820, scrolling=True)
+                                # Botón de descarga — siempre disponible como alternativa
+                                _slug = "".join(c for c in info_sel['empresa'][:18]
+                                                if c.isalnum() or c in " -_").strip().replace(" ","_")
+                                st.download_button(
+                                    label="⬇️ Descargar PDF",
+                                    data=pdf_bytes_prev,
+                                    file_name=f"EstadoCuenta_{_slug}_{cycle_id_prev}.pdf",
+                                    mime="application/pdf",
+                                    key=f"dl_pdf_prev_{info_sel['cod']}",
+                                    use_container_width=True,
+                                )
                             else:
                                 st.info("Vista previa del PDF no disponible.")
                 
