@@ -1582,21 +1582,42 @@ class EstadoCuentaCliente:
         return story
 
     def _build_salutation(self) -> List:
-        """Lima, fecha  +  Saludo configurable / Empresa / Código / Presente.-"""
-        _tmpl     = self.settings.get("email_template", {})
+        """Bloque destinatario (tarjeta estilizada) + saludo + presente configurable."""
+        _tmpl      = self.settings.get("email_template", {})
         raw_saludo = (_tmpl.get("pdf_saludo") or "Señores:").strip()
         saludo_txt = raw_saludo.replace("{CLIENTE}", self.empresa).replace("{cliente}", self.empresa)
+        pdf_presente = (_tmpl.get("pdf_presente") or "Presente.-").strip()
+
         story = []
-        story.append(Paragraph(self._fecha_larga(), ST_BODY))
-        story.append(_spacer(0.30))
+
+        # ── Tarjeta de destinatario con acento izquierdo ──────────────────────
+        lbl_rc = _style("EC_RcLbl", "Normal", fontSize=7, leading=9,
+                        textColor=C_MUTED, fontName=_F_BOLD, spaceAfter=1)
+        val_rc = _style("EC_RcNm",  "Normal", fontSize=11, leading=14,
+                        textColor=C_TEXT, fontName=_F_HEADING)
+        cod_rc = _style("EC_RcCod", "Normal", fontSize=8, leading=11,
+                        textColor=C_MUTED, fontName=_F_BODY)
+
+        inner = [
+            Paragraph("DIRIGIDO A", lbl_rc),
+            Paragraph(self.empresa, val_rc),
+            Paragraph(f"Código de cliente: {self.cod_cliente}", cod_rc),
+        ]
+        # Franja azul izquierda + fondo claro
+        card = Table([[inner]], colWidths=[self._page_w])
+        card.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), C_LIGHT_ROW),
+            ("LINEBEFORE",    (0, 0), (-1, -1), 4, C_ACCENT),
+            ("TOPPADDING",    (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 14),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 14),
+            ("LINEBELOW",     (0, 0), (-1, -1), 0.5, C_BORDER),
+        ]))
+        story.append(card)
+        story.append(_spacer(0.35))
         story.append(Paragraph(saludo_txt, ST_BODY))
-        story.append(Paragraph(
-            f"<b>{self.empresa}</b>",
-            _style("EC_EmpNm", "Normal", fontSize=11, leading=14,
-                   textColor=C_TEXT, fontName=_F_HEADING),
-        ))
-        story.append(Paragraph(f"Código de cliente: {self.cod_cliente}", ST_BODY))
-        story.append(Paragraph("Presente.-", ST_BODY))
+        story.append(Paragraph(pdf_presente, ST_BODY))
         story.append(_spacer(0.35))
         return story
 
@@ -1927,16 +1948,19 @@ class EstadoCuentaCliente:
         return story
 
     def _build_signature(self) -> List:
-        """Atentamente + cargo configurable + datos empresa."""
-        company    = self.settings.get("company_name", "DACTA S.A.C.")
-        ruc        = self.settings.get("company_ruc", "")
-        phone      = self.settings.get("phone_contact", "")
-        _tmpl      = self.settings.get("email_template", {})
-        firma_cargo = (_tmpl.get("firma_cargo") or "Area de Cobranzas y Facturacion").strip()
-        story   = []
-        story.append(_spacer(0.2))
-        story.append(Paragraph("Atentamente,", ST_BODY))
-        story.append(_spacer(0.15))
+        """Frase de despedida configurable + cargo + datos empresa."""
+        company         = self.settings.get("company_name", "DACTA S.A.C.")
+        ruc             = self.settings.get("company_ruc", "")
+        phone           = self.settings.get("phone_contact", "")
+        _tmpl           = self.settings.get("email_template", {})
+        firma_cargo     = (_tmpl.get("firma_cargo")     or "Area de Cobranzas y Facturacion").strip()
+        pdf_atentamente = (_tmpl.get("pdf_atentamente") or "Atentamente,").strip()
+
+        story = []
+        story.append(_hr(C_BORDER, 0.5))
+        story.append(_spacer(0.25))
+        story.append(Paragraph(pdf_atentamente, ST_BODY))
+        story.append(_spacer(0.5))   # espacio para firma manual
         story.append(Paragraph(firma_cargo, ST_BODY_BOLD))
         footer_line = company
         if ruc:
@@ -1947,13 +1971,27 @@ class EstadoCuentaCliente:
         return story
 
     def _add_page_footer(self, canvas_obj: Any, doc: Any) -> None:
-        """Ref: CYCLE_ID · fecha  (izq)  ·  Pág. N  (der)."""
+        """Línea decorativa + Ref (izq) · Empresa (centro) · Pág. N (der)."""
         canvas_obj.saveState()
-        y = 0.9 * cm
+        page_w = A4[0]
+        y_line = 1.15 * cm
+        y_text = 0.65 * cm
+
+        # Línea separadora tenue
+        canvas_obj.setStrokeColor(C_BORDER)
+        canvas_obj.setLineWidth(0.5)
+        canvas_obj.line(2 * cm, y_line, page_w - 2 * cm, y_line)
+
+        company = self.settings.get("company_name", "DACTA S.A.C.")
+        ruc     = self.settings.get("company_ruc", "")
+        center_txt = company + (f" · RUC: {ruc}" if ruc else "")
+
         canvas_obj.setFont(_F_BODY, 6.5)
         canvas_obj.setFillColor(C_MUTED)
-        canvas_obj.drawString(2 * cm, y, f"Ref: {self.cycle_id} · {self._now.strftime('%d/%m/%Y')}")
-        canvas_obj.drawRightString(A4[0] - 2 * cm, y, f"Pág. {doc.page}")
+        canvas_obj.drawString(2 * cm, y_text,
+                              f"Ref: {self.cycle_id} · {self._now.strftime('%d/%m/%Y')}")
+        canvas_obj.drawCentredString(page_w / 2, y_text, center_txt)
+        canvas_obj.drawRightString(page_w - 2 * cm, y_text, f"Pág. {doc.page}")
         canvas_obj.restoreState()
 
 

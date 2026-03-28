@@ -27,6 +27,7 @@ DEFAULT_SETTINGS = {
         "pdf_title": "ESTADO DE CUENTA",
         # --- PDF: CUERPO DE LA CARTA ---
         "pdf_saludo": "Estimado cliente: {CLIENTE},",
+        "pdf_presente": "Presente.-",
         "intro_text": (
             "Le informamos que a la fecha presenta documentos pendientes de pago.\n"
             "Agradeceremos gestionar la cancelacion para mantener su servicio activo y evitar inconvenientes."
@@ -48,9 +49,9 @@ DEFAULT_SETTINGS = {
         "voucher_text": "",    # Instrucciones adicionales de pago
         # --- PIE Y FIRMA ---
         "footer_text": (
-            "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje.\n\n"
-            "Atentamente,\nArea de Cobranzas y Facturacion"
+            "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje."
         ),
+        "pdf_atentamente": "Atentamente,",
         "firma_cargo": "Area de Cobranzas y Facturacion",
     },
     "smtp_config": {

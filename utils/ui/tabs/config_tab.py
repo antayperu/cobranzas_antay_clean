@@ -538,6 +538,12 @@ def render_tab(config):
                 help="Primera línea de la carta. Usa {CLIENTE} para personalizar.",
                 key="planta_pdf_saludo"
             )
+            new_pdf_presente = st.text_input(
+                "Línea 'Presente'",
+                value=_tmpl.get("pdf_presente", "Presente.-"),
+                help='Línea formal después del saludo. Ejemplo: "Presente.-" o "De mi mayor consideración:"',
+                key="planta_pdf_presente"
+            )
             new_intro = st.text_area(
                 "Texto introductorio",
                 value=_tmpl.get("intro_text", ""),
@@ -621,6 +627,12 @@ def render_tab(config):
                 help='Incluye siempre: "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje."',
                 key="planta_footer"
             )
+            new_pdf_atentamente = st.text_input(
+                "Frase de despedida",
+                value=_tmpl.get("pdf_atentamente", "Atentamente,"),
+                help='Frase antes de la firma. Ejemplo: "Atentamente," o "Cordialmente,"',
+                key="planta_pdf_atentamente"
+            )
             new_firma_cargo = st.text_input(
                 "Cargo para la firma",
                 value=_tmpl.get("firma_cargo", "Area de Cobranzas y Facturacion"),
@@ -653,6 +665,7 @@ def render_tab(config):
                 "pdf_title":       new_pdf_title.strip(),
                 # PDF cuerpo
                 "pdf_saludo":      new_pdf_saludo.strip(),
+                "pdf_presente":    new_pdf_presente.strip(),
                 "intro_text":      new_intro,
                 # Alerta
                 "alert_text":      new_alert,
@@ -664,6 +677,7 @@ def render_tab(config):
                 "voucher_text":    new_voucher,
                 # Pie y firma
                 "footer_text":     new_footer,
+                "pdf_atentamente": new_pdf_atentamente.strip(),
                 "firma_cargo":     new_firma_cargo.strip(),
             }
 
