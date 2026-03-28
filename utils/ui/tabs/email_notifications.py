@@ -10,6 +10,7 @@ import utils.helpers as helpers
 import utils.ui.styles as styles
 import utils.db_manager as dbm
 import utils.storage_manager as storage_mgr
+from utils.pdf_report import EstadoCuentaCliente
 
 
 def _resolve_runtime_logo(config):
@@ -263,48 +264,141 @@ def render_tab(df_final, df_filtered, config):
         st.markdown("---")
         
         with c_mail2:
-            st.markdown("##### Vista Previa (HTML)")
-            
+            st.markdown("##### Vista Previa")
+
             if sel_emails:
-                # Definir ruta de logo (Storage-aware).
                 logo_path = _resolve_runtime_logo(config)
-                # Convertir imagen a base64 para el preview en iframe
-                
+                cycle_id_prev = st.session_state.get('cycle_id', 'CIC-PREVIEW')
+
                 for selected_label in sel_emails:
-                    info_sel = email_map[selected_label]
-                    # FIX E2E: Usar df_email_view (vista filtrada) en lugar de df_final (dataset completo)
-                    # para que la Vista Previa HTML muestre los mismos documentos que el Reporte General filtrado
+                    info_sel      = email_map[selected_label]
                     docs_cli_mail = df_email_view[df_email_view['COD CLIENTE'] == info_sel['cod']]
-                    
-                    mask_soles_prev = docs_cli_mail['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
-                    totales_s = docs_cli_mail[mask_soles_prev]['SALDO REAL'].sum()
-                    totales_d = docs_cli_mail[~mask_soles_prev]['SALDO REAL'].sum()
-                    
-                    txt_s = f"S/ {totales_s:,.2f}" if totales_s > 0 else ""
-                    txt_d = f"$ {totales_d:,.2f}" if totales_d > 0 else ""
-                    
-                    # Generar HTML (cid)
-                    preview_html_cid = es.generate_premium_email_body_cid(
-                        info_sel['empresa'],
-                        docs_cli_mail,
-                        txt_s,
-                        txt_d,
-                        config
+
+                    # ── Email cover (portada) ─────────────────────────────
+                    cover_html = es.generate_cover_email_html(
+                        info_sel['empresa'], docs_cli_mail, cycle_id_prev, config
                     )
-                    
-                    # Convertir imagen a base64 para el preview en iframe
-                    preview_html_view = preview_html_cid
                     if logo_path:
                         try:
-                            with open(logo_path, "rb") as image_file:
-                                    encoded_string = base64.b64encode(image_file.read()).decode()
-                            src_base64 = f"data:image/png;base64,{encoded_string}"
-                            preview_html_view = preview_html_cid.replace("cid:logo_dacta", src_base64)
-                        except:
-                            pass # Fallback (mostrará alt text)
-                    
+                            with open(logo_path, "rb") as f:
+                                enc = base64.b64encode(f.read()).decode()
+                            cover_html = cover_html.replace("cid:logo_dacta",
+                                                            f"data:image/png;base64,{enc}")
+                        except Exception:
+                            pass
+
+                    # ── PDF adjunto (preview inline) ──────────────────────
+                    pdf_preview_b64 = None
+                    try:
+                        pdf_bytes_prev = EstadoCuentaCliente(
+                            empresa=info_sel['empresa'],
+                            cod_cliente=info_sel['cod'],
+                            cycle_id=cycle_id_prev,
+                            docs_df=docs_cli_mail,
+                            settings=config,
+                            logo_path=logo_path,
+                        ).generate()
+                        pdf_preview_b64 = base64.b64encode(pdf_bytes_prev).decode()
+                    except Exception as e_prev:
+                        st.warning(f"⚠️ Preview PDF no disponible para {info_sel['empresa']}: {e_prev}")
+
                     with st.expander(f"✉️ {info_sel['empresa']}", expanded=False):
-                        components.html(preview_html_view, height=600, scrolling=True)
+                        tab_email, tab_pdf = st.tabs(["📧 Email (portada)", "📄 PDF adjunto"])
+                        with tab_email:
+                            components.html(cover_html, height=580, scrolling=True)
+                        with tab_pdf:
+                            if pdf_preview_b64:
+                                # PDF.js — renderiza PDF como canvas.
+                                # Fix: blob-worker trick para evitar el bloqueo de
+                                # workers cross-origin en iframes sandboxed de Chromium.
+                                # cMapUrl necesario para decodificar fonts TrueType embebidos.
+                                _CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174"
+                                pdf_js_html = f"""<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box}}
+  body{{
+    background:#525659;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:14px 10px;
+    gap:10px;
+    font-family:sans-serif;
+    overflow-y:auto;
+  }}
+  canvas{{display:block;max-width:100%;box-shadow:0 3px 16px rgba(0,0,0,.45);background:#fff}}
+  #msg{{color:#ccc;font-size:13px;padding:40px 0;text-align:center;letter-spacing:.02em}}
+</style>
+</head>
+<body>
+<div id="msg">⏳ Cargando vista previa…</div>
+<script src="{_CDN}/pdf.min.js" crossorigin="anonymous"></script>
+<script>
+(function(){{
+  // Blob-worker: evita bloqueo cross-origin en iframe sandboxed de Chromium
+  var WORKER = '{_CDN}/pdf.worker.min.js';
+  try {{
+    var blob = new Blob(
+      ['importScripts("' + WORKER + '");'],
+      {{type:'application/javascript'}}
+    );
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+  }} catch(e) {{
+    pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER;
+  }}
+
+  var b64 = "{pdf_preview_b64}";
+  var raw = atob(b64), buf = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
+
+  pdfjsLib.getDocument({{
+    data: buf,
+    cMapUrl: '{_CDN}/cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: '{_CDN}/standard_fonts/',
+  }}).promise.then(function(pdf) {{
+    document.getElementById('msg').remove();
+    var scale = Math.min(1.55, (window.innerWidth - 28) / 595);
+    function renderPage(n) {{
+      pdf.getPage(n).then(function(page) {{
+        var vp = page.getViewport({{scale: scale}});
+        var canvas = document.createElement('canvas');
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        document.body.appendChild(canvas);
+        return page.render({{
+          canvasContext: canvas.getContext('2d'),
+          viewport: vp,
+        }}).promise;
+      }}).then(function() {{
+        if (n < pdf.numPages) renderPage(n + 1);
+      }});
+    }}
+    renderPage(1);
+  }}).catch(function(e) {{
+    var m = document.getElementById('msg');
+    m.style.color = '#ff8080';
+    m.innerHTML = '⚠️ No se pudo renderizar el PDF.<br><small>' + e.message + '</small>';
+  }});
+}})();
+</script>
+</body></html>"""
+                                components.html(pdf_js_html, height=820, scrolling=True)
+                                # Botón de descarga — siempre disponible como alternativa
+                                _slug = "".join(c for c in info_sel['empresa'][:18]
+                                                if c.isalnum() or c in " -_").strip().replace(" ","_")
+                                st.download_button(
+                                    label="⬇️ Descargar PDF",
+                                    data=pdf_bytes_prev,
+                                    file_name=f"EstadoCuenta_{_slug}_{cycle_id_prev}.pdf",
+                                    mime="application/pdf",
+                                    key=f"dl_pdf_prev_{info_sel['cod']}",
+                                    use_container_width=True,
+                                )
+                            else:
+                                st.info("Vista previa del PDF no disponible.")
                 
                 
                 # --- RC-BUG-006 & 010: Protección Avanzada contra Doble Envío ---
@@ -366,7 +460,10 @@ def render_tab(df_final, df_filtered, config):
                         messages_to_send = []
                         # RC-BUG-007: Deduplicación explícita en el origen
                         seen_emails_batch = set()
-                        
+
+                        # Obtener cycle_id del session_state (necesario para PDF y batch)
+                        current_cycle_id = st.session_state.get('cycle_id', 'default_cycle')
+
                         # RC-BUG-LOGO: Resolve logo from Storage/local cache.
                         batch_logo_path = _resolve_runtime_logo(config)
                         
@@ -405,13 +502,38 @@ def render_tab(df_final, df_filtered, config):
                             str_s = f"S/ {t_s:,.2f}" if t_s > 0 else ""
                             str_d = f"$ {t_d:,.2f}" if t_d > 0 else ""
                             
-                            body = es.generate_premium_email_body_cid(info['empresa'], d_cli, str_s, str_d, config)
+                            # ── Generar PDF Estado de Cuenta (RC-FEAT-040) ──────────────
+                            # Política estricta: si el PDF falla, el cliente NO se envía.
+                            try:
+                                pdf_bytes_client = EstadoCuentaCliente(
+                                    empresa=info['empresa'],
+                                    cod_cliente=info['cod'],
+                                    cycle_id=current_cycle_id,
+                                    docs_df=d_cli,
+                                    settings=config,
+                                    logo_path=batch_logo_path,
+                                ).generate()
+                            except Exception as e_pdf_gen:
+                                st.error(f"❌ No se pudo generar PDF para {info['empresa']}: {e_pdf_gen}. Cliente omitido del envío.")
+                                stats_pdf_errors = st.session_state.get('_pdf_gen_errors', [])
+                                stats_pdf_errors.append(info['empresa'])
+                                st.session_state['_pdf_gen_errors'] = stats_pdf_errors
+                                continue  # cliente bloqueado — no se agrega al batch
+
+                            # Nombre archivo: EstadoCuenta_KORESUR_CIC-20260324-1840.pdf
+                            empresa_slug = "".join(c for c in info['empresa'][:20] if c.isalnum() or c in (" ", "-", "_")).strip().replace(" ", "_")
+                            pdf_filename = f"EstadoCuenta_{empresa_slug}_{current_cycle_id}.pdf"
+
+                            # ── Cuerpo del email (portada premium) ─────────────────────
+                            body = es.generate_cover_email_html(
+                                info['empresa'], d_cli, current_cycle_id, config
+                            )
                             plain_body = es.generate_plain_text_body(info['empresa'], d_cli, str_s, str_d, config)
-                            
+
                             # Asunto Profesional Anti-Spam
                             company_sender = config.get('company_name', 'DACTA S.A.C.')
                             subject_line = f"Estado de Cuenta {company_sender} | Cliente: {info['empresa']}"
-                            
+
                             # Recolectar MATCH_KEYs para este cliente (para tracking post-envío)
                             if 'MATCH_KEY' in d_cli.columns:
                                 match_keys_for_client = d_cli['MATCH_KEY'].tolist()
@@ -424,13 +546,13 @@ def render_tab(df_final, df_filtered, config):
                             else:
                                 docs_unicos = []
                             single_documento_numero = docs_unicos[0] if len(docs_unicos) == 1 else None
-                            
+
                             # Generar ID único para este mensaje (para matching confiable en post-send)
                             import uuid
                             msg_unique_id = str(uuid.uuid4())[:8]
-                            
+
                             messages_to_send.append({
-                                'msg_id': msg_unique_id,  # NUEVO: ID único para matching
+                                'msg_id': msg_unique_id,
                                 'email': info['email'],
                                 'client_name': info['empresa'],
                                 'cod_cliente': info['cod'],
@@ -438,6 +560,8 @@ def render_tab(df_final, df_filtered, config):
                                 'subject': subject_line,
                                 'html_body': body,
                                 'plain_body': plain_body,
+                                'pdf_bytes': pdf_bytes_client,       # RC-FEAT-040
+                                'pdf_filename': pdf_filename,         # RC-FEAT-040
                                 'notification_key': notif_key,
                                 'original_email': info['email'],
                                 'documento_numero': single_documento_numero,
@@ -449,9 +573,6 @@ def render_tab(df_final, df_filtered, config):
                         
                         # Enviar Batch con Logo
                         with st.spinner(f"Enviando con Business Lock (Fecha: {fecha_corte})..."):
-                            # Obtener cycle_id del session_state
-                            current_cycle_id = st.session_state.get('cycle_id', 'default_cycle')
-
                             results = es.send_email_batch(
                                 smtp_cfg,
                                 messages_to_send,

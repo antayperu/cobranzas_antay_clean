@@ -37,6 +37,380 @@ COLOR_BG = "#f4f4f4"
 COLOR_TEXT = "#333333"
 
 
+def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
+    """
+    Genera el cuerpo HTML premium del correo de notificación de cobranza.
+    RC-FEAT-041: Email corporativo de clase mundial — solo resumen ejecutivo,
+    sin tabla de documentos (el detalle completo va en el PDF adjunto).
+
+    Contenido 100% configurable desde Tab Configuración → Plantillas de Correo:
+      email_body_text — cuerpo breve con variables dinámicas
+      footer_text     — cierre (incluye mensaje "caso omiso")
+      firma_cargo     — cargo del área firmante
+      cuentas_sol/usd — cuentas bancarias (antes hardcodeadas)
+
+    Variables en email_body_text: {CLIENTE}, {DEUDA_SOL}, {DOCS_SOL},
+                                   {DEUDA_USD}, {DOCS_USD}, {DETRACCION}, {FECHA}
+    """
+    company_name  = branding_config.get("company_name", "DACTA S.A.C.")
+    company_ruc   = branding_config.get("company_ruc", "")
+    phone         = branding_config.get("phone_contact", "")
+    primary_color = branding_config.get("primary_color", "#0D3B66")
+    tmpl          = branding_config.get("email_template", {})
+
+    def _nl2br(txt):
+        return html.escape(str(txt or "")).replace("\n", "<br>")
+
+    # ── Calcular KPIs ─────────────────────────────────────────────────────────
+    sum_s = sum_d = sum_detr = 0.0
+    count_s = count_d = count_detr = 0
+    try:
+        df_calc = docs_df.copy()
+        df_calc['SALDO_REAL_CLEAN'] = df_calc['SALDO REAL'].apply(helpers.safe_clean_decimal)
+        df_calc['DETRACCION_CLEAN'] = df_calc['DETRACCIÓN'].apply(helpers.safe_clean_decimal)
+        mask_soles = df_calc['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
+        df_sol  = df_calc[mask_soles]
+        df_dol  = df_calc[~mask_soles]
+        sum_s   = df_sol['SALDO_REAL_CLEAN'].sum()
+        count_s = len(df_sol)
+        sum_d   = df_dol['SALDO_REAL_CLEAN'].sum()
+        count_d = len(df_dol)
+        try:
+            mask_dv    = df_calc['DETRACCION_CLEAN'] > 0.01
+            mask_ds    = df_calc['ESTADO DETRACCION'].astype(str).str.strip().str.upper() == 'PENDIENTE'
+            df_detr    = df_calc[mask_dv & mask_ds]
+            sum_detr   = df_detr['DETRACCION_CLEAN'].sum()
+            count_detr = len(df_detr)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    kpi_sol   = f"S/ {sum_s:,.2f}"
+    kpi_sol_n = f"{count_s:02d} doc{'umento' if count_s == 1 else 'umentos'}"
+    kpi_usd   = f"US$ {sum_d:,.2f}"
+    kpi_usd_n = f"{count_d:02d} doc{'umento' if count_d == 1 else 'umentos'}"
+    kpi_detr  = f"S/ {sum_detr:,.2f}"
+    kpi_detr_n = f"{count_detr:02d} doc{'umento afecto' if count_detr == 1 else 'umentos afectos'}"
+
+    fecha_str = datetime.now().strftime("%d/%m/%Y")
+    safe_client = html.escape(str(client_name))
+
+    # ── Variables para sustitución en email_body_text ─────────────────────────
+    _var_map = {
+        "{CLIENTE}":    safe_client,
+        "{cliente}":    safe_client,
+        "{DEUDA_SOL}":  f"S/ {sum_s:,.2f}",
+        "{DOCS_SOL}":   f"{count_s:02d} documentos",
+        "{DEUDA_USD}":  f"US$ {sum_d:,.2f}",
+        "{DOCS_USD}":   f"{count_d:02d} documentos",
+        "{DETRACCION}": f"S/ {sum_detr:,.2f}",
+        "{FECHA}":      fecha_str,
+    }
+
+    def _apply_vars(raw: str) -> str:
+        result = html.escape(str(raw or ""))
+        for var, val in _var_map.items():
+            result = result.replace(html.escape(var), val)
+        return result.replace("\n", "<br>")
+
+    # ── Textos configurables ──────────────────────────────────────────────────
+    body_raw    = (tmpl.get("email_body_text") or tmpl.get("intro_text") or "").strip()
+    footer_raw  = (tmpl.get("footer_text") or "").strip()
+    firma_cargo = html.escape(tmpl.get("firma_cargo", "Area de Cobranzas y Facturacion").strip())
+
+    body_html = _apply_vars(body_raw) if body_raw else (
+        f"Estimado {safe_client},<br><br>"
+        "Le informamos que a la fecha presenta documentos pendientes de pago.<br>"
+        "Le agradeceremos gestionar la cancelaci&#243;n para mantener su servicio activo."
+    )
+    footer_html = _nl2br(footer_raw) if footer_raw else (
+        "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje."
+    )
+
+    # ── Logo ──────────────────────────────────────────────────────────────────
+    has_logo = bool(branding_config.get("logo_path") or branding_config.get("logo_bytes"))
+    logo_img = (
+        f'<img src="cid:logo_dacta" width="160" alt="{html.escape(company_name)}"'
+        ' style="max-width:160px;max-height:64px;height:auto;display:block;margin:0 auto">'
+        if has_logo else
+        f'<div style="font-size:20px;font-weight:700;color:{primary_color};'
+        f'letter-spacing:1px;font-family:Georgia,serif">{html.escape(company_name)}</div>'
+    )
+
+    # ── Barra inferior empresa ────────────────────────────────────────────────
+    company_parts = [html.escape(company_name)]
+    if company_ruc:
+        company_parts.append(f"RUC {html.escape(company_ruc)}")
+    if phone:
+        company_parts.append(html.escape(phone))
+    company_line = " &nbsp;&nbsp;·&nbsp;&nbsp; ".join(company_parts)
+
+    # ── KPI rows del resumen de cuenta ────────────────────────────────────────
+    def _kpi_row(label: str, amount: str, qty: str, show: bool = True) -> str:
+        if not show:
+            return ""
+        return (
+            f'<tr>'
+            f'<td style="padding:12px 0;color:#4A5568;font-size:13px;'
+            f'border-bottom:1px solid #EDF2F7;font-weight:400;'
+            f'font-family:\'Helvetica Neue\',Arial,sans-serif">{label}</td>'
+            f'<td style="padding:12px 0;text-align:right;border-bottom:1px solid #EDF2F7">'
+            f'<span style="font-weight:700;font-size:16px;color:{primary_color};'
+            f'font-family:Georgia,serif">{amount}</span>'
+            f'<br><span style="font-size:11px;color:#A0AEC0;font-family:\'Helvetica Neue\',Arial,sans-serif">{qty}</span>'
+            f'</td>'
+            f'</tr>'
+        )
+
+    resumen_rows = (
+        _kpi_row("Deuda Total <strong>Soles</strong>", kpi_sol, kpi_sol_n)
+        + _kpi_row("Deuda Total <strong>D&oacute;lares</strong>", kpi_usd, kpi_usd_n)
+        + _kpi_row("Detracciones SUNAT Pendientes", kpi_detr, kpi_detr_n, show=(sum_detr > 0.01))
+    )
+
+    # ── Sección cuentas bancarias ─────────────────────────────────────────────
+    def _render_cuenta_col(cuentas: list, titulo: str) -> str:
+        cuentas_validas = [c for c in (cuentas or []) if isinstance(c, dict) and c.get("numero", "").strip()]
+        if not cuentas_validas:
+            return ""
+        items_html = ""
+        for c in cuentas_validas:
+            banco  = html.escape(c.get("banco",  "").strip())
+            numero = html.escape(c.get("numero", "").strip())
+            cci    = html.escape(c.get("cci",    "").strip())
+            items_html += (
+                f'<p style="margin:0 0 8px;font-size:13px;color:#2D3748;'
+                f'font-family:\'Helvetica Neue\',Arial,sans-serif">'
+                f'<span style="font-weight:600">{banco}:</span> {numero}'
+                + (f'<br><span style="font-size:11px;color:#718096">CCI: {cci}</span>' if cci else "")
+                + '</p>'
+            )
+        return (
+            f'<td style="padding:20px 24px;vertical-align:top;width:50%">'
+            f'<p style="margin:0 0 10px;font-size:10px;font-weight:700;letter-spacing:1px;'
+            f'color:{primary_color};text-transform:uppercase;'
+            f'font-family:\'Helvetica Neue\',Arial,sans-serif">{titulo}</p>'
+            f'{items_html}'
+            f'</td>'
+        )
+
+    _col_sol = _render_cuenta_col(tmpl.get("cuentas_sol", []), "Cuentas en Soles (S/)")
+    _col_usd = _render_cuenta_col(tmpl.get("cuentas_usd", []), "Cuentas en D&oacute;lares (US$)")
+    _contact_email = html.escape(tmpl.get("contact_email", "").strip())
+    _contact_phone = html.escape(tmpl.get("contact_phone", "").strip())
+    _voucher_raw   = (tmpl.get("voucher_text") or "").strip()
+
+    cuentas_block = ""
+    if _col_sol or _col_usd:
+        contact_row = ""
+        if _contact_email or _contact_phone:
+            parts = []
+            if _contact_email:
+                parts.append(f"Envío de vouchers: <strong>{_contact_email}</strong>")
+            if _contact_phone:
+                parts.append(f"Tel: {_contact_phone}")
+            contact_row = (
+                f'<tr><td colspan="2" style="padding:4px 24px 16px;font-size:12px;'
+                f'color:#718096;border-top:1px solid #EDF2F7;'
+                f'font-family:\'Helvetica Neue\',Arial,sans-serif">'
+                + " &nbsp;&bull;&nbsp; ".join(parts)
+                + "</td></tr>"
+            )
+        if _voucher_raw:
+            contact_row += (
+                f'<tr><td colspan="2" style="padding:0 24px 16px;font-size:12px;'
+                f'color:#718096;font-family:\'Helvetica Neue\',Arial,sans-serif">'
+                + _nl2br(_voucher_raw) + "</td></tr>"
+            )
+        cuentas_block = f"""
+        <tr>
+          <td style="padding:0 44px 0">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+                   style="border:1px solid #E2E8F0;border-top:3px solid {primary_color}">
+              <tr>
+                <td colspan="2" style="padding:14px 24px 8px">
+                  <span style="font-size:10px;font-weight:700;letter-spacing:1px;
+                               color:{primary_color};text-transform:uppercase;
+                               font-family:'Helvetica Neue',Arial,sans-serif">
+                    Datos para el Pago
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                {_col_sol}
+                {_col_usd if _col_usd else '<td style="width:50%"></td>'}
+              </tr>
+              {contact_row}
+            </table>
+          </td>
+        </tr>
+        <tr><td style="height:32px;font-size:0">&nbsp;</td></tr>"""
+
+    # ── Mes en español para el encabezado ─────────────────────────────────────
+    _MESES = ["enero","febrero","marzo","abril","mayo","junio",
+              "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+    _now = datetime.now()
+    fecha_larga = f"{_now.day} de {_MESES[_now.month-1]} de {_now.year}"
+
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estado de Cuenta</title>
+</head>
+<body style="margin:0;padding:0;background:#E8ECF1;
+             font-family:'Helvetica Neue',Helvetica,Arial,sans-serif">
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+  <tr>
+    <td align="center" style="padding:36px 16px 48px">
+
+      <!-- ╔═══════════════ CARD 600px ═══════════════╗ -->
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0"
+             style="max-width:600px;width:100%;background:#FFFFFF;
+                    box-shadow:0 2px 4px rgba(0,0,0,.06),0 12px 40px rgba(0,0,0,.10)">
+
+        <!-- ── LOGO (fondo blanco — siempre visible) ─────────────────── -->
+        <tr>
+          <td align="center"
+              style="background:#FFFFFF;padding:28px 48px 24px;
+                     border-bottom:1px solid #E2E8F0">
+            {logo_img}
+          </td>
+        </tr>
+
+        <!-- ── HEADER CORPORATIVO (título + fecha) ──────────────────── -->
+        <tr>
+          <td align="center"
+              style="background:{primary_color};padding:28px 48px 26px">
+
+            <!-- Separador decorativo -->
+            <div style="width:40px;height:1px;background:rgba(255,255,255,.30);
+                        margin:0 auto 18px"></div>
+
+            <!-- Título principal -->
+            <div style="font-family:Georgia,'Times New Roman',serif;
+                        font-size:24px;font-weight:400;font-style:normal;
+                        color:#FFFFFF;letter-spacing:3px;text-transform:uppercase;
+                        line-height:1.2;margin-bottom:8px">
+              Estado de Cuenta
+            </div>
+
+            <!-- Fecha -->
+            <div style="font-family:'Helvetica Neue',Arial,sans-serif;
+                        font-size:11px;color:rgba(255,255,255,.60);
+                        letter-spacing:1.5px;text-transform:uppercase">
+              Al {fecha_larga}
+            </div>
+
+          </td>
+        </tr>
+
+        <!-- ── CUERPO DEL MENSAJE ─────────────────────────────────────── -->
+        <tr>
+          <td align="center" style="padding:40px 52px 0">
+            <p style="margin:0;font-size:15px;line-height:27px;
+                      color:#4A5568;text-align:center;
+                      font-family:'Helvetica Neue',Arial,sans-serif">
+              {body_html}
+            </p>
+          </td>
+        </tr>
+
+        <!-- ── RESUMEN FINANCIERO ─────────────────────────────────────── -->
+        <tr>
+          <td style="padding:32px 44px 0">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+                   style="border:1px solid #E2E8F0;border-top:3px solid {primary_color}">
+              <tr>
+                <td style="padding:16px 24px 8px">
+                  <span style="font-size:10px;font-weight:700;letter-spacing:1px;
+                               color:{primary_color};text-transform:uppercase;
+                               font-family:'Helvetica Neue',Arial,sans-serif">
+                    Resumen de Cuenta
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 24px 16px">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                    {resumen_rows}
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── AVISO PDF ADJUNTO ──────────────────────────────────────── -->
+        <tr>
+          <td style="padding:20px 44px 0">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+                   style="border:1px dashed #CBD5E0;background:#F7FAFC">
+              <tr>
+                <td style="padding:14px 20px;font-size:13px;color:#718096;line-height:20px;
+                           font-family:'Helvetica Neue',Arial,sans-serif">
+                  <strong style="color:#2D3748;font-size:13px">
+                    &#128206; Estado de Cuenta adjunto en PDF
+                  </strong><br>
+                  El documento adjunto incluye el detalle completo de sus facturas pendientes.
+                  Puede abrirlo, imprimirlo o archivarlo para su registro.
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── ESPACIADO ──────────────────────────────────────────────── -->
+        <tr><td style="height:32px;font-size:0;line-height:0">&nbsp;</td></tr>
+
+        {cuentas_block}
+
+        <!-- ── SEPARADOR ─────────────────────────────────────────────── -->
+        <tr>
+          <td style="padding:0 44px">
+            <div style="height:1px;background:#EDF2F7"></div>
+          </td>
+        </tr>
+
+        <!-- ── PIE Y FIRMA ────────────────────────────────────────────── -->
+        <tr>
+          <td style="padding:24px 52px 32px;
+                     font-family:'Helvetica Neue',Arial,sans-serif">
+            <p style="margin:0 0 20px;font-size:13px;line-height:22px;color:#718096">
+              {footer_html}
+            </p>
+            <p style="margin:0;font-size:13px;font-weight:600;
+                      color:#2D3748;letter-spacing:.2px">
+              {firma_cargo}
+            </p>
+          </td>
+        </tr>
+
+        <!-- ── FOOTER EMPRESA ─────────────────────────────────────────── -->
+        <tr>
+          <td align="center"
+              style="background:{primary_color};padding:16px 48px;
+                     font-size:11px;color:rgba(255,255,255,.55);
+                     letter-spacing:.5px;text-transform:uppercase;
+                     font-family:'Helvetica Neue',Arial,sans-serif">
+            {company_line}
+          </td>
+        </tr>
+
+      </table>
+      <!-- ╚═══════════════════════════════════════════════╝ -->
+
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>"""
+
+
 def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, branding_config):
     """
     Genera cuerpo HTML asumiendo que el logo se adjunta con Content-ID: <logo_dacta>
@@ -822,6 +1196,20 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     except Exception as e_img:
                          stats['log'].append(f"⚠️ [RunID:{run_id}] No se pudo adjuntar logo: {str(e_img)}")
 
+                # Adjuntar PDF Estado de Cuenta (RC-FEAT-040)
+                if not use_api:
+                    pdf_data   = msg_data.get('pdf_bytes')
+                    pdf_name   = msg_data.get('pdf_filename', 'EstadoCuenta.pdf')
+                    if pdf_data:
+                        try:
+                            from email.mime.application import MIMEApplication
+                            pdf_part = MIMEApplication(pdf_data, _subtype="pdf")
+                            pdf_part.add_header('Content-Disposition', 'attachment', filename=pdf_name)
+                            msg.attach(pdf_part)
+                            stats['log'].append(f"📄 [RunID:{run_id}] PDF_ATTACHED: {pdf_name} ({len(pdf_data)} bytes)")
+                        except Exception as e_pdf:
+                            stats['log'].append(f"⚠️ [RunID:{run_id}] No se pudo adjuntar PDF: {e_pdf}")
+
                 # Log PRE-SEND (Forensic)
                 stats['log'].append(f"📡 [RunID:{run_id}] SEND_CALL #{send_call_index} PREPARE -> To: {msg_data['email']} | MsgID: {msg_id}")
                 
@@ -921,16 +1309,27 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                                 "subject": msg_data['subject'],
                                 "html": msg_data['html_body']
                             }
-                            
-                            # Add logo attachment if exists
+
+                            attachments = []
+                            # Logo inline
                             if logo_path:
                                 with open(logo_path, 'rb') as f:
                                     logo_data = f.read()
-                                params["attachments"] = [{
+                                attachments.append({
                                     "filename": "logo.png",
-                                    "content": list(logo_data)  # Resend expects list of bytes
-                                }]
-                            
+                                    "content": list(logo_data)
+                                })
+                            # PDF adjunto (RC-FEAT-040)
+                            pdf_data = msg_data.get('pdf_bytes')
+                            pdf_name = msg_data.get('pdf_filename', 'EstadoCuenta.pdf')
+                            if pdf_data:
+                                attachments.append({
+                                    "filename": pdf_name,
+                                    "content": list(pdf_data)
+                                })
+                            if attachments:
+                                params["attachments"] = attachments
+
                             response = resend.Emails.send(params)
                             stats['log'].append(f"[{i+1}/{total}] ✅ [API] Enviado vía Resend (ID: {response.get('id', 'N/A')})")
                         
@@ -942,7 +1341,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                                 subject=msg_data['subject'],
                                 html_content=msg_data['html_body']
                             )
-                            
+
                             if logo_path:
                                 with open(logo_path, 'rb') as f:
                                     encoded_file = base64.b64encode(f.read()).decode()
@@ -954,7 +1353,19 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                                     ContentId('logo_dacta')
                                 )
                                 message.add_attachment(attached_file)
-                            
+
+                            # PDF adjunto (RC-FEAT-040)
+                            pdf_data = msg_data.get('pdf_bytes')
+                            pdf_name = msg_data.get('pdf_filename', 'EstadoCuenta.pdf')
+                            if pdf_data:
+                                pdf_att = Attachment(
+                                    FileContent(base64.b64encode(pdf_data).decode()),
+                                    FileName(pdf_name),
+                                    FileType('application/pdf'),
+                                    Disposition('attachment'),
+                                )
+                                message.add_attachment(pdf_att)
+
                             response = sg_client.send(message)
                             stats['log'].append(f"[{i+1}/{total}] ✅ [API] Enviado vía SendGrid (Status: {response.status_code})")
                     except Exception as e_api:

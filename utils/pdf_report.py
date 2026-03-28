@@ -1405,6 +1405,598 @@ class InformeGerencial:
 # Helper local
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Estado de Cuenta por Cliente — RC-FEAT-040
+# PDF corporativo adjunto al email de notificación de cobranza.
+# ---------------------------------------------------------------------------
+
+class EstadoCuentaCliente:
+    """
+    Genera el Estado de Cuenta individual de un cliente como PDF adjunto.
+    Diseño: carta notarial corporativa Antay — formal, imprimible, archivable.
+
+    Uso:
+        pdf_bytes = EstadoCuentaCliente(
+            empresa="KORESUR S.A.C.",
+            cod_cliente="000087",
+            cycle_id="CIC-20260324-1840",
+            docs_df=df_cliente,
+            settings=config,
+            logo_path="assets/logo.png",
+        ).generate()
+    """
+
+    def __init__(
+        self,
+        empresa: str,
+        cod_cliente: str,
+        cycle_id: str,
+        docs_df: Any,          # pd.DataFrame
+        settings: Dict[str, Any],
+        logo_path: Optional[str] = None,
+    ) -> None:
+        self.empresa     = empresa
+        self.cod_cliente = cod_cliente
+        self.cycle_id    = cycle_id
+        self.docs_df     = docs_df
+        self.settings    = settings
+        self.logo_path   = logo_path
+        self._now        = datetime.now()
+        self._page_w     = A4[0] - 4 * cm   # ancho útil con márgenes 2cm c/u
+
+    # ------------------------------------------------------------------
+    # API pública
+    # ------------------------------------------------------------------
+
+    def generate(self) -> bytes:
+        """Genera el PDF y retorna los bytes en memoria."""
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buf,
+            pagesize=A4,
+            leftMargin=2 * cm,
+            rightMargin=2 * cm,
+            topMargin=1.5 * cm,
+            bottomMargin=1.8 * cm,
+            title=f"Estado de Cuenta — {self.empresa}",
+            author=self.settings.get("company_name", "DACTA S.A.C."),
+        )
+        story: List = []
+        story += self._build_header()
+        story += self._build_salutation()
+        story += self._build_intro()
+        story += self._build_docs_table()       # totales incluidos al final de la tabla
+        story += self._build_detraccion()
+        story += self._build_payment_accounts() # cuentas bancarias desde configuración
+        story += self._build_footer_block()
+        story += self._build_signature()
+        doc.build(
+            story,
+            onFirstPage=self._add_page_footer,
+            onLaterPages=self._add_page_footer,
+        )
+        return buf.getvalue()
+
+    # ------------------------------------------------------------------
+    # Helpers internos
+    # ------------------------------------------------------------------
+
+    def _fecha_larga(self) -> str:
+        d = self._now
+        return f"Lima, {d.day} de {_MESES_ES[d.month]} de {d.year}"
+
+    @staticmethod
+    def _safe_float(val) -> float:
+        try:
+            if val is None:
+                return 0.0
+            s = str(val).replace(",", "").replace(" ", "").strip()
+            return float(s) if s not in ("", "—", "-", "nan", "NaT") else 0.0
+        except Exception:
+            return 0.0
+
+    @staticmethod
+    def _safe_date(val) -> str:
+        if val is None:
+            return "—"
+        try:
+            import pandas as pd
+            ts = pd.to_datetime(val)
+            if pd.isnull(ts):
+                return "—"
+            return ts.strftime("%d/%m/%y")
+        except Exception:
+            s = str(val)
+            return s[:10] if len(s) >= 10 else s
+
+    def _col(self, row: Any, *keys: str) -> Any:
+        """Lee la primera columna que exista en la fila."""
+        for k in keys:
+            try:
+                v = row.get(k)
+                if v is not None and str(v).strip() not in ("", "nan", "NaT", "None"):
+                    return v
+            except Exception:
+                pass
+        return None
+
+    # ------------------------------------------------------------------
+    # Secciones del documento
+    # ------------------------------------------------------------------
+
+    def _build_header(self) -> List:
+        """Banner azul corporativo: logo (izq) + título+ciclo+fecha (der)."""
+        story = []
+        company_name = self.settings.get("company_name", "DACTA S.A.C.")
+        _tmpl        = self.settings.get("email_template", {})
+        pdf_title    = (_tmpl.get("pdf_title") or "ESTADO DE CUENTA").strip().upper()
+
+        # Celda derecha: título + ciclo + fecha
+        title_tbl = Table([
+            [Paragraph(pdf_title,
+                _style("EC_Hdr", "Normal", fontSize=15, leading=19,
+                       textColor=C_WHITE, fontName=_F_HEADING))],
+            [Paragraph(f"Ciclo: {self.cycle_id}",
+                _style("EC_Cic", "Normal", fontSize=8, leading=11,
+                       textColor=colors.HexColor("#A8D4F5"), fontName=_F_BODY))],
+            [Paragraph(self._fecha_larga(),
+                _style("EC_Fch", "Normal", fontSize=8, leading=11,
+                       textColor=colors.HexColor("#A8D4F5"), fontName=_F_BODY))],
+        ], colWidths=[self._page_w * 0.52])
+        title_tbl.setStyle(TableStyle([
+            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+            ("TOPPADDING",    (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]))
+
+        # Celda izquierda: logo o nombre empresa
+        logo_w = self._page_w * 0.40
+        gap_w  = self._page_w - logo_w - self._page_w * 0.52
+
+        if self.logo_path and os.path.exists(self.logo_path):
+            logo_cell = Image(self.logo_path, width=4 * cm, height=1.6 * cm, kind="proportional")
+        else:
+            logo_cell = Paragraph(
+                company_name,
+                _style("EC_Co", "Normal", fontSize=10, leading=13,
+                       textColor=C_WHITE, fontName=_F_HEADING),
+            )
+
+        banner = Table(
+            [[logo_cell, "", title_tbl]],
+            colWidths=[logo_w, gap_w, self._page_w * 0.52],
+        )
+        banner.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), C_PRIMARY),
+            ("TOPPADDING",    (0, 0), (-1, -1), 14),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 14),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 14),
+            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN",         (2, 0), (2, 0),   "RIGHT"),
+            ("LINEBELOW",     (0, 0), (-1, -1), 3, C_ACCENT),
+        ]))
+        story.append(banner)
+        story.append(_spacer(0.35))
+        return story
+
+    def _build_salutation(self) -> List:
+        """Bloque destinatario premium (tipografía limpia) + saludo + presente."""
+        _tmpl        = self.settings.get("email_template", {})
+        raw_saludo   = (_tmpl.get("pdf_saludo") or "Estimado cliente,").strip()
+        saludo_txt   = raw_saludo.replace("{CLIENTE}", self.empresa).replace("{cliente}", self.empresa)
+        pdf_presente = (_tmpl.get("pdf_presente") or "Presente.-").strip()
+
+        story = []
+
+        # ── Identificación del destinatario — tipografía pura, sin cajas ──────
+        empresa_st = _style("EC_EmpB",  "Normal", fontSize=14, leading=18,
+                            textColor=C_PRIMARY, fontName=_F_HEADING)
+        cod_st     = _style("EC_CodB",  "Normal", fontSize=8.5, leading=12,
+                            textColor=C_MUTED, fontName=_F_BODY)
+
+        story.append(Paragraph(self.empresa, empresa_st))
+        story.append(Paragraph(f"Código de cliente: {self.cod_cliente}", cod_st))
+        story.append(_spacer(0.2))
+        # Línea de acento teal (2pt) — divide el destinatario del cuerpo de la carta
+        story.append(_hr(C_ACCENT, 2.0))
+        story.append(_spacer(0.35))
+
+        # ── Saludo + Presente ─────────────────────────────────────────────────
+        saludo_st = _style("EC_Sal", "Normal", fontSize=9.5, leading=13,
+                           textColor=C_TEXT, fontName=_F_BODY)
+        story.append(Paragraph(saludo_txt, saludo_st))
+        story.append(Paragraph(pdf_presente, saludo_st))
+        story.append(_spacer(0.4))
+        return story
+
+    def _build_intro(self) -> List:
+        """Texto introductorio desde Tab Configuración > Plantilla de Correo."""
+        tmpl = self.settings.get("email_template", {})
+        raw  = (tmpl.get("intro_text") or "").strip()
+        if not raw:
+            raw = (
+                "Le informamos que a la fecha presenta documentos pendientes de pago.\n"
+                "Agradeceremos gestionar la cancelación para mantener su servicio activo."
+            )
+        # Reemplazar placeholder {CLIENTE} / {cliente} con el nombre de empresa
+        raw = raw.replace("{CLIENTE}", self.empresa).replace("{cliente}", self.empresa)
+        story = []
+        for line in raw.split("\n"):
+            story.append(Paragraph(line or " ", ST_BODY))
+        story.append(_spacer(0.35))
+        return story
+
+    def _build_docs_table(self) -> List:
+        """Tabla de documentos pendientes — columnas: DOCUMENTO | EMISIÓN |
+        VENCIMIENTO | IMPORTE | SALDO A [empresa] | DETRACCIÓN (S/) | ESTADO DETR."""
+        story = []
+        story += _section_title("DETALLE DE DOCUMENTOS PENDIENTES", self._page_w)
+        story.append(_spacer(0.15))
+
+        df  = self.docs_df
+        pw  = self._page_w
+
+        # "SALDO A DACTA" — primera palabra del nombre de empresa
+        co_parts   = self.settings.get("company_name", "DACTA S.A.C.").split()
+        co_short   = co_parts[0] if co_parts else "DACTA"
+
+        # Encabezados y anchos — fuente pequeña para caber en 7 columnas
+        headers = [
+            "DOCUMENTO", "EMISIÓN", "VENCIMIENTO",
+            "IMPORTE", f"SALDO A\n{co_short}",
+            "DETRACCIÓN\n(S/)", "ESTADO\nDETR.",
+        ]
+        col_ws = [
+            pw * 0.22, pw * 0.10, pw * 0.10,
+            pw * 0.13, pw * 0.15,
+            pw * 0.14, pw * 0.16,
+        ]
+
+        # Estilo de cabecera más pequeño para caber
+        ST_TH_XS = _style("EC_TH_XS", "Normal", fontSize=6.5, leading=8.5,
+                           textColor=C_WHITE, fontName=_F_BOLD, alignment=TA_CENTER)
+
+        head_row   = [Paragraph(h, ST_TH_XS) for h in headers]
+        rows       = [head_row]
+        style_cmds = [
+            ("BACKGROUND",    (0, 0), (-1, 0),  C_PRIMARY),
+            ("GRID",          (0, 0), (-1, -1), 0.3, C_BORDER),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [C_WHITE, C_LIGHT_ROW]),
+            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+        ]
+
+        # Estilos de celda reutilizables
+        ST_TD_XS = _style("EC_TD_XS", "Normal", fontSize=7.5, leading=10,
+                          textColor=C_TEXT, fontName=_F_BODY, alignment=TA_LEFT)
+        ST_TD_XS_C = _style("EC_TDC_XS", "Normal", fontSize=7.5, leading=10,
+                             textColor=C_TEXT, fontName=_F_BODY, alignment=TA_CENTER)
+        ST_TD_XS_R = _style("EC_TDR_XS", "Normal", fontSize=7.5, leading=10,
+                             textColor=C_TEXT, fontName=_F_BODY, alignment=TA_RIGHT)
+
+        for ri, (_, row) in enumerate(df.iterrows(), start=1):
+            comprobante = str(self._col(row, "COMPROBANTE") or "—")
+            fech_emis   = self._safe_date(self._col(row, "FECH EMIS", "FECHA EMISIÓN", "FECHA EMISION"))
+            fech_venc   = self._safe_date(self._col(row, "FECH VENC", "FECHA VENCIMIENTO", "FECH VENCIMIENTO"))
+            mont_emit   = self._safe_float(self._col(row, "MONT EMIT", "IMPORTE", "MONTO"))
+            saldo_real  = self._safe_float(self._col(row, "SALDO REAL", "SALDO"))
+            moneda      = str(self._col(row, "MONEDA") or "S/").strip()
+            detr        = self._safe_float(self._col(row, "DETRACCIÓN", "DETRACCION"))
+            estado_detr = str(self._col(row, "ESTADO DETRACCION", "ESTADO DETR") or "").strip().upper()
+
+            sym = "S/" if moneda.upper().startswith("S") else "US$"
+            importe_txt = f"{sym} {mont_emit:,.2f}" if mont_emit > 0 else "—"
+            saldo_txt   = f"{sym} {saldo_real:,.2f}"
+            detr_txt    = f"S/ {detr:,.2f}" if detr > 0 else "—"
+
+            # Estado detracción: coloreado
+            if estado_detr in ("COBRADO", "COBRADA", "PAGADO"):
+                fg_est = C_SUCCESS
+            elif estado_detr in ("PENDIENTE",):
+                fg_est = C_WARNING
+            elif estado_detr:
+                fg_est = C_MUTED
+            else:
+                fg_est = C_MUTED
+            estado_txt  = estado_detr.capitalize() if estado_detr else "—"
+            est_st = _style(f"EC_Est{ri}", "Normal", fontSize=7.5, leading=10,
+                            textColor=fg_est, fontName=_F_BOLD, alignment=TA_CENTER)
+
+            # Saldo en azul negrita (igual al modelo)
+            sld_st = _style(f"EC_Sld{ri}", "Normal", fontSize=7.5, leading=10,
+                            textColor=C_PRIMARY, fontName=_F_BOLD, alignment=TA_RIGHT)
+
+            rows.append([
+                Paragraph(comprobante, ST_TD_XS),
+                Paragraph(fech_emis,   ST_TD_XS_C),
+                Paragraph(fech_venc,   ST_TD_XS_C),
+                Paragraph(importe_txt, ST_TD_XS_R),
+                Paragraph(saldo_txt,   sld_st),
+                Paragraph(detr_txt,    ST_TD_XS_C),
+                Paragraph(estado_txt,  est_st),
+            ])
+
+        # ── Filas de totales al final de la tabla (7 columnas) ────────────
+        mask_sol_t = df["MONEDA"].astype(str).str.strip().str.upper().str.startswith("S", na=False) if "MONEDA" in df.columns else [True] * len(df)
+        tot_sol = df[mask_sol_t]["SALDO REAL"].apply(self._safe_float).sum() if "SALDO REAL" in df.columns else 0.0
+        tot_usd = df[~mask_sol_t]["SALDO REAL"].apply(self._safe_float).sum() if "SALDO REAL" in df.columns else 0.0
+        n_sol   = int(mask_sol_t.sum())
+        n_usd   = int((~mask_sol_t).sum())
+
+        try:
+            mask_dv  = df["DETRACCIÓN"].apply(self._safe_float) > 0.01 if "DETRACCIÓN" in df.columns else False
+            mask_dp  = df["ESTADO DETRACCION"].astype(str).str.upper() == "PENDIENTE" if "ESTADO DETRACCION" in df.columns else False
+            if hasattr(mask_dv, "__len__") and hasattr(mask_dp, "__len__"):
+                tot_detr = df[mask_dv & mask_dp]["DETRACCIÓN"].apply(self._safe_float).sum()
+                n_detr   = int((mask_dv & mask_dp).sum())
+            else:
+                tot_detr, n_detr = 0.0, 0
+        except Exception:
+            tot_detr, n_detr = 0.0, 0
+
+        lbl_tot = _style("EC_TotLbl2", "Normal", fontSize=7.5, leading=10,
+                         textColor=C_TEXT, fontName=_F_BOLD, alignment=TA_LEFT)
+        val_tot = _style("EC_TotVal2", "Normal", fontSize=8.5, leading=11,
+                         textColor=C_PRIMARY, fontName=_F_HEADING, alignment=TA_RIGHT)
+
+        n_dr = len(rows)   # índice del primer footer row
+
+        # Fila Total S/ — label en col0-3, valor en col4, cols 5-6 vacíos
+        rows.append(["", "", "", "", Paragraph(f"S/ {tot_sol:,.2f}", val_tot), "", ""])
+        style_cmds += [
+            ("SPAN",          (0, n_dr), (3, n_dr)),
+            ("SPAN",          (5, n_dr), (6, n_dr)),
+            ("BACKGROUND",    (0, n_dr), (-1, n_dr), C_BG),
+            ("LINEABOVE",     (0, n_dr), (-1, n_dr), 1.5, C_ACCENT),
+            ("ALIGN",         (4, n_dr), (4, n_dr),  "RIGHT"),
+        ]
+        rows[n_dr][0] = Paragraph(f"Total S/ ({n_sol:02d} documentos)", lbl_tot)
+
+        # Fila Total US$
+        r2 = n_dr + 1
+        rows.append(["", "", "", "", Paragraph(f"US$ {tot_usd:,.2f}", val_tot), "", ""])
+        style_cmds += [
+            ("SPAN",       (0, r2), (3, r2)),
+            ("SPAN",       (5, r2), (6, r2)),
+            ("BACKGROUND", (0, r2), (-1, r2), C_BG),
+            ("ALIGN",      (4, r2), (4, r2),  "RIGHT"),
+        ]
+        rows[r2][0] = Paragraph(f"Total US$ ({n_usd:02d} documentos)", lbl_tot)
+
+        # Fila Total Detracción
+        r3 = n_dr + 2
+        rows.append(["", "", "", "", Paragraph(f"S/ {tot_detr:,.2f}", val_tot), "", ""])
+        style_cmds += [
+            ("SPAN",       (0, r3), (3, r3)),
+            ("SPAN",       (5, r3), (6, r3)),
+            ("BACKGROUND", (0, r3), (-1, r3), C_BG),
+            ("ALIGN",      (4, r3), (4, r3),  "RIGHT"),
+            ("LINEBELOW",  (0, r3), (-1, r3), 1, C_ACCENT),
+        ]
+        rows[r3][0] = Paragraph(f"Detracciones SUNAT ({n_detr:02d} documentos afectos)", lbl_tot)
+
+        tbl = Table(rows, colWidths=col_ws, repeatRows=1)
+        tbl.setStyle(TableStyle(style_cmds))
+        story.append(tbl)
+        story.append(_spacer(0.35))
+        return story
+
+    def _build_detraccion(self) -> List:
+        """Caja de alerta de detracción: solo si hay detracción PENDIENTE > 0."""
+        story = []
+        df     = self.docs_df
+        tmpl   = self.settings.get("email_template", {})
+        raw    = (tmpl.get("alert_text") or "").strip()
+
+        if not raw:
+            return story
+
+        try:
+            mask_val  = df["DETRACCIÓN"].apply(self._safe_float) > 0.01 if "DETRACCIÓN" in df.columns else False
+            mask_pend = df["ESTADO DETRACCION"].astype(str).str.upper() == "PENDIENTE" if "ESTADO DETRACCION" in df.columns else False
+            if hasattr(mask_val, "__len__") and hasattr(mask_pend, "__len__"):
+                sum_detr = df[mask_val & mask_pend]["DETRACCIÓN"].apply(self._safe_float).sum()
+            else:
+                sum_detr = 0.0
+        except Exception:
+            sum_detr = 0.0
+
+        if sum_detr <= 0:
+            return story
+
+        lbl_st = _style("EC_DetHdr", "Normal", fontSize=8, leading=11,
+                        textColor=C_WARNING, fontName=_F_BOLD)
+        txt_st = _style("EC_DetTxt", "Normal", fontSize=8, leading=11,
+                        textColor=C_TEXT, fontName=_F_BODY)
+
+        lines = [Paragraph("⚠  INFORMACIÓN DE DETRACCIÓN", lbl_st)]
+        for line in raw.split("\n"):
+            lines.append(Paragraph(line or " ", txt_st))
+
+        box = Table([[lines]], colWidths=[self._page_w])
+        box.setStyle(TableStyle([
+            ("BOX",           (0, 0), (-1, -1), 1,   colors.HexColor("#F4A261")),
+            ("BACKGROUND",    (0, 0), (-1, -1), colors.HexColor("#FFF3E0")),
+            ("TOPPADDING",    (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
+        ]))
+        story.append(box)
+        story.append(_spacer(0.35))
+        return story
+
+    def _build_payment_accounts(self) -> List:
+        """Sección de cuentas bancarias — desde Tab Configuración > Información de Pago.
+        Solo se renderiza si hay al menos una cuenta con número configurado."""
+        tmpl          = self.settings.get("email_template", {})
+        cuentas_sol   = [c for c in (tmpl.get("cuentas_sol") or []) if isinstance(c, dict) and c.get("numero", "").strip()]
+        cuentas_usd   = [c for c in (tmpl.get("cuentas_usd") or []) if isinstance(c, dict) and c.get("numero", "").strip()]
+        contact_email = (tmpl.get("contact_email") or "").strip()
+        contact_phone = (tmpl.get("contact_phone") or "").strip()
+        voucher_raw   = (tmpl.get("voucher_text") or "").strip()
+
+        if not cuentas_sol and not cuentas_usd and not contact_email and not contact_phone:
+            return []
+
+        story = []
+        story += _section_title("INFORMACIÓN DE PAGO", self._page_w)
+        story.append(_spacer(0.15))
+
+        hdr_st  = _style("EC_PayHdr", "Normal", fontSize=8, leading=10,
+                         textColor=C_PRIMARY, fontName=_F_BOLD)
+        lbl_st  = _style("EC_PayLbl", "Normal", fontSize=7.5, leading=10,
+                         textColor=C_MUTED, fontName=_F_BODY)
+        val_st  = _style("EC_PayVal", "Normal", fontSize=8, leading=11,
+                         textColor=C_TEXT, fontName=_F_BODY)
+        cci_st  = _style("EC_PayCCI", "Normal", fontSize=7, leading=9,
+                         textColor=C_MUTED, fontName=_F_BODY)
+
+        def _cuenta_block(cuentas: list) -> List:
+            block = []
+            for c in cuentas:
+                banco  = c.get("banco",  "").strip()
+                numero = c.get("numero", "").strip()
+                cci    = c.get("cci",    "").strip()
+                if banco:
+                    block.append(Paragraph(f"<b>{banco}:</b> {numero}", val_st))
+                else:
+                    block.append(Paragraph(numero, val_st))
+                if cci:
+                    block.append(Paragraph(f"CCI: {cci}", cci_st))
+            return block
+
+        # Construir columnas de cuentas (sol izquierda, usd derecha)
+        col_sol_content: List = []
+        col_usd_content: List = []
+
+        if cuentas_sol:
+            col_sol_content.append(Paragraph("CUENTAS EN SOLES (S/)", hdr_st))
+            col_sol_content += _cuenta_block(cuentas_sol)
+
+        if cuentas_usd:
+            col_usd_content.append(Paragraph("CUENTAS EN DÓLARES (US$)", hdr_st))
+            col_usd_content += _cuenta_block(cuentas_usd)
+
+        if col_sol_content or col_usd_content:
+            half_w = self._page_w / 2 - 4
+            tbl_cuentas = Table(
+                [[col_sol_content or [""], col_usd_content or [""]]],
+                colWidths=[half_w, half_w],
+            )
+            tbl_cuentas.setStyle(TableStyle([
+                ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+                ("LINEAFTER",     (0, 0), (0, -1),  0.5, C_BORDER),
+                ("BACKGROUND",    (0, 0), (-1, -1), C_LIGHT_ROW),
+                ("TOPPADDING",    (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
+                ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+            ]))
+            story.append(tbl_cuentas)
+
+        # Datos de contacto
+        contact_parts = []
+        if contact_email:
+            contact_parts.append(f"Envío de vouchers: <b>{contact_email}</b>")
+        if contact_phone:
+            contact_parts.append(f"Consultas: {contact_phone}")
+        if contact_parts:
+            story.append(_spacer(0.1))
+            story.append(Paragraph(" &nbsp;&bull;&nbsp; ".join(contact_parts),
+                _style("EC_Contact", "Normal", fontSize=7.5, leading=10,
+                       textColor=C_MUTED, fontName=_F_BODY)))
+
+        # Instrucciones adicionales de pago
+        if voucher_raw:
+            story.append(_spacer(0.1))
+            for line in voucher_raw.split("\n"):
+                story.append(Paragraph(line or " ",
+                    _style("EC_Voucher", "Normal", fontSize=7.5, leading=10,
+                           textColor=C_MUTED, fontName=_F_BODY)))
+
+        story.append(_spacer(0.30))
+        return story
+
+    def _build_footer_block(self) -> List:
+        """Texto de cierre desde Tab Configuración > footer_text."""
+        tmpl  = self.settings.get("email_template", {})
+        raw   = (tmpl.get("footer_text") or "").strip()
+        story = []
+        if not raw:
+            return story
+        story.append(_spacer(0.2))
+        # Caja sutil para el texto de cierre (evitar confusión con el cuerpo)
+        note_st = _style("EC_Note", "Normal", fontSize=7.5, leading=11,
+                         textColor=C_MUTED, fontName=_F_BODY)
+        lines = [Paragraph(line or " ", note_st) for line in raw.split("\n")]
+        box = Table([[lines]], colWidths=[self._page_w])
+        box.setStyle(TableStyle([
+            ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+            ("BACKGROUND",    (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+            ("TOPPADDING",    (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 12),
+        ]))
+        story.append(box)
+        story.append(_spacer(0.25))
+        return story
+
+    def _build_signature(self) -> List:
+        """Frase de despedida configurable + cargo + datos empresa."""
+        company         = self.settings.get("company_name", "DACTA S.A.C.")
+        ruc             = self.settings.get("company_ruc", "")
+        phone           = self.settings.get("phone_contact", "")
+        _tmpl           = self.settings.get("email_template", {})
+        firma_cargo     = (_tmpl.get("firma_cargo")     or "Area de Cobranzas y Facturacion").strip()
+        pdf_atentamente = (_tmpl.get("pdf_atentamente") or "Atentamente,").strip()
+
+        story = []
+        story.append(_hr(C_BORDER, 0.5))
+        story.append(_spacer(0.25))
+        story.append(Paragraph(pdf_atentamente, ST_BODY))
+        story.append(_spacer(0.5))   # espacio para firma manual
+        story.append(Paragraph(firma_cargo, ST_BODY_BOLD))
+        footer_line = company
+        if ruc:
+            footer_line += f" · RUC: {ruc}"
+        if phone:
+            footer_line += f" · {phone}"
+        story.append(Paragraph(footer_line, ST_SMALL))
+        return story
+
+    def _add_page_footer(self, canvas_obj: Any, doc: Any) -> None:
+        """Línea decorativa + Ref (izq) · Empresa (centro) · Pág. N (der)."""
+        canvas_obj.saveState()
+        page_w = A4[0]
+        y_line = 1.15 * cm
+        y_text = 0.65 * cm
+
+        # Línea separadora tenue
+        canvas_obj.setStrokeColor(C_BORDER)
+        canvas_obj.setLineWidth(0.5)
+        canvas_obj.line(2 * cm, y_line, page_w - 2 * cm, y_line)
+
+        company = self.settings.get("company_name", "DACTA S.A.C.")
+        ruc     = self.settings.get("company_ruc", "")
+        center_txt = company + (f" · RUC: {ruc}" if ruc else "")
+
+        canvas_obj.setFont(_F_BODY, 6.5)
+        canvas_obj.setFillColor(C_MUTED)
+        canvas_obj.drawString(2 * cm, y_text,
+                              f"Ref: {self.cycle_id} · {self._now.strftime('%d/%m/%Y')}")
+        canvas_obj.drawCentredString(page_w / 2, y_text, center_txt)
+        canvas_obj.drawRightString(page_w - 2 * cm, y_text, f"Pág. {doc.page}")
+        canvas_obj.restoreState()
+
+
 def _accion_pdf(mora: int, gestiones: int) -> str:
     if mora > 365:
         return "⚖️ Cobro judicial urgente"

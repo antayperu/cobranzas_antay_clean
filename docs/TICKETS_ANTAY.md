@@ -7,9 +7,9 @@
 
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
-| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 062 |
-| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 071 |
-| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 003 |
+| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 041 |
+| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 073 |
+| **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 004 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
 | **RC-TECH** | Deuda técnica | Estandarización de esquema, nomenclatura, contratos internos. | 001 |
@@ -30,6 +30,11 @@
 | **RC-FIX-062** | Recuperado real dual moneda desde resumen_ciclo | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 |
 | **RC-UX-001** | Sidebar progressive disclosure + feedback visual archivos | **P2** (Medio) | Done ✅ | Claude | 2026-03-24 |
 | **RC-UX-002** | Informe Gerencial — tipografía Manrope/IBM Plex Sans + visual premium | **P2** (Medio) | Done ✅ | Claude | 2026-03-24 |
+| **RC-FEAT-040** | Email premium con PDF adjunto Estado de Cuenta | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 |
+| **RC-FEAT-041** | Email premium sin tabla + PDF premium configurable + Plantillas de Correo | **P1** (Alto) | Done ✅ | Claude | 2026-03-28 |
+| **RC-UX-003** | Precision Editor Plantillas de Correo — 6 expanders colapsados + CSS premium | **P2** (Medio) | Done ✅ | Claude | 2026-03-28 |
+| **RC-BUG-072** | PDF adjunto en Vista Previa renderizaba canvas en blanco (PDF.js blob-worker) | **P1** (Alto) | Done ✅ | Claude | 2026-03-28 |
+| **RC-BUG-073** | EstadoCuenta PDF duplicaba fecha y nombre empresa en saludo | **P1** (Alto) | Done ✅ | Claude | 2026-03-28 |
 | **RC-QA-001** | Validar Envío PDF (Estrategia Force-Click + Loop) | **P0** (Critico) | Ready | Antigravity | 2025-12-22 |
 | **RC-FEAT-001** | Selector Tri-modal (Texto / Imagen / +PDF) | **P1** (Alto) | Backlog | - | - |
 | **RC-ARCH-001** | Estandarización Selectores DOM WhatsApp Web | **P2** (Medio) | Backlog | - | - |
