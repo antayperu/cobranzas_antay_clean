@@ -521,6 +521,99 @@ def load_css():
                 padding: 16px;
             }}
         }}
+
+        /* ── Premium Expanders — área de contenido principal ──────────────── */
+        [data-testid="stAppViewContainer"] [data-testid="stExpander"] {{
+            border: 1.5px solid var(--antay-border);
+            border-radius: 14px;
+            margin-bottom: 8px;
+            background: var(--antay-surface);
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(16,42,67,0.05), 0 3px 10px rgba(13,59,102,0.04);
+            transition: box-shadow 0.22s ease, border-color 0.22s ease;
+        }}
+        [data-testid="stAppViewContainer"] [data-testid="stExpander"]:hover {{
+            box-shadow: 0 3px 14px rgba(13,59,102,0.10), 0 1px 4px rgba(16,42,67,0.06);
+            border-color: #bad0e6;
+        }}
+        [data-testid="stAppViewContainer"] [data-testid="stExpander"] details > summary {{
+            padding: 15px 20px !important;
+            font-family: 'Manrope', 'IBM Plex Sans', sans-serif !important;
+            font-weight: 700 !important;
+            font-size: 0.92rem !important;
+            color: var(--antay-primary) !important;
+            letter-spacing: -0.01em;
+            line-height: 1.35;
+            list-style: none;
+        }}
+        [data-testid="stAppViewContainer"] [data-testid="stExpander"] details > summary:hover {{
+            background: linear-gradient(to right, rgba(13,59,102,0.045), transparent) !important;
+        }}
+        [data-testid="stAppViewContainer"] [data-testid="stExpander"] details[open] > summary {{
+            background: linear-gradient(90deg, rgba(13,59,102,0.06) 0%, rgba(11,114,133,0.025) 100%) !important;
+            border-bottom: 1.5px solid var(--antay-border);
+        }}
+        /* Chevron del expander */
+        [data-testid="stAppViewContainer"] [data-testid="stExpander"] details > summary svg {{
+            color: var(--antay-accent) !important;
+            opacity: 0.8;
+        }}
+        /* Padding interior del contenido */
+        [data-testid="stAppViewContainer"] [data-testid="stExpander"] details > div {{
+            padding: 2px 4px 8px;
+        }}
+
+        /* ── Chips de variables disponibles ──────────────────────────────── */
+        .plantillas-chips {{
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px;
+            padding: 9px 12px;
+            background: rgba(13,59,102,0.032);
+            border: 1px solid var(--antay-border);
+            border-radius: 9px;
+            margin-bottom: 1rem;
+        }}
+        .plantillas-chips__label {{
+            font-size: 0.70rem;
+            font-weight: 750;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--antay-muted);
+            margin-right: 4px;
+            white-space: nowrap;
+        }}
+        .plantillas-chips code {{
+            display: inline-flex;
+            align-items: center;
+            background: linear-gradient(118deg, #eef5ff 0%, #e4efff 100%);
+            border: 1px solid #b5ceea;
+            border-radius: 6px;
+            padding: 1px 8px;
+            font-family: 'IBM Plex Mono', 'Courier New', monospace;
+            font-size: 0.71rem;
+            font-weight: 650;
+            color: var(--antay-primary);
+            white-space: nowrap;
+            transition: background 0.15s ease;
+        }}
+        .plantillas-chips code:hover {{
+            background: linear-gradient(118deg, #deeeff 0%, #d5e9ff 100%);
+            border-color: #9ab8d8;
+        }}
+
+        /* ── Bank account section micro-header ────────────────────────────── */
+        .plantillas-bank-hdr {{
+            font-size: 0.73rem;
+            font-weight: 750;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--antay-muted);
+            padding-bottom: 6px;
+            border-bottom: 1.5px solid var(--antay-border);
+            margin-bottom: 6px;
+        }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)

@@ -491,156 +491,165 @@ def render_tab(config):
 
         with _plant_form_ctx:
 
-            # ── SECCIÓN A: CORREO ELECTRÓNICO ─────────────────────────────────
-            st.markdown("#### 📧 Correo Electrónico")
-            st.caption("Define el asunto y el cuerpo breve del correo que recibirá el cliente.")
-            st.markdown(f"**Variables disponibles:** {_vars_chip_email}", unsafe_allow_html=True)
-            st.markdown("")
-
-            new_subject = st.text_input(
-                "Asunto del correo",
-                value=_tmpl.get("email_subject", "Estado de Cuenta | {CLIENTE}"),
-                help="Línea de asunto. Usa {CLIENTE} para incluir el nombre de la empresa.",
-                key="planta_subject"
-            )
-            new_email_body = st.text_area(
-                "Cuerpo del mensaje",
-                value=_tmpl.get("email_body_text", ""),
-                height=110,
-                help="Texto principal del correo. Breve y directo. El resumen de deuda se inserta automáticamente.",
-                key="planta_email_body"
-            )
-
-            st.divider()
-
-            # ── SECCIÓN B: CABECERA DEL DOCUMENTO PDF ─────────────────────────
-            st.markdown("#### 📄 Cabecera del Documento PDF")
-            st.caption("Título que aparece en la parte superior del documento Estado de Cuenta.")
-
-            new_pdf_title = st.text_input(
-                "Título del documento",
-                value=_tmpl.get("pdf_title", "ESTADO DE CUENTA"),
-                help="Ejemplo: ESTADO DE CUENTA · NOTIFICACIÓN DE COBRANZA",
-                key="planta_pdf_title"
-            )
-
-            st.divider()
-
-            # ── SECCIÓN C: CUERPO DE LA CARTA (PDF) ───────────────────────────
-            st.markdown("#### ✉️ Cuerpo de la Carta (PDF)")
-            st.caption("Texto que se dirige directamente al cliente en el documento PDF.")
-            st.markdown(f"**Variables disponibles:** {_vars_chip_pdf}", unsafe_allow_html=True)
-            st.markdown("")
-
-            new_pdf_saludo = st.text_input(
-                "Saludo / Apertura",
-                value=_tmpl.get("pdf_saludo", "Estimado cliente: {CLIENTE},"),
-                help="Primera línea de la carta. Usa {CLIENTE} para personalizar.",
-                key="planta_pdf_saludo"
-            )
-            new_pdf_presente = st.text_input(
-                "Línea 'Presente'",
-                value=_tmpl.get("pdf_presente", "Presente.-"),
-                help='Línea formal después del saludo. Ejemplo: "Presente.-" o "De mi mayor consideración:"',
-                key="planta_pdf_presente"
-            )
-            new_intro = st.text_area(
-                "Texto introductorio",
-                value=_tmpl.get("intro_text", ""),
-                height=100,
-                help="Párrafo principal de la carta. Explica el motivo del documento.",
-                key="planta_intro"
-            )
-
-            st.divider()
-
-            # ── SECCIÓN D: ALERTA DE DETRACCIÓN ───────────────────────────────
-            st.markdown("#### ⚠️ Alerta de Detracción SUNAT")
-            st.caption("Este bloque aparece en el PDF **solo si** el cliente tiene documentos afectos a detracción. Déjalo vacío para no mostrar nada.")
-
-            new_alert = st.text_area(
-                "Texto de alerta detracción",
-                value=_tmpl.get("alert_text", ""),
-                height=80,
-                help="Instrucción sobre el Banco de la Nación y número de cuenta de detracciones.",
-                key="planta_alert"
-            )
-
-            st.divider()
-
-            # ── SECCIÓN E: INFORMACIÓN DE PAGO ────────────────────────────────
-            st.markdown("#### 🏦 Información de Pago")
-            st.caption("Cuentas bancarias que aparecerán tanto en el correo como en el PDF. Deja vacío los campos que no apliquen.")
-
-            st.markdown("**Cuentas en Soles (S/)**")
-            _col_s1, _col_s2 = st.columns(2)
-            with _col_s1:
-                new_sol_b1_banco  = st.text_input("Banco 1 — Nombre",  value=_cuenta_val(_cuentas_sol, 0, "banco"),  key="planta_sol_b1_banco", placeholder="BCP")
-                new_sol_b1_num    = st.text_input("Banco 1 — Número",  value=_cuenta_val(_cuentas_sol, 0, "numero"), key="planta_sol_b1_num",   placeholder="1234567890")
-                new_sol_b1_cci    = st.text_input("Banco 1 — CCI",     value=_cuenta_val(_cuentas_sol, 0, "cci"),    key="planta_sol_b1_cci",   placeholder="00210300...")
-            with _col_s2:
-                new_sol_b2_banco  = st.text_input("Banco 2 — Nombre",  value=_cuenta_val(_cuentas_sol, 1, "banco"),  key="planta_sol_b2_banco", placeholder="BBVA")
-                new_sol_b2_num    = st.text_input("Banco 2 — Número",  value=_cuenta_val(_cuentas_sol, 1, "numero"), key="planta_sol_b2_num",   placeholder="0011034...")
-                new_sol_b2_cci    = st.text_input("Banco 2 — CCI",     value=_cuenta_val(_cuentas_sol, 1, "cci"),    key="planta_sol_b2_cci",   placeholder="01134000...")
-
-            st.markdown("**Cuentas en Dólares (US$)**")
-            _col_u1, _col_u2 = st.columns(2)
-            with _col_u1:
-                new_usd_b1_banco  = st.text_input("Banco 1 — Nombre",  value=_cuenta_val(_cuentas_usd, 0, "banco"),  key="planta_usd_b1_banco", placeholder="BCP")
-                new_usd_b1_num    = st.text_input("Banco 1 — Número",  value=_cuenta_val(_cuentas_usd, 0, "numero"), key="planta_usd_b1_num",   placeholder="1912078...")
-                new_usd_b1_cci    = st.text_input("Banco 1 — CCI",     value=_cuenta_val(_cuentas_usd, 0, "cci"),    key="planta_usd_b1_cci",   placeholder="00219100...")
-
-            st.markdown("**Datos de contacto para pagos**")
-            _col_c1, _col_c2 = st.columns(2)
-            with _col_c1:
-                new_contact_email = st.text_input(
-                    "Correo para envío de vouchers",
-                    value=_tmpl.get("contact_email", ""),
-                    key="planta_contact_email",
-                    placeholder="cobranzas@empresa.com"
+            # ── A · CORREO ELECTRÓNICO ────────────────────────────────────────
+            with st.expander("📧  Correo Electrónico", expanded=False):
+                st.caption("Asunto y cuerpo breve del correo. El resumen de deuda se inserta automáticamente.")
+                _chips_email_html = (
+                    "<div class='plantillas-chips'>"
+                    "<span class='plantillas-chips__label'>Variables:</span>"
+                    + "".join(f"<code>{v}</code>" for v in _VARS_EMAIL)
+                    + "</div>"
                 )
-            with _col_c2:
-                new_contact_phone = st.text_input(
-                    "Teléfono de consulta",
-                    value=_tmpl.get("contact_phone", ""),
-                    key="planta_contact_phone",
-                    placeholder="+51 999 000 000"
+                st.markdown(_chips_email_html, unsafe_allow_html=True)
+                new_subject = st.text_input(
+                    "Asunto del correo",
+                    value=_tmpl.get("email_subject", "Estado de Cuenta | {CLIENTE}"),
+                    help="Línea de asunto. Usa {CLIENTE} para incluir el nombre de la empresa.",
+                    key="planta_subject",
                 )
-            new_voucher = st.text_area(
-                "Instrucciones adicionales de pago (opcional)",
-                value=_tmpl.get("voucher_text", ""),
-                height=60,
-                help="Texto libre para instrucciones específicas. Déjalo vacío para no mostrar.",
-                key="planta_voucher"
-            )
+                new_email_body = st.text_area(
+                    "Cuerpo del mensaje",
+                    value=_tmpl.get("email_body_text", ""),
+                    height=110,
+                    help="Texto principal del correo. Breve y directo.",
+                    key="planta_email_body",
+                )
 
-            st.divider()
+            # ── B · CABECERA DEL PDF ──────────────────────────────────────────
+            with st.expander("📄  Cabecera del PDF", expanded=False):
+                st.caption("Título que aparece en el banner superior del Estado de Cuenta.")
+                new_pdf_title = st.text_input(
+                    "Título del documento",
+                    value=_tmpl.get("pdf_title", "ESTADO DE CUENTA"),
+                    help="Ejemplo: ESTADO DE CUENTA · NOTIFICACIÓN DE COBRANZA",
+                    key="planta_pdf_title",
+                )
 
-            # ── SECCIÓN F: PIE DE PÁGINA Y FIRMA ──────────────────────────────
-            st.markdown("#### 📝 Pie de Página y Firma")
-            st.caption("Texto final del documento y cargo del área que firma.")
+            # ── C · CUERPO DE LA CARTA (PDF) ─────────────────────────────────
+            with st.expander("✉️  Cuerpo de la Carta  (PDF)", expanded=False):
+                st.caption("Saludo, apertura formal y párrafo introductorio del documento PDF.")
+                _chips_pdf_html = (
+                    "<div class='plantillas-chips'>"
+                    "<span class='plantillas-chips__label'>Variables:</span>"
+                    + "".join(f"<code>{v}</code>" for v in _VARS_PDF)
+                    + "</div>"
+                )
+                st.markdown(_chips_pdf_html, unsafe_allow_html=True)
+                _sc1, _sc2 = st.columns(2)
+                with _sc1:
+                    new_pdf_saludo = st.text_input(
+                        "Saludo / Apertura",
+                        value=_tmpl.get("pdf_saludo", "Estimado cliente,"),
+                        help="Primera línea de la carta. Usa {CLIENTE} para personalizar.",
+                        key="planta_pdf_saludo",
+                    )
+                with _sc2:
+                    new_pdf_presente = st.text_input(
+                        "Línea formal (Presente)",
+                        value=_tmpl.get("pdf_presente", "Presente.-"),
+                        help='Línea después del saludo. Ej: "Presente.-" o "De mi mayor consideración:"',
+                        key="planta_pdf_presente",
+                    )
+                new_intro = st.text_area(
+                    "Texto introductorio",
+                    value=_tmpl.get("intro_text", ""),
+                    height=100,
+                    help="Párrafo principal de la carta. Explica el motivo del documento.",
+                    key="planta_intro",
+                )
 
-            new_footer = st.text_area(
-                "Texto de cierre / pie de página",
-                value=_tmpl.get("footer_text", ""),
-                height=100,
-                help='Incluye siempre: "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje."',
-                key="planta_footer"
-            )
-            new_pdf_atentamente = st.text_input(
-                "Frase de despedida",
-                value=_tmpl.get("pdf_atentamente", "Atentamente,"),
-                help='Frase antes de la firma. Ejemplo: "Atentamente," o "Cordialmente,"',
-                key="planta_pdf_atentamente"
-            )
-            new_firma_cargo = st.text_input(
-                "Cargo para la firma",
-                value=_tmpl.get("firma_cargo", "Area de Cobranzas y Facturacion"),
-                help="Ejemplo: Área de Cobranzas y Facturación",
-                key="planta_firma_cargo"
-            )
+            # ── D · ALERTA DETRACCIÓN ─────────────────────────────────────────
+            with st.expander("⚠️  Alerta de Detracción SUNAT", expanded=False):
+                st.caption("Aparece en el PDF **solo si** hay documentos afectos a detracción. Déjalo vacío para ocultar.")
+                new_alert = st.text_area(
+                    "Texto de alerta",
+                    value=_tmpl.get("alert_text", ""),
+                    height=80,
+                    help="Instrucción sobre el Banco de la Nación y la cuenta de detracciones.",
+                    key="planta_alert",
+                )
 
-            st.markdown("")
+            # ── E · CUENTAS BANCARIAS Y CONTACTO ─────────────────────────────
+            with st.expander("🏦  Cuentas Bancarias y Contacto", expanded=False):
+                st.caption("Información de pago que aparece en el correo y en el PDF.")
+
+                st.markdown("<p class='plantillas-bank-hdr'>Cuentas en Soles (S/)</p>", unsafe_allow_html=True)
+                _e1, _e2, _e3 = st.columns([1.1, 2, 2.5])
+                with _e1:
+                    new_sol_b1_banco = st.text_input("Banco", value=_cuenta_val(_cuentas_sol, 0, "banco"), key="planta_sol_b1_banco", placeholder="BCP")
+                with _e2:
+                    new_sol_b1_num = st.text_input("Número de cuenta", value=_cuenta_val(_cuentas_sol, 0, "numero"), key="planta_sol_b1_num", placeholder="194-12345678-0-89")
+                with _e3:
+                    new_sol_b1_cci = st.text_input("CCI", value=_cuenta_val(_cuentas_sol, 0, "cci"), key="planta_sol_b1_cci", placeholder="002194001234567890")
+
+                _e1, _e2, _e3 = st.columns([1.1, 2, 2.5])
+                with _e1:
+                    new_sol_b2_banco = st.text_input("Banco\u00a0", value=_cuenta_val(_cuentas_sol, 1, "banco"), key="planta_sol_b2_banco", placeholder="BBVA")
+                with _e2:
+                    new_sol_b2_num = st.text_input("Número de cuenta\u00a0", value=_cuenta_val(_cuentas_sol, 1, "numero"), key="planta_sol_b2_num", placeholder="0011-0034-01...")
+                with _e3:
+                    new_sol_b2_cci = st.text_input("CCI\u00a0", value=_cuenta_val(_cuentas_sol, 1, "cci"), key="planta_sol_b2_cci", placeholder="011034000...")
+
+                st.markdown("<p class='plantillas-bank-hdr' style='margin-top:14px'>Cuentas en Dólares (US$)</p>", unsafe_allow_html=True)
+                _e1, _e2, _e3 = st.columns([1.1, 2, 2.5])
+                with _e1:
+                    new_usd_b1_banco = st.text_input("Banco\u00a0\u00a0", value=_cuenta_val(_cuentas_usd, 0, "banco"), key="planta_usd_b1_banco", placeholder="BCP")
+                with _e2:
+                    new_usd_b1_num = st.text_input("Número de cuenta\u00a0\u00a0", value=_cuenta_val(_cuentas_usd, 0, "numero"), key="planta_usd_b1_num", placeholder="194-98765432-1-20")
+                with _e3:
+                    new_usd_b1_cci = st.text_input("CCI\u00a0\u00a0", value=_cuenta_val(_cuentas_usd, 0, "cci"), key="planta_usd_b1_cci", placeholder="002194009876543210")
+
+                st.markdown("<p class='plantillas-bank-hdr' style='margin-top:14px'>Datos de Contacto</p>", unsafe_allow_html=True)
+                _ec1, _ec2 = st.columns(2)
+                with _ec1:
+                    new_contact_email = st.text_input(
+                        "Correo para vouchers",
+                        value=_tmpl.get("contact_email", ""),
+                        key="planta_contact_email",
+                        placeholder="cobranzas@empresa.com",
+                    )
+                with _ec2:
+                    new_contact_phone = st.text_input(
+                        "Teléfono de consulta",
+                        value=_tmpl.get("contact_phone", ""),
+                        key="planta_contact_phone",
+                        placeholder="+51 999 000 000",
+                    )
+                new_voucher = st.text_area(
+                    "Instrucciones adicionales (opcional)",
+                    value=_tmpl.get("voucher_text", ""),
+                    height=60,
+                    help="Texto libre para instrucciones específicas de pago. Déjalo vacío para no mostrar.",
+                    key="planta_voucher",
+                )
+
+            # ── F · PIE DE PÁGINA Y FIRMA ─────────────────────────────────────
+            with st.expander("🖊️  Pie de Página y Firma", expanded=False):
+                st.caption("Texto de cierre del documento y cargo del área responsable.")
+                new_footer = st.text_area(
+                    "Texto de cierre",
+                    value=_tmpl.get("footer_text", ""),
+                    height=90,
+                    help='Incluye: "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje."',
+                    key="planta_footer",
+                )
+                _pf1, _pf2 = st.columns(2)
+                with _pf1:
+                    new_pdf_atentamente = st.text_input(
+                        "Frase de despedida",
+                        value=_tmpl.get("pdf_atentamente", "Atentamente,"),
+                        help='Ejemplo: "Atentamente," o "Cordialmente,"',
+                        key="planta_pdf_atentamente",
+                    )
+                with _pf2:
+                    new_firma_cargo = st.text_input(
+                        "Cargo para la firma",
+                        value=_tmpl.get("firma_cargo", "Area de Cobranzas y Facturacion"),
+                        help="Ejemplo: Área de Cobranzas y Facturación",
+                        key="planta_firma_cargo",
+                    )
+
+            st.markdown("&nbsp;", unsafe_allow_html=True)
             _plant_submitted = st.form_submit_button(
                 "💾 Guardar Plantillas", type="primary", use_container_width=True
             )
