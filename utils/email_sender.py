@@ -37,17 +37,16 @@ COLOR_BG = "#f4f4f4"
 COLOR_TEXT = "#333333"
 
 
-def generate_cover_email_html(client_name, total_sol, total_usd, cycle_id, branding_config):
+def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
     """
     Genera el cuerpo HTML de la carta de presentación premium del email.
-    El detalle va en el PDF adjunto — este email es la portada corporativa.
+    El detalle completo va en el PDF adjunto — este email es la portada corporativa.
     RC-FEAT-040: Reemplaza generate_premium_email_body_cid() como cuerpo principal.
 
     Parámetros:
-        client_name    -- nombre del cliente (empresa)
-        total_sol      -- float, total en soles
-        total_usd      -- float, total en dólares
-        cycle_id       -- ID del ciclo (CIC-YYYYMMDD-HHMM)
+        client_name     -- nombre del cliente (empresa)
+        docs_df         -- pd.DataFrame con los documentos del cliente
+        cycle_id        -- ID del ciclo (CIC-YYYYMMDD-HHMM)
         branding_config -- dict con company_name, company_ruc, phone_contact,
                            primary_color, email_template, logo_path/logo_bytes
     """
@@ -60,42 +59,61 @@ def generate_cover_email_html(client_name, total_sol, total_usd, cycle_id, brand
     def _nl2br(txt):
         return html.escape(str(txt or "")).replace("\n", "<br>")
 
+    # Calcular KPIs exactamente igual que generate_premium_email_body_cid
+    sum_detr = 0.0
+    try:
+        df_calc = docs_df.copy()
+        df_calc['SALDO_REAL_CLEAN']  = df_calc['SALDO REAL'].apply(helpers.safe_clean_decimal)
+        df_calc['DETRACCION_CLEAN']  = df_calc['DETRACCIÓN'].apply(helpers.safe_clean_decimal)
+        mask_soles = df_calc['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
+        df_sol = df_calc[mask_soles]
+        df_dol = df_calc[~mask_soles]
+        sum_s  = df_sol['SALDO_REAL_CLEAN'].sum()
+        count_s = len(df_sol)
+        sum_d  = df_dol['SALDO_REAL_CLEAN'].sum()
+        count_d = len(df_dol)
+        kpi_sol  = f"S/ {sum_s:,.2f} ({count_s:02d} documentos)"
+        kpi_usd  = f"US$ {sum_d:,.2f} ({count_d:02d} documentos)"
+        try:
+            mask_dv = df_calc['DETRACCION_CLEAN'] > 0.01
+            mask_ds = df_calc['ESTADO DETRACCION'].astype(str).str.strip().str.upper() == 'PENDIENTE'
+            df_detr = df_calc[mask_dv & mask_ds]
+            sum_detr   = df_detr['DETRACCION_CLEAN'].sum()
+            count_detr = len(df_detr)
+        except Exception:
+            sum_detr, count_detr = 0.0, 0
+        kpi_sunat = f"S/ {sum_detr:,.2f} ({count_detr:02d} documentos afectos)"
+    except Exception:
+        kpi_sol   = "S/ 0.00 (00 documentos)"
+        kpi_usd   = "US$ 0.00 (00 documentos)"
+        kpi_sunat = "S/ 0.00 (00 documentos afectos)"
+
+    safe_client = html.escape(str(client_name))
+
+    # Resumen financiero — mismo formato que el email anterior
+    td_lbl = f'style="color:#486581;padding:5px 0;font-size:13px"'
+    td_val = f'style="text-align:right;font-weight:700;color:{primary_color};padding:5px 0;font-size:14px"'
+    resumen_rows = (
+        f'<tr><td {td_lbl}>Deuda Total <strong>Soles</strong>:</td>'
+        f'<td {td_val}>{kpi_sol}</td></tr>'
+        f'<tr><td {td_lbl}>Deuda Total <strong>Dólares</strong>:</td>'
+        f'<td {td_val}>{kpi_usd}</td></tr>'
+        f'<tr><td {td_lbl}>Detracciones SUNAT Pendientes:</td>'
+        f'<td {td_val}>{kpi_sunat}</td></tr>'
+    )
+
+    # Textos configurables
     intro_raw  = (tmpl.get("intro_text") or "").strip()
     footer_raw = (tmpl.get("footer_text") or "").strip()
 
-    intro_html  = _nl2br(intro_raw) if intro_raw else (
+    safe_client_plain = str(client_name)
+    intro_html = _nl2br(intro_raw).replace("{CLIENTE}", safe_client).replace("{cliente}", safe_client) if intro_raw else (
         "Le informamos que a la fecha presenta documentos pendientes de pago.<br>"
         "Agradeceremos gestionar la cancelación para mantener su servicio activo."
     )
     footer_html = _nl2br(footer_raw) if footer_raw else (
         f"Área de Cobranzas y Facturación<br><strong>{html.escape(company_name)}</strong>"
     )
-
-    safe_client = html.escape(str(client_name))
-
-    # Resumen financiero
-    resumen_rows = ""
-    if total_sol and float(total_sol) > 0:
-        resumen_rows += (
-            f'<tr>'
-            f'<td style="color:#486581;padding:5px 0;font-size:13px">Total pendiente S/:</td>'
-            f'<td style="text-align:right;font-weight:700;color:{primary_color};'
-            f'padding:5px 0;font-size:14px">S/ {float(total_sol):,.0f}</td>'
-            f'</tr>'
-        )
-    if total_usd and float(total_usd) > 0:
-        resumen_rows += (
-            f'<tr>'
-            f'<td style="color:#486581;padding:5px 0;font-size:13px">Total pendiente US$:</td>'
-            f'<td style="text-align:right;font-weight:700;color:{primary_color};'
-            f'padding:5px 0;font-size:14px">US$ {float(total_usd):,.0f}</td>'
-            f'</tr>'
-        )
-    if not resumen_rows:
-        resumen_rows = (
-            '<tr><td colspan="2" style="color:#486581;font-size:13px;padding:5px 0">'
-            'Ver detalle completo en el PDF adjunto.</td></tr>'
-        )
 
     # Logo
     has_logo = bool(branding_config.get("logo_path") or branding_config.get("logo_bytes"))

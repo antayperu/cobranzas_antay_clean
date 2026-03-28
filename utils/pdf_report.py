@@ -1465,8 +1465,7 @@ class EstadoCuentaCliente:
         story += self._build_header()
         story += self._build_salutation()
         story += self._build_intro()
-        story += self._build_docs_table()
-        story += self._build_totals()
+        story += self._build_docs_table()   # totales incluidos al final de la tabla
         story += self._build_detraccion()
         story += self._build_footer_block()
         story += self._build_signature()
@@ -1604,6 +1603,8 @@ class EstadoCuentaCliente:
                 "Le informamos que a la fecha presenta documentos pendientes de pago.\n"
                 "Agradeceremos gestionar la cancelación para mantener su servicio activo."
             )
+        # Reemplazar placeholder {CLIENTE} / {cliente} con el nombre de empresa
+        raw = raw.replace("{CLIENTE}", self.empresa).replace("{cliente}", self.empresa)
         story = []
         for line in raw.split("\n"):
             story.append(Paragraph(line or " ", ST_BODY))
@@ -1677,49 +1678,71 @@ class EstadoCuentaCliente:
             if bg_mora:
                 style_cmds.append(("BACKGROUND", (4, ri), (4, ri), bg_mora))
 
+        # ── Filas de totales al final de la tabla ────────────────────────
+        df = self.docs_df
+        mask_sol_t = df["MONEDA"].astype(str).str.strip().str.upper().str.startswith("S", na=False) if "MONEDA" in df.columns else [True] * len(df)
+        tot_sol   = df[mask_sol_t]["SALDO REAL"].apply(self._safe_float).sum()    if "SALDO REAL"  in df.columns else 0.0
+        tot_usd   = df[~mask_sol_t]["SALDO REAL"].apply(self._safe_float).sum()   if "SALDO REAL"  in df.columns else 0.0
+        n_sol     = int(mask_sol_t.sum())
+        n_usd     = int((~mask_sol_t).sum())
+
+        # Detracción pendiente
+        try:
+            mask_dv = df["DETRACCIÓN"].apply(self._safe_float) > 0.01 if "DETRACCIÓN" in df.columns else False
+            mask_dp = df["ESTADO DETRACCION"].astype(str).str.upper() == "PENDIENTE" if "ESTADO DETRACCION" in df.columns else False
+            if hasattr(mask_dv, "__len__") and hasattr(mask_dp, "__len__"):
+                tot_detr = df[mask_dv & mask_dp]["DETRACCIÓN"].apply(self._safe_float).sum()
+                n_detr   = int((mask_dv & mask_dp).sum())
+            else:
+                tot_detr, n_detr = 0.0, 0
+        except Exception:
+            tot_detr, n_detr = 0.0, 0
+
+        lbl_tot = _style("EC_TotLbl2", "Normal", fontSize=8, leading=10,
+                         textColor=C_TEXT, fontName=_F_BOLD, alignment=TA_LEFT)
+        val_tot = _style("EC_TotVal2", "Normal", fontSize=9, leading=11,
+                         textColor=C_PRIMARY, fontName=_F_HEADING, alignment=TA_RIGHT)
+
+        # Separador antes de los totales
+        n_data_rows = len(rows)   # índice del primer footer row
+
+        # Fila Total S/
+        rows.append(["", "", "", Paragraph(f"S/ {tot_sol:,.2f}", val_tot), "", ""])
+        style_cmds += [
+            ("SPAN",          (0, n_data_rows), (2, n_data_rows)),
+            ("SPAN",          (4, n_data_rows), (5, n_data_rows)),
+            ("BACKGROUND",    (0, n_data_rows), (-1, n_data_rows), C_BG),
+            ("LINEABOVE",     (0, n_data_rows), (-1, n_data_rows), 1.5, C_ACCENT),
+            ("ALIGN",         (3, n_data_rows), (3, n_data_rows), "RIGHT"),
+        ]
+        rows[n_data_rows][0] = Paragraph(f"Total S/ ({n_sol:02d} docs)", lbl_tot)
+
+        # Fila Total US$ (siempre visible, incluso si es cero)
+        r_usd = n_data_rows + 1
+        rows.append(["", "", "", Paragraph(f"US$ {tot_usd:,.2f}", val_tot), "", ""])
+        style_cmds += [
+            ("SPAN",       (0, r_usd), (2, r_usd)),
+            ("SPAN",       (4, r_usd), (5, r_usd)),
+            ("BACKGROUND", (0, r_usd), (-1, r_usd), C_BG),
+            ("ALIGN",      (3, r_usd), (3, r_usd), "RIGHT"),
+        ]
+        rows[r_usd][0] = Paragraph(f"Total US$ ({n_usd:02d} docs)", lbl_tot)
+
+        # Fila Total Detracción
+        r_det = n_data_rows + 2
+        rows.append(["", "", "", Paragraph(f"S/ {tot_detr:,.2f}", val_tot), "", ""])
+        style_cmds += [
+            ("SPAN",       (0, r_det), (2, r_det)),
+            ("SPAN",       (4, r_det), (5, r_det)),
+            ("BACKGROUND", (0, r_det), (-1, r_det), C_BG),
+            ("ALIGN",      (3, r_det), (3, r_det), "RIGHT"),
+            ("LINEBELOW",  (0, r_det), (-1, r_det), 1, C_ACCENT),
+        ]
+        rows[r_det][0] = Paragraph(f"Detracciones SUNAT ({n_detr:02d} docs)", lbl_tot)
+
         tbl = Table(rows, colWidths=col_ws, repeatRows=1)
         tbl.setStyle(TableStyle(style_cmds))
         story.append(tbl)
-        story.append(_spacer(0.35))
-        return story
-
-    def _build_totals(self) -> List:
-        """Caja resumen: Total S/ y US$."""
-        story = []
-        df = self.docs_df
-
-        mask_sol = df["MONEDA"].astype(str).str.strip().str.upper().str.startswith("S", na=False)
-        tot_sol  = df[mask_sol]["SALDO REAL"].apply(self._safe_float).sum() if "SALDO REAL" in df.columns else 0.0
-        tot_usd  = df[~mask_sol]["SALDO REAL"].apply(self._safe_float).sum() if "SALDO REAL" in df.columns else 0.0
-        n_docs   = len(df)
-
-        lbl_st = _style("EC_TotLbl", "Normal", fontSize=9, leading=12,
-                        textColor=C_MUTED, fontName=_F_BODY)
-        val_st = _style("EC_TotVal", "Normal", fontSize=12, leading=15,
-                        textColor=C_PRIMARY, fontName=_F_HEADING, alignment=TA_RIGHT)
-
-        tbl_data = []
-        tbl_data.append([
-            Paragraph(f"Total documentos: {n_docs}", lbl_st),
-            Paragraph(f"S/  {tot_sol:,.0f}", val_st),
-        ])
-        if tot_usd > 0:
-            tbl_data.append([
-                Paragraph("", lbl_st),
-                Paragraph(f"US$ {tot_usd:,.0f}", val_st),
-            ])
-
-        pw = self._page_w
-        tot_tbl = Table(tbl_data, colWidths=[pw * 0.50, pw * 0.50])
-        tot_tbl.setStyle(TableStyle([
-            ("BOX",           (0, 0), (-1, -1), 1,   C_ACCENT),
-            ("BACKGROUND",    (0, 0), (-1, -1), C_BG),
-            ("TOPPADDING",    (0, 0), (-1, -1), 8),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 10),
-            ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
-        ]))
-        story.append(tot_tbl)
         story.append(_spacer(0.35))
         return story
 

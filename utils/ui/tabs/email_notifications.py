@@ -274,13 +274,9 @@ def render_tab(df_final, df_filtered, config):
                     info_sel      = email_map[selected_label]
                     docs_cli_mail = df_email_view[df_email_view['COD CLIENTE'] == info_sel['cod']]
 
-                    mask_sol_p = docs_cli_mail['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
-                    tot_sol_p  = docs_cli_mail[mask_sol_p]['SALDO REAL'].sum()
-                    tot_usd_p  = docs_cli_mail[~mask_sol_p]['SALDO REAL'].sum()
-
                     # ── Email cover (portada) ─────────────────────────────
                     cover_html = es.generate_cover_email_html(
-                        info_sel['empresa'], tot_sol_p, tot_usd_p, cycle_id_prev, config
+                        info_sel['empresa'], docs_cli_mail, cycle_id_prev, config
                     )
                     if logo_path:
                         try:
@@ -447,7 +443,7 @@ def render_tab(df_final, df_filtered, config):
 
                             # ── Cuerpo del email (portada premium) ─────────────────────
                             body = es.generate_cover_email_html(
-                                info['empresa'], t_s, t_d, current_cycle_id, config
+                                info['empresa'], d_cli, current_cycle_id, config
                             )
                             plain_body = es.generate_plain_text_body(info['empresa'], d_cli, str_s, str_d, config)
 
