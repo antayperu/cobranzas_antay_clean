@@ -120,6 +120,7 @@ ST_TH_SM       = _style("RC_TH_SM",   "Normal",  fontSize=7,   leading=9,  textC
 ST_TD          = _style("RC_TD",      "Normal",  fontSize=8.5, leading=11, textColor=C_TEXT,    fontName=_F_BODY,    alignment=TA_LEFT)
 ST_TD_RIGHT    = _style("RC_TDR",     "Normal",  fontSize=8.5, leading=11, textColor=C_TEXT,    fontName=_F_BODY,    alignment=TA_RIGHT)
 ST_TD_CENTER   = _style("RC_TDC",     "Normal",  fontSize=8.5, leading=11, textColor=C_TEXT,    fontName=_F_BODY,    alignment=TA_CENTER)
+ST_TD_SM       = _style("RC_TDSM",   "Normal",  fontSize=7.5, leading=10, textColor=C_TEXT,    fontName=_F_BODY,    alignment=TA_CENTER)
 ST_REC_CAT     = _style("RC_RecCat",  "Normal",  fontSize=10, leading=13, textColor=C_WHITE,    fontName=_F_HEADING)
 ST_REC_TXT     = _style("RC_RecTxt",  "Normal",  fontSize=8.5, leading=12, textColor=C_TEXT,    fontName=_F_BODY)
 ST_NOTE        = _style("RC_Note",    "Normal",  fontSize=7,  leading=9,  textColor=C_MUTED,    fontName=_F_BODY)
@@ -139,17 +140,17 @@ ST_KPI_BIG_L   = _style("RC_KpiBigL",   "Normal", fontSize=7,  leading=9,  textC
 # ---------------------------------------------------------------------------
 
 def _fmt_sol(v: float) -> str:
+    """Formatea soles sin decimales: S/ 60,500"""
     if v == 0:
         return "S/ —"
-    if abs(v) >= 1_000:
-        return f"S/ {v:,.0f}"
-    return f"S/ {v:,.2f}"
+    return f"S/ {round(v):,}"
 
 
 def _fmt_usd(v: float) -> str:
+    """Formatea dólares sin decimales: US$ 1,200"""
     if v == 0:
         return "—"
-    return f"US$ {v:,.2f}"
+    return f"US$ {round(v):,}"
 
 
 def _pct(num: float, den: float, fmt: str = ".1f") -> str:
@@ -563,8 +564,28 @@ class InformeGerencial:
         tasa_recup   = self.recovery.get("tasa_recuperacion", 0.0)
         tiene_ant    = self.recovery.get("tiene_anterior", False)
 
-        saldo_pendiente_sol = max(total_sol - rec_sol, 0.0)
-        saldo_pendiente_usd = max(total_usd - rec_usd, 0.0)
+        # --- AR Roll Forward: cartera_anterior = aging_actual + recuperado ---
+        # La identidad contable: cartera_ant - recuperado = cartera_actual (aging)
+        # Aproximacion valida para portafolios B2B sin crecimiento explosivo entre ciclos.
+        if tiene_ant:
+            cartera_ant_sol = total_sol + rec_sol
+            cartera_ant_usd = total_usd + rec_usd
+        else:
+            cartera_ant_sol = total_sol
+            cartera_ant_usd = total_usd
+
+        # Tasas de recuperacion sobre monto (mas correctas que tasa_recup doc-based)
+        tasa_sol = rec_sol / cartera_ant_sol * 100 if cartera_ant_sol > 0 else 0.0
+        tasa_usd = rec_usd / cartera_ant_usd * 100 if cartera_ant_usd > 0 else 0.0
+
+        # Semaforo eficiencia: basado en tasa_sol (moneda principal)
+        _c_efic = C_SUCCESS if tasa_sol >= 55 else C_WARNING if tasa_sol >= 40 else C_DANGER
+
+        # Meta 55% y faltan — basados en cartera anterior
+        meta_sol   = round(cartera_ant_sol * 0.55, 0) if cartera_ant_sol > 0 else 0.0
+        meta_usd   = round(cartera_ant_usd * 0.55, 0) if cartera_ant_usd > 0 else 0.0
+        faltan_sol = max(meta_sol - rec_sol, 0.0)
+        faltan_usd = max(meta_usd - rec_usd, 0.0)
 
         tasa_cobertura = f"{alcanzados / cartera * 100:.0f}%" if cartera > 0 else "—"
         tasa_gestion   = f"{con_respuesta / alcanzados * 100:.0f}%" if alcanzados > 0 else "—"
@@ -590,64 +611,65 @@ class InformeGerencial:
             ]))
             return t
 
-        # --- FRD v4.0 Sección A — 4 tarjetas exactas ---
-        # Tarjeta 1: Cartera Vencida Total — mostrar nro de documentos por moneda
+        # --- RC-BUG-071 — Semaforo Ejecutivo: AR Roll Forward narrative ---
+        # Tarjeta 1 — SALDO ANTERIOR: cartera al inicio del periodo
         total_docs_sol = sum(b.get("docs_sol", 0) for b in aging)
         total_docs_usd = sum(b.get("docs_usd", 0) for b in aging)
-        _sub1_parts = []
+        val1 = _fmt_sol(cartera_ant_sol)
+        if cartera_ant_usd > 0:
+            val1 += f"<br/>{_fmt_usd(cartera_ant_usd)}"
+        sub1_note = "Saldo al inicio del periodo" if tiene_ant else "Ciclo actual (sin anterior)"
+        sub1_parts = []
         if total_docs_sol > 0:
-            _sub1_parts.append(f"{total_docs_sol} docs S/")
+            sub1_parts.append(f"{total_docs_sol} docs S/")
         if total_docs_usd > 0:
-            _sub1_parts.append(f"{total_docs_usd} docs US$")
-        sub1 = "  ·  ".join(_sub1_parts) if _sub1_parts else f"{cartera} clientes"
+            sub1_parts.append(f"{total_docs_usd} docs US$")
+        sub1 = sub1_note + ("  .  " + "  .  ".join(sub1_parts) if sub1_parts else "")
 
-        # Tarjeta 1: Cartera Vencida Total — valor con salto de línea si hay ambas monedas
-        val1 = _fmt_sol(total_sol)
-        if total_usd > 0:
-            val1 += f"<br/>{_fmt_usd(total_usd)}"
-
-        # Tarjeta 2: Recuperado en el Período (fuente: resumen_ciclo, diferencia CxC)
+        # Tarjeta 2 — RECUPERADO: lo cobrado en el periodo
         # monto_recuperado_sol ya es combinado (docs completos + amortizaciones parciales)
+        _c2 = C_MUTED  # color neutro — el semaforo de eficiencia va en T3
         if not tiene_ant:
             val2 = _fmt_sol(0)
-            sub2 = "Sin ciclo anterior  ·  Meta: 55%"
+            sub2 = "Sin ciclo anterior"
         elif rec_sol > 0 or rec_usd > 0:
             val2 = _fmt_sol(rec_sol)
             if rec_usd > 0:
                 val2 += f"<br/>{_fmt_usd(rec_usd)}"
-            if docs_amort > 0:
-                sub2 = f"{docs_rec} docs + {docs_amort} amortiz.<br/>Tasa: {tasa_recup:.1f}%  ·  Meta: 55%"
-            else:
-                sub2 = f"{docs_rec} docs<br/>Tasa: {tasa_recup:.1f}%  ·  Meta: 55%"
+            docs_txt = f"{docs_rec} docs + {docs_amort} amortiz." if docs_amort > 0 else f"{docs_rec} docs"
+            sub2 = f"{docs_txt}<br/>Tasa S/: {tasa_sol:.1f}%"
+            if rec_usd > 0:
+                sub2 += f"  .  US$: {tasa_usd:.1f}%"
         else:
             val2 = _fmt_sol(0)
-            sub2 = f"Tasa: 0.0%  ·  Meta: 55%  ·  {docs_rec} docs"
+            sub2 = f"0 recuperaciones  .  {docs_rec} docs"
 
-        # Tarjeta 3: Saldo Pendiente (cartera - recuperado, por moneda)
-        val3 = _fmt_sol(saldo_pendiente_sol) if saldo_pendiente_sol > 0 else _fmt_sol(total_sol)
-        if saldo_pendiente_usd > 0:
-            val3 += f"<br/>{_fmt_usd(saldo_pendiente_usd)}"
-        sub3_parts = [f"{cartera} clientes"]
-        if legal > 0:
-            sub3_parts.append(f"{legal} en Legal")
-        sub3 = "  ·  ".join(sub3_parts)
-
-        # Tarjeta 4: En Acuerdos de Pago
-        if acuerdos_monto > 0:
-            val4 = _fmt_sol(acuerdos_monto)
-            sub4 = f"{acuerdos_activos} acuerdo(s) activo(s)"
-        elif acuerdos_activos > 0:
-            val4 = f"{acuerdos_activos} acuerdo(s)"
-            sub4 = "Monto por registrar"
+        # Tarjeta 3 — EFICIENCIA DE COBRO: semaforo de rendimiento vs meta
+        if not tiene_ant:
+            val3 = "—"
+            sub3 = "Sin ciclo anterior para calcular"
         else:
-            val4 = "Sin acuerdos"
-            sub4 = "0 acuerdos activos"
+            val3 = f"S/: {tasa_sol:.1f}%"
+            if cartera_ant_usd > 0:
+                val3 += f"<br/>US$: {tasa_usd:.1f}%"
+            sub3 = f"Meta: 55%  .  Faltan {_fmt_sol(faltan_sol)}"
+            if faltan_usd > 0:
+                sub3 += f"<br/>Faltan {_fmt_usd(faltan_usd)}"
+
+        # Tarjeta 4 — CARTERA ACTUAL: aging real = saldo anterior - recuperado
+        val4 = _fmt_sol(total_sol)
+        if total_usd > 0:
+            val4 += f"<br/>{_fmt_usd(total_usd)}"
+        pct_pend = total_sol / cartera_ant_sol * 100 if cartera_ant_sol > 0 else 0
+        sub4 = f"{pct_pend:.0f}% aun pendiente"
+        if legal > 0:
+            sub4 += f"<br/>{legal} cliente(s) en Legal"
 
         cards = [
-            _card("CARTERA VENCIDA",  val1,  sub1,  C_PRIMARY),
-            _card("RECUPERADO",       val2,  sub2,  C_SUCCESS),
-            _card("SALDO PENDIENTE",  val3,  sub3,  C_WARNING),
-            _card("EN ACUERDOS",      val4,  sub4,  C_ACCENT),
+            _card("SALDO ANTERIOR",      val1, sub1, C_PRIMARY),
+            _card("RECUPERADO",          val2, sub2, _c2),
+            _card("EFICIENCIA DE COBRO", val3, sub3, _c_efic),
+            _card("CARTERA ACTUAL",      val4, sub4, C_WARNING),
         ]
 
         cards_row = Table(
@@ -665,6 +687,9 @@ class InformeGerencial:
 
         # Indicadores secundarios
         story.append(_spacer(0.4))
+
+        cycle_ant = self.recovery.get("cycle_id_anterior")
+
         kpi_data = [
             [
                 Paragraph("Indicador", ST_TH),
@@ -675,7 +700,7 @@ class InformeGerencial:
             [
                 Paragraph("Cobertura de cartera", ST_TD),
                 Paragraph(tasa_cobertura, ST_TD_CENTER),
-                Paragraph("Efectividad de gestión", ST_TD),
+                Paragraph("Efectividad de gestion", ST_TD),
                 Paragraph(tasa_gestion, ST_TD_CENTER),
             ],
             [
@@ -687,6 +712,30 @@ class InformeGerencial:
                 ),
                 Paragraph("Cuotas cobradas S/", ST_TD),
                 Paragraph(_fmt_sol(rec_sol) if rec_sol > 0 else "Sin registros", ST_TD_CENTER),
+            ],
+            [
+                Paragraph("Ciclo anterior comparado", ST_TD),
+                Paragraph(
+                    cycle_ant or "Sin ciclo anterior",
+                    ParagraphStyle("rc_ant_lbl", parent=ST_TD_CENTER,
+                                   textColor=C_MUTED, fontSize=7.5),
+                ),
+                Paragraph("Tasa recuperacion (en monto)", ST_TD),
+                Paragraph(
+                    f"{tasa_sol:.1f}%" if tiene_ant else "—",
+                    ParagraphStyle("rc_tasa_prd", parent=ST_TD_CENTER,
+                                   textColor=C_SUCCESS if tasa_sol >= 55 else
+                                   C_WARNING if tasa_sol >= 40 else C_DANGER),
+                ),
+            ],
+            [
+                Paragraph("En acuerdos activos", ST_TD),
+                Paragraph(str(acuerdos_activos), ST_TD_CENTER),
+                Paragraph("Monto en acuerdos", ST_TD),
+                Paragraph(
+                    _fmt_sol(acuerdos_monto) if acuerdos_monto > 0 else "—",
+                    ST_TD_CENTER,
+                ),
             ],
         ]
         w = self._page_w / 4
@@ -756,11 +805,11 @@ class InformeGerencial:
             docs_b = b.get("documentos", b.get("docs_sol", 0) + b.get("docs_usd", 0))
             row = [
                 Paragraph(b.get("segmento", "—"), ST_TD),
-                Paragraph(str(b.get("clientes", 0)), ST_TD_CENTER),
-                Paragraph(_pct(b.get("clientes", 0), total_clientes), ST_TD_CENTER),
-                Paragraph(str(docs_b), ST_TD_CENTER),
+                Paragraph(str(b.get("clientes", 0)), ST_TD_SM),
+                Paragraph(_pct(b.get("clientes", 0), total_clientes), ST_TD_SM),
+                Paragraph(str(docs_b), ST_TD_SM),
                 Paragraph(_fmt_sol(b.get("saldo_sol", 0)), ST_TD_RIGHT),
-                Paragraph(f"{b.get('pct_sol', 0):.1f}%", ST_TD_CENTER),
+                Paragraph(f"{b.get('pct_sol', 0):.1f}%", ST_TD_SM),
                 Paragraph(_fmt_usd(b.get("saldo_usd", 0)), ST_TD_RIGHT),
                 Paragraph(riesgo, ParagraphStyle("rc_riesgo", parent=ST_TD_CENTER, textColor=tc, fontName=_F_BOLD)),
             ]
@@ -864,7 +913,13 @@ class InformeGerencial:
             saldo_sol = float(c.get("saldo_sol", 0))
             saldo_usd = float(c.get("saldo_usd", 0))
             nombre    = str(c.get("nombre") or c.get("cliente_id") or "—")[:40]
-            rec = _accion_pdf(mora, gest)
+            rec       = _accion_pdf(mora, gest)
+            rec_color = _color_accion_pdf(mora)
+            rec_st    = (
+                ParagraphStyle(f"RC_Rec_{i}", parent=ST_TD,
+                               textColor=rec_color, fontName=_F_BOLD)
+                if mora > 90 else ST_TD
+            )
             bg = RIESGO_COLORS["CRÍTICO"] if mora > 90 else RIESGO_COLORS["ALTO"]
             row = [
                 Paragraph(str(i), ST_TD_CENTER),
@@ -874,7 +929,7 @@ class InformeGerencial:
                 Paragraph(_fmt_usd(saldo_usd) if saldo_usd > 0 else "—", ST_TD_RIGHT),
                 Paragraph(str(docs_c), ST_TD_CENTER),
                 Paragraph(str(gest), ST_TD_CENTER),
-                Paragraph(rec, ST_TD),
+                Paragraph(rec, rec_st),
             ]
             rows.append(row)
             style_cmds.append(("BACKGROUND", (0, i), (-1, i), bg))
@@ -950,8 +1005,8 @@ class InformeGerencial:
             ("RIGHTPADDING",  (1, 0), (1, -1),  10),
         ])
 
-        t_canal   = Table(canal_data,   colWidths=[half_w * 0.78, half_w * 0.22])
-        t_acuerdo = Table(acuerdo_data, colWidths=[half_w * 0.78, half_w * 0.22])
+        t_canal   = Table(canal_data,   colWidths=[half_w * 0.74, half_w * 0.26])
+        t_acuerdo = Table(acuerdo_data, colWidths=[half_w * 0.74, half_w * 0.26])
         t_canal.setStyle(tbl_style)
         t_acuerdo.setStyle(tbl_style)
 
@@ -1178,13 +1233,13 @@ class InformeGerencial:
         ST_TH_C = ST_TH   # reutiliza el estilo de encabezado de tabla
 
         header = [
-            Paragraph("#",             ST_TH_C),
-            Paragraph("Cliente",       ST_TH_C),
-            Paragraph("Documento",     ST_TH_C),
-            Paragraph("Tipo",          ST_TH_C),
-            Paragraph("Moneda",        ST_TH_C),
-            Paragraph("Saldo Ant.",    ST_TH_C),
-            Paragraph("Recuperado",    ST_TH_C),
+            Paragraph("#",          ST_TH_SM),
+            Paragraph("Cliente",    ST_TH_C),
+            Paragraph("Documento",  ST_TH_C),
+            Paragraph("Tipo",       ST_TH_SM),
+            Paragraph("Mon.",       ST_TH_SM),
+            Paragraph("Saldo Ant.", ST_TH_C),
+            Paragraph("Recuperado", ST_TH_C),
         ]
 
         rows = [header]
@@ -1351,8 +1406,12 @@ class InformeGerencial:
 # ---------------------------------------------------------------------------
 
 def _accion_pdf(mora: int, gestiones: int) -> str:
+    if mora > 365:
+        return "⚖️ Cobro judicial urgente"
+    if mora > 180:
+        return "⚖️ Iniciar proceso legal"
     if mora > 90:
-        return "Carta notarial / Legal"
+        return "Carta notarial + abogado"
     if mora > 60:
         return "Aviso firme + acuerdo urgente"
     if mora > 30:
@@ -1360,3 +1419,12 @@ def _accion_pdf(mora: int, gestiones: int) -> str:
     if gestiones == 0:
         return "Primer contacto preventivo"
     return "Seguimiento habitual"
+
+
+def _color_accion_pdf(mora: int) -> Any:
+    """Color del texto de la columna Recomendación según días de mora."""
+    if mora > 180:
+        return C_DANGER
+    if mora > 90:
+        return colors.HexColor("#B84C00")   # naranja oscuro
+    return C_TEXT
