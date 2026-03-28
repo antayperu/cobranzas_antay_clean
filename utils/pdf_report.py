@@ -1612,19 +1612,37 @@ class EstadoCuentaCliente:
         return story
 
     def _build_docs_table(self) -> List:
-        """Tabla de documentos pendientes con semáforo de mora."""
+        """Tabla de documentos pendientes — columnas: DOCUMENTO | EMISIÓN |
+        VENCIMIENTO | IMPORTE | SALDO A [empresa] | DETRACCIÓN (S/) | ESTADO DETR."""
         story = []
         story += _section_title("DETALLE DE DOCUMENTOS PENDIENTES", self._page_w)
         story.append(_spacer(0.15))
 
-        df = self.docs_df
-        pw = self._page_w
+        df  = self.docs_df
+        pw  = self._page_w
 
-        headers  = ["Comprobante", "F. Emisión", "F. Vcto.", "Saldo", "Mora", "Det."]
-        col_ws   = [pw * 0.30, pw * 0.13, pw * 0.13, pw * 0.21, pw * 0.11, pw * 0.12]
+        # "SALDO A DACTA" — primera palabra del nombre de empresa
+        co_parts   = self.settings.get("company_name", "DACTA S.A.C.").split()
+        co_short   = co_parts[0] if co_parts else "DACTA"
 
-        head_row = [Paragraph(h, ST_TH_SM) for h in headers]
-        rows     = [head_row]
+        # Encabezados y anchos — fuente pequeña para caber en 7 columnas
+        headers = [
+            "DOCUMENTO", "EMISIÓN", "VENCIMIENTO",
+            "IMPORTE", f"SALDO A\n{co_short}",
+            "DETRACCIÓN\n(S/)", "ESTADO\nDETR.",
+        ]
+        col_ws = [
+            pw * 0.22, pw * 0.10, pw * 0.10,
+            pw * 0.13, pw * 0.15,
+            pw * 0.14, pw * 0.16,
+        ]
+
+        # Estilo de cabecera más pequeño para caber
+        ST_TH_XS = _style("EC_TH_XS", "Normal", fontSize=6.5, leading=8.5,
+                           textColor=C_WHITE, fontName=_F_BOLD, alignment=TA_CENTER)
+
+        head_row   = [Paragraph(h, ST_TH_XS) for h in headers]
+        rows       = [head_row]
         style_cmds = [
             ("BACKGROUND",    (0, 0), (-1, 0),  C_PRIMARY),
             ("GRID",          (0, 0), (-1, -1), 0.3, C_BORDER),
@@ -1633,63 +1651,69 @@ class EstadoCuentaCliente:
             ("LEFTPADDING",   (0, 0), (-1, -1), 4),
             ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [C_WHITE, C_LIGHT_ROW]),
+            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
         ]
+
+        # Estilos de celda reutilizables
+        ST_TD_XS = _style("EC_TD_XS", "Normal", fontSize=7.5, leading=10,
+                          textColor=C_TEXT, fontName=_F_BODY, alignment=TA_LEFT)
+        ST_TD_XS_C = _style("EC_TDC_XS", "Normal", fontSize=7.5, leading=10,
+                             textColor=C_TEXT, fontName=_F_BODY, alignment=TA_CENTER)
+        ST_TD_XS_R = _style("EC_TDR_XS", "Normal", fontSize=7.5, leading=10,
+                             textColor=C_TEXT, fontName=_F_BODY, alignment=TA_RIGHT)
 
         for ri, (_, row) in enumerate(df.iterrows(), start=1):
             comprobante = str(self._col(row, "COMPROBANTE") or "—")
             fech_emis   = self._safe_date(self._col(row, "FECH EMIS", "FECHA EMISIÓN", "FECHA EMISION"))
             fech_venc   = self._safe_date(self._col(row, "FECH VENC", "FECHA VENCIMIENTO", "FECH VENCIMIENTO"))
+            mont_emit   = self._safe_float(self._col(row, "MONT EMIT", "IMPORTE", "MONTO"))
             saldo_real  = self._safe_float(self._col(row, "SALDO REAL", "SALDO"))
             moneda      = str(self._col(row, "MONEDA") or "S/").strip()
-            dias_mora   = int(self._safe_float(self._col(row, "DÍAS MORA", "DIAS MORA", "DIASMORA")))
             detr        = self._safe_float(self._col(row, "DETRACCIÓN", "DETRACCION"))
+            estado_detr = str(self._col(row, "ESTADO DETRACCION", "ESTADO DETR") or "").strip().upper()
 
-            moneda_sym = "S/" if moneda.upper().startswith("S") else "US$"
-            saldo_txt  = f"{moneda_sym} {saldo_real:,.0f}"
-            mora_txt   = f"{dias_mora}d"
-            detr_txt   = f"S/ {detr:,.0f}" if detr > 0 else "—"
+            sym = "S/" if moneda.upper().startswith("S") else "US$"
+            importe_txt = f"{sym} {mont_emit:,.2f}" if mont_emit > 0 else "—"
+            saldo_txt   = f"{sym} {saldo_real:,.2f}"
+            detr_txt    = f"S/ {detr:,.2f}" if detr > 0 else "—"
 
-            # Semáforo
-            if dias_mora > 90:
-                bg_mora = colors.HexColor("#FFEBEB")
-                fg_mora = C_DANGER
-            elif dias_mora > 30:
-                bg_mora = colors.HexColor("#FFF3E0")
-                fg_mora = C_WARNING
+            # Estado detracción: coloreado
+            if estado_detr in ("COBRADO", "COBRADA", "PAGADO"):
+                fg_est = C_SUCCESS
+            elif estado_detr in ("PENDIENTE",):
+                fg_est = C_WARNING
+            elif estado_detr:
+                fg_est = C_MUTED
             else:
-                bg_mora = None
-                fg_mora = C_SUCCESS
+                fg_est = C_MUTED
+            estado_txt  = estado_detr.capitalize() if estado_detr else "—"
+            est_st = _style(f"EC_Est{ri}", "Normal", fontSize=7.5, leading=10,
+                            textColor=fg_est, fontName=_F_BOLD, alignment=TA_CENTER)
 
-            mora_st = _style(f"EC_Mora{ri}", "Normal",
-                fontSize=8, leading=10, textColor=fg_mora,
-                fontName=_F_BOLD, alignment=TA_CENTER)
-            sld_st = _style(f"EC_Sld{ri}", "Normal",
-                fontSize=8, leading=10, textColor=C_TEXT,
-                fontName=_F_BODY, alignment=TA_RIGHT)
+            # Saldo en azul negrita (igual al modelo)
+            sld_st = _style(f"EC_Sld{ri}", "Normal", fontSize=7.5, leading=10,
+                            textColor=C_PRIMARY, fontName=_F_BOLD, alignment=TA_RIGHT)
 
             rows.append([
-                Paragraph(comprobante, ST_TD_SM),
-                Paragraph(fech_emis,   ST_TD_CENTER),
-                Paragraph(fech_venc,   ST_TD_CENTER),
+                Paragraph(comprobante, ST_TD_XS),
+                Paragraph(fech_emis,   ST_TD_XS_C),
+                Paragraph(fech_venc,   ST_TD_XS_C),
+                Paragraph(importe_txt, ST_TD_XS_R),
                 Paragraph(saldo_txt,   sld_st),
-                Paragraph(mora_txt,    mora_st),
-                Paragraph(detr_txt,    ST_TD_CENTER),
+                Paragraph(detr_txt,    ST_TD_XS_C),
+                Paragraph(estado_txt,  est_st),
             ])
-            if bg_mora:
-                style_cmds.append(("BACKGROUND", (4, ri), (4, ri), bg_mora))
 
-        # ── Filas de totales al final de la tabla ────────────────────────
-        df = self.docs_df
+        # ── Filas de totales al final de la tabla (7 columnas) ────────────
         mask_sol_t = df["MONEDA"].astype(str).str.strip().str.upper().str.startswith("S", na=False) if "MONEDA" in df.columns else [True] * len(df)
-        tot_sol   = df[mask_sol_t]["SALDO REAL"].apply(self._safe_float).sum()    if "SALDO REAL"  in df.columns else 0.0
-        tot_usd   = df[~mask_sol_t]["SALDO REAL"].apply(self._safe_float).sum()   if "SALDO REAL"  in df.columns else 0.0
-        n_sol     = int(mask_sol_t.sum())
-        n_usd     = int((~mask_sol_t).sum())
+        tot_sol = df[mask_sol_t]["SALDO REAL"].apply(self._safe_float).sum() if "SALDO REAL" in df.columns else 0.0
+        tot_usd = df[~mask_sol_t]["SALDO REAL"].apply(self._safe_float).sum() if "SALDO REAL" in df.columns else 0.0
+        n_sol   = int(mask_sol_t.sum())
+        n_usd   = int((~mask_sol_t).sum())
 
-        # Detracción pendiente
         try:
-            mask_dv = df["DETRACCIÓN"].apply(self._safe_float) > 0.01 if "DETRACCIÓN" in df.columns else False
-            mask_dp = df["ESTADO DETRACCION"].astype(str).str.upper() == "PENDIENTE" if "ESTADO DETRACCION" in df.columns else False
+            mask_dv  = df["DETRACCIÓN"].apply(self._safe_float) > 0.01 if "DETRACCIÓN" in df.columns else False
+            mask_dp  = df["ESTADO DETRACCION"].astype(str).str.upper() == "PENDIENTE" if "ESTADO DETRACCION" in df.columns else False
             if hasattr(mask_dv, "__len__") and hasattr(mask_dp, "__len__"):
                 tot_detr = df[mask_dv & mask_dp]["DETRACCIÓN"].apply(self._safe_float).sum()
                 n_detr   = int((mask_dv & mask_dp).sum())
@@ -1698,47 +1722,46 @@ class EstadoCuentaCliente:
         except Exception:
             tot_detr, n_detr = 0.0, 0
 
-        lbl_tot = _style("EC_TotLbl2", "Normal", fontSize=8, leading=10,
+        lbl_tot = _style("EC_TotLbl2", "Normal", fontSize=7.5, leading=10,
                          textColor=C_TEXT, fontName=_F_BOLD, alignment=TA_LEFT)
-        val_tot = _style("EC_TotVal2", "Normal", fontSize=9, leading=11,
+        val_tot = _style("EC_TotVal2", "Normal", fontSize=8.5, leading=11,
                          textColor=C_PRIMARY, fontName=_F_HEADING, alignment=TA_RIGHT)
 
-        # Separador antes de los totales
-        n_data_rows = len(rows)   # índice del primer footer row
+        n_dr = len(rows)   # índice del primer footer row
 
-        # Fila Total S/
-        rows.append(["", "", "", Paragraph(f"S/ {tot_sol:,.2f}", val_tot), "", ""])
+        # Fila Total S/ — label en col0-3, valor en col4, cols 5-6 vacíos
+        rows.append(["", "", "", "", Paragraph(f"S/ {tot_sol:,.2f}", val_tot), "", ""])
         style_cmds += [
-            ("SPAN",          (0, n_data_rows), (2, n_data_rows)),
-            ("SPAN",          (4, n_data_rows), (5, n_data_rows)),
-            ("BACKGROUND",    (0, n_data_rows), (-1, n_data_rows), C_BG),
-            ("LINEABOVE",     (0, n_data_rows), (-1, n_data_rows), 1.5, C_ACCENT),
-            ("ALIGN",         (3, n_data_rows), (3, n_data_rows), "RIGHT"),
+            ("SPAN",          (0, n_dr), (3, n_dr)),
+            ("SPAN",          (5, n_dr), (6, n_dr)),
+            ("BACKGROUND",    (0, n_dr), (-1, n_dr), C_BG),
+            ("LINEABOVE",     (0, n_dr), (-1, n_dr), 1.5, C_ACCENT),
+            ("ALIGN",         (4, n_dr), (4, n_dr),  "RIGHT"),
         ]
-        rows[n_data_rows][0] = Paragraph(f"Total S/ ({n_sol:02d} docs)", lbl_tot)
+        rows[n_dr][0] = Paragraph(f"Total S/ ({n_sol:02d} documentos)", lbl_tot)
 
-        # Fila Total US$ (siempre visible, incluso si es cero)
-        r_usd = n_data_rows + 1
-        rows.append(["", "", "", Paragraph(f"US$ {tot_usd:,.2f}", val_tot), "", ""])
+        # Fila Total US$
+        r2 = n_dr + 1
+        rows.append(["", "", "", "", Paragraph(f"US$ {tot_usd:,.2f}", val_tot), "", ""])
         style_cmds += [
-            ("SPAN",       (0, r_usd), (2, r_usd)),
-            ("SPAN",       (4, r_usd), (5, r_usd)),
-            ("BACKGROUND", (0, r_usd), (-1, r_usd), C_BG),
-            ("ALIGN",      (3, r_usd), (3, r_usd), "RIGHT"),
+            ("SPAN",       (0, r2), (3, r2)),
+            ("SPAN",       (5, r2), (6, r2)),
+            ("BACKGROUND", (0, r2), (-1, r2), C_BG),
+            ("ALIGN",      (4, r2), (4, r2),  "RIGHT"),
         ]
-        rows[r_usd][0] = Paragraph(f"Total US$ ({n_usd:02d} docs)", lbl_tot)
+        rows[r2][0] = Paragraph(f"Total US$ ({n_usd:02d} documentos)", lbl_tot)
 
         # Fila Total Detracción
-        r_det = n_data_rows + 2
-        rows.append(["", "", "", Paragraph(f"S/ {tot_detr:,.2f}", val_tot), "", ""])
+        r3 = n_dr + 2
+        rows.append(["", "", "", "", Paragraph(f"S/ {tot_detr:,.2f}", val_tot), "", ""])
         style_cmds += [
-            ("SPAN",       (0, r_det), (2, r_det)),
-            ("SPAN",       (4, r_det), (5, r_det)),
-            ("BACKGROUND", (0, r_det), (-1, r_det), C_BG),
-            ("ALIGN",      (3, r_det), (3, r_det), "RIGHT"),
-            ("LINEBELOW",  (0, r_det), (-1, r_det), 1, C_ACCENT),
+            ("SPAN",       (0, r3), (3, r3)),
+            ("SPAN",       (5, r3), (6, r3)),
+            ("BACKGROUND", (0, r3), (-1, r3), C_BG),
+            ("ALIGN",      (4, r3), (4, r3),  "RIGHT"),
+            ("LINEBELOW",  (0, r3), (-1, r3), 1, C_ACCENT),
         ]
-        rows[r_det][0] = Paragraph(f"Detracciones SUNAT ({n_detr:02d} docs)", lbl_tot)
+        rows[r3][0] = Paragraph(f"Detracciones SUNAT ({n_detr:02d} documentos afectos)", lbl_tot)
 
         tbl = Table(rows, colWidths=col_ws, repeatRows=1)
         tbl.setStyle(TableStyle(style_cmds))

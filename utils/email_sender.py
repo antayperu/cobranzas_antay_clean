@@ -156,12 +156,9 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
 
         {logo_block}
 
-        <!-- Saludo e intro -->
+        <!-- Intro (texto íntegro desde Tab Configuración — sin línea hardcodeada) -->
         <tr>
           <td style="padding:28px 40px 0">
-            <p style="margin:0 0 14px;font-size:15px;line-height:22px;color:#102A43">
-              Estimados señores <strong>{safe_client}</strong>,
-            </p>
             <p style="margin:0 0 24px;font-size:14px;line-height:22px;color:#486581">
               {intro_html}
             </p>

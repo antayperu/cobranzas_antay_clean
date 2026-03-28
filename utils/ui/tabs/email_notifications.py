@@ -308,12 +308,24 @@ def render_tab(df_final, df_filtered, config):
                             components.html(cover_html, height=580, scrolling=True)
                         with tab_pdf:
                             if pdf_preview_b64:
-                                pdf_embed = (
-                                    f'<iframe src="data:application/pdf;base64,{pdf_preview_b64}"'
-                                    ' width="100%" height="560" style="border:none;border-radius:4px">'
-                                    '</iframe>'
-                                )
-                                components.html(pdf_embed, height=570)
+                                # Blob URL via JS — compatible con Chrome/Edge/Firefox
+                                # (data: URIs bloqueados en iframes Chromium; blob: sí funciona)
+                                pdf_html = f"""<!DOCTYPE html>
+<html><head>
+<style>html,body{{margin:0;padding:0;width:100%;height:100%;overflow:hidden}}</style>
+</head><body>
+<embed id="pv" type="application/pdf" width="100%" height="100%" style="display:block">
+<script>
+(function(){{
+  var b64="{pdf_preview_b64}";
+  var bin=atob(b64),n=bin.length,arr=new Uint8Array(n);
+  for(var i=0;i<n;i++)arr[i]=bin.charCodeAt(i);
+  var url=URL.createObjectURL(new Blob([arr],{{type:'application/pdf'}}));
+  document.getElementById('pv').src=url;
+}})();
+</script>
+</body></html>"""
+                                components.html(pdf_html, height=560)
                             else:
                                 st.info("Vista previa del PDF no disponible.")
                 
