@@ -1,9 +1,10 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-03-16
-Version actual: v1.8.0 (TIER 2 completado — RC-FEAT-026/034 + RC-BUG-032/033 + context engineering)
+Ultima actualizacion: 2026-03-28
+Version actual: v2.0.0 (TIER 2 completado — RC-FEAT-039 + RC-BUG-063→071 + RC-UX-001/002/003 · pendiente Gate 3 QA)
 Estado migracion Supabase: Completada. Todas las fases MIG-000 a MIG-009 + SUPABASE-002 + CONFIG-001 cerradas.
 Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). TIER 2 completado 2026-03-16. TIER 3 pendiente.
+Informe Gerencial PDF: TIER 2 completado 2026-03-28 (162/162 tests). Gate 3 QA pendiente en PC servidor.
 
 ---
 
@@ -131,6 +132,21 @@ Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). TIER 2 co
   - Fix: guardar `DeudaS`/`DeudaD` explícitos al enviar y recalcular desde `df_filtered` en fallback
   - Fix: deduplicar `CodCliente` en cálculo (un cliente tiene fila Envío + fila Gestión)
 - Criterios de aceptación definidos y documentados en `RETOMAR_SESION.md`
+
+### Completados — TIER 2 (Sprint 2026-03-24/28) ✅ → v2.0.0 · Gate 3 pendiente
+- RC-FEAT-039: Informe Gerencial PDF para Comité de Directorio — Secciones A-F ✅
+- RC-FIX-062: Recuperado real dual moneda (S/ + US$) desde resumen_ciclo — diferencia CxC ✅
+- RC-UX-001: Sidebar progressive disclosure + slots duales con feedback visual por archivo ✅
+- RC-UX-002: PDF Informe Gerencial — tipografía Manrope + IBM Plex Sans, visual premium ✅
+- RC-UX-003: Filtro Cartera Activa / General en panel PDF ✅
+- RC-BUG-063: SMTP leía session_state incorrecto — ahora usa config['smtp_config'] ✅
+- RC-BUG-064: Footer/portada del PDF usaban empresa hardcodeada ✅
+- RC-BUG-065: Credenciales SMTP se perdían en cada refresco ✅
+- RC-BUG-066: prev_cycle_id leído desde Supabase (no session_state) ✅
+- RC-BUG-067: Lazy reconciliation en get_recovery_stats() ✅
+- RC-BUG-068: Gestiones y acuerdos del Informe filtrados por scope ✅
+- RC-BUG-069: Recovery y título del PDF respetan scope activa/general ✅
+- RC-BUG-071: Rediseño Semáforo Ejecutivo — AR Roll Forward (corrige doble sustracción) ✅
 
 ### Completados — TIER 2 (Sprint 2026-03-16) ✅
 - RC-FEAT-026: Panel de envío WA de prueba en Config Tab — `config_tab.py` SECCIÓN 8 ✅

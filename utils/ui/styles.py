@@ -159,6 +159,163 @@ def load_css():
             background: rgba(255, 255, 255, 0.45);
         }}
 
+        /* Nombre del archivo cargado — legible sobre fondo oscuro del sidebar */
+        [data-testid="stFileUploaderFileName"] {{
+            color: #FFFFFF !important;
+            font-weight: 600;
+            font-size: 0.82rem;
+        }}
+        [data-testid="stFileUploaderFileData"] small,
+        [data-testid="stFileUploaderFileData"] span {{
+            color: rgba(255, 255, 255, 0.75) !important;
+        }}
+        [data-testid="stFileUploaderDeleteBtn"] svg {{
+            fill: rgba(255, 255, 255, 0.7) !important;
+        }}
+
+        /* ── Sidebar progressive disclosure components ─────────────────── */
+
+        /* Tarjeta ciclo activo (ESTADO 3) */
+        .sb-cycle-card {{
+            background: rgba(255,255,255,0.10);
+            border: 1px solid rgba(255,255,255,0.22);
+            border-radius: 10px;
+            padding: 12px 14px;
+        }}
+        .sb-cycle-label {{
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.65);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }}
+        .sb-cycle-id {{
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #ffffff;
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: 0.02em;
+        }}
+        .sb-cycle-meta {{
+            font-size: 0.76rem;
+            color: rgba(255,255,255,0.6);
+            margin-top: 3px;
+        }}
+
+        /* Tarjeta de confirmación de reemplazo (ESTADO 3b) */
+        .sb-confirm-card {{
+            background: rgba(230, 119, 0, 0.18);
+            border: 1px solid rgba(230, 119, 0, 0.45);
+            border-radius: 10px;
+            padding: 14px;
+        }}
+        .sb-confirm-title {{
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: #ffd59e;
+            margin-bottom: 6px;
+        }}
+        .sb-confirm-body {{
+            font-size: 0.80rem;
+            color: rgba(255,255,255,0.82);
+            line-height: 1.45;
+        }}
+        .sb-confirm-body strong {{
+            color: #ffffff;
+        }}
+
+        /* Confirmación de archivos listos (ESTADO 2b) */
+        .sb-files-ok {{
+            background: rgba(43, 138, 62, 0.20);
+            border: 1px solid rgba(43, 138, 62, 0.45);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.80rem;
+            color: rgba(255,255,255,0.90);
+            line-height: 1.7;
+        }}
+        .sb-files-ok strong {{ color: #ffffff; }}
+
+        /* Stepper de progreso (ESTADOS 2 y 2b) */
+        .sb-stepper {{
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 0 2px 0;
+            font-size: 0.76rem;
+        }}
+        .sb-step {{ color: rgba(255,255,255,0.55); }}
+        .sb-step--active {{ color: #ffffff; font-weight: 700; }}
+        .sb-step--done {{ color: #74e89a; font-weight: 600; }}
+        .sb-step--pending {{ color: rgba(255,255,255,0.35); }}
+        .sb-step-sep {{ color: rgba(255,255,255,0.30); font-size: 0.70rem; }}
+
+        /* Estado vacío — sin sesión (ESTADO 1) */
+        .sb-empty-state {{
+            background: rgba(255,255,255,0.07);
+            border: 1px dashed rgba(255,255,255,0.20);
+            border-radius: 10px;
+            padding: 16px 14px;
+            font-size: 0.82rem;
+            color: rgba(255,255,255,0.65);
+            text-align: center;
+            line-height: 1.55;
+        }}
+
+        /* ── Slots de archivo (ESTADO 2 unificado) ─────────────────── */
+
+        /* Card de archivo cargado exitosamente */
+        .sb-file-card {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(43, 138, 62, 0.22);
+            border: 1px solid rgba(43, 138, 62, 0.50);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }}
+        .sb-file-card__check {{
+            font-size: 1.15rem;
+            flex-shrink: 0;
+            line-height: 1;
+        }}
+        .sb-file-card__info {{
+            min-width: 0;
+        }}
+        .sb-file-card__name {{
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 170px;
+        }}
+        .sb-file-card__meta {{
+            font-size: 0.71rem;
+            color: rgba(255,255,255,0.62);
+            margin-top: 2px;
+            letter-spacing: 0.01em;
+        }}
+
+        /* Hint debajo del botón disabled */
+        .sb-upload-hint {{
+            text-align: center;
+            font-size: 0.73rem;
+            color: rgba(255,255,255,0.40);
+            margin-top: 5px;
+            padding: 0 6px;
+            line-height: 1.4;
+        }}
+
+        /* Botones "Cambiar" — más compactos y menos pesados visualmente */
+        [data-testid="stSidebar"] .stButton button[kind="secondary"] {{
+            min-height: 36px;
+            font-size: 0.78rem;
+            padding-top: 0.25rem;
+            padding-bottom: 0.25rem;
+        }}
+
         .kpi-card {{
             background: var(--antay-surface);
             padding: 16px;

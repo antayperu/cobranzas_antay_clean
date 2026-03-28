@@ -49,4 +49,5 @@ Write-Host "Ambiente: STAGING" -ForegroundColor Yellow
 Write-Host "SUPABASE_URL: $($env:SUPABASE_URL)"
 Write-Host "Puerto Streamlit: $Port"
 
-streamlit run app.py --server.port $Port
+$Python = "C:\Users\corte\AppData\Local\Programs\Python\Python312\python.exe"
+& $Python -m streamlit run app.py --server.port $Port

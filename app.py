@@ -38,6 +38,7 @@ import utils.ui.tabs.email_notifications as tab_email # Email Notifications Tab 
 import utils.ui.tabs.clientes_premium as tab_clientes_premium # Premium Clients Tab Module
 import utils.ui.tabs.crm_gestiones as tab_crm  # CRM & Gestiones Tab Module
 import utils.ui.tabs.config_tab as tab_config # Configuration Tab Module
+import utils.ui.tabs.dashboard as tab_dashboard  # RC-FEAT-038 Dashboard de Efectividad
 import utils.supabase_cycle_service as supabase_cycle_service
 import utils.storage_manager as storage_mgr
 import utils.state_manager as state_mgr
@@ -95,11 +96,7 @@ with st.sidebar:
     else:
         st.markdown(f"## {CONFIG['company_name']}")
 
-    st.markdown("---")
-    
-    # --- RECOVERY: Mostrar opcion de restaurar sesion anterior ---
-    if not st.session_state.get('data_ready', False):
-        session_lib.render_recovery_options()
+    # Logo only — ciclos y recovery se gestionan en render_sidebar()
     
 
 
@@ -253,8 +250,10 @@ if wizard_action == "PROCESS_TRIGGERED":
                         )
 
                     # --- RC-FEAT-023: TRAZABILIDAD — reconcile recovery vs ciclo anterior ---
-                    _prev_cycle = st.session_state.get("prev_cycle_id")
-                    if _prev_cycle and _prev_cycle != cycle_id:
+                    # Lee el ciclo anterior desde Supabase (no session_state) para que
+                    # funcione aunque la app se haya reiniciado entre cargas de ciclos.
+                    _prev_cycle = dbm.get_prev_cycle_id(cycle_id)
+                    if _prev_cycle:
                         _rec_result = dbm.reconcile_ciclo_recovery(
                             cycle_id_anterior=_prev_cycle,
                             cycle_id_nuevo=cycle_id,
@@ -266,7 +265,6 @@ if wizard_action == "PROCESS_TRIGGERED":
                                 f"({_s.get('tasa_recuperacion', 0)}%)",
                                 icon="📊",
                             )
-                    st.session_state["prev_cycle_id"] = cycle_id
 
                     
                     # Mark session start
@@ -340,7 +338,8 @@ if st.session_state['data_ready']:
             "5. Notificaciones Email",
             "6. Clientes Premium",
             "7. Centro de Gestiones",
-            "8. Configuración",
+            "8. Dashboard",
+            "9. Configuración",
         ]
     )
     
@@ -380,8 +379,12 @@ if st.session_state['data_ready']:
     with tab_map["7. Centro de Gestiones"]:
         tab_crm.render_tab(df_final, CONFIG)
 
-    # --- TAB 8: CONFIGURACIÓN GLOBAL ---
-    with tab_map["8. Configuración"]:
+    # --- TAB 8: DASHBOARD DE EFECTIVIDAD (RC-FEAT-038) ---
+    with tab_map["8. Dashboard"]:
+        tab_dashboard.render_tab(df_final, CONFIG)
+
+    # --- TAB 9: CONFIGURACIÓN GLOBAL ---
+    with tab_map["9. Configuración"]:
         # Logic extracted to utils/ui/tabs/config_tab.py
         tab_config.render_tab(CONFIG)
 

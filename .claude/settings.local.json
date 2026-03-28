@@ -1,10 +1,42 @@
 {
   "permissions": {
     "allow": [
-      "mcp__notion__API-post-search",
-      "mcp__notion__API-get-block-children",
-      "mcp__notion__API-query-data-source",
-      "Bash(git log:*)"
+      "Bash(python -:*)",
+      "Bash(python -m py_compile c:/dev/ReporteCobranzas/utils/pdf_report.py)",
+      "Bash(python -m py_compile c:/dev/ReporteCobranzas/utils/ui/tabs/report_generator.py)",
+      "Bash(mkdir -p c:/dev/ReporteCobranzas/assets/fonts)",
+      "Bash(curl -L \"https://fonts.gstatic.com/s/manrope/v15/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk59FO_F87jxeN7B.ttf\" -o assets/fonts/Manrope-Bold.ttf --max-time 30)",
+      "Bash(curl -L \"https://fonts.gstatic.com/s/ibmplexsans/v19/zYXgKVElMYYaJe8bpLHnCwDKjQ76AIFsdP3pBms.ttf\" -o assets/fonts/IBMPlexSans-Regular.ttf --max-time 30)",
+      "Bash(curl -L \"https://fonts.gstatic.com/s/ibmplexsans/v19/zYX9KVElMYYaJe8bpLHnCwDKjXr8AIxsdO_q.ttf\" -o assets/fonts/IBMPlexSans-SemiBold.ttf --max-time 30)",
+      "Bash(curl -L \"https://github.com/IBM/plex/raw/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Regular.ttf\" -o assets/fonts/IBMPlexSans-Regular.ttf --max-time 30)",
+      "Bash(curl -L \"https://github.com/IBM/plex/raw/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-SemiBold.ttf\" -o assets/fonts/IBMPlexSans-SemiBold.ttf --max-time 30)",
+      "Bash(python -c \":*)",
+      "Bash(python -m py_compile utils/ui/tabs/report_generator.py utils/ui/tabs/dashboard.py)",
+      "Bash(python -m py_compile utils/db_manager.py utils/pdf_report.py utils/ui/tabs/report_generator.py)",
+      "Bash(python -m py_compile app.py utils/db_manager.py)",
+      "Bash(python -m pytest tests/ -v -x -q)",
+      "Bash(python -m py_compile utils/db_manager.py utils/ui/tabs/report_generator.py)",
+      "Bash(python -m py_compile utils/db_manager.py utils/ui/tabs/report_generator.py utils/pdf_report.py)",
+      "Bash(ls c:/dev/ReporteCobranzas/sql/1*.sql)",
+      "Bash(python -m py_compile utils/db_manager.py utils/pdf_report.py)",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(grep -n \"TOTAL S/\\\\|TOTAL US$\\\\|TOTAL RECUPERADO\\\\|_add_tot_row\\\\|n_docs_sol\\\\|n_docs_usd\\\\|docs_sol\\\\|docs_usd\\\\|documentos\" utils/pdf_report.py)",
+      "Read(//c/Users/corte/.claude/plugins/cache/anthropic-agent-skills/document-skills/887114fd09f8/skills/**)",
+      "Read(//c/Users/corte/.claude/plugins/cache/anthropic-agent-skills/document-skills/887114fd09f8/**)",
+      "Bash(python -m scripts.package_skill skills/cobranza-expert)",
+      "Bash(python -m scripts.package_skill ../cobranza-expert)",
+      "Bash(pip install:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m scripts.package_skill ../cobranza-expert)",
+      "Bash(ls *.md)",
+      "Bash(ls *.pdf)",
+      "Bash(ls *.xlsx)",
+      "Bash(ls *.log *.db)",
+      "Bash(ls docs/FRD_*.md docs/FRD_*.pdf)",
+      "Bash(ls docs/EVIDENCIA_*.md)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\corte\\.claude\\plugins\\cache\\anthropic-agent-skills\\document-skills\\887114fd09f8\\skills\\cobranza-expert",
+      "C:\\Users\\corte\\.claude\\plugins\\cache\\anthropic-agent-skills\\document-skills\\887114fd09f8\\skills\\skill-creator"
     ]
   }
 }

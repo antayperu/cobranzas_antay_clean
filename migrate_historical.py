@@ -286,7 +286,7 @@ def insert_notificaciones(
         destino   = correo.split(',')[0].strip() if correo else cod
 
         notif_rows.append({
-            "tipo_notificacion": "INFO",
+            "tipo_notificacion": "EMAIL",
             "prioridad":         "NORMAL",
             "cliente_id":        cod,
             "destinatario":      destino.lower(),
