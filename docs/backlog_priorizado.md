@@ -1,10 +1,10 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
 Ultima actualizacion: 2026-03-28
-Version actual: v2.0.0 (TIER 2 completado — RC-FEAT-039 + RC-BUG-063→071 + RC-UX-001/002/003 · pendiente Gate 3 QA)
+Version actual: v2.0.0 (RELEASED — RC-FEAT-039/040/041 + RC-BUG-063→073 + RC-UX-001/002/003/004 · 162/162 tests)
 Estado migracion Supabase: Completada. Todas las fases MIG-000 a MIG-009 + SUPABASE-002 + CONFIG-001 cerradas.
 Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). TIER 2 completado 2026-03-16. TIER 3 pendiente.
-Informe Gerencial PDF: TIER 2 completado 2026-03-28 (162/162 tests). Gate 3 QA pendiente en PC servidor.
+Informe Gerencial PDF: completado 2026-03-28. Email+PDF Premium: completado 2026-03-28. Tag v2.0.0 en main.
 
 ---
 

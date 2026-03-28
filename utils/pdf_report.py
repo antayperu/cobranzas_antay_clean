@@ -1465,8 +1465,9 @@ class EstadoCuentaCliente:
         story += self._build_header()
         story += self._build_salutation()
         story += self._build_intro()
-        story += self._build_docs_table()   # totales incluidos al final de la tabla
+        story += self._build_docs_table()       # totales incluidos al final de la tabla
         story += self._build_detraccion()
+        story += self._build_payment_accounts() # cuentas bancarias desde configuración
         story += self._build_footer_block()
         story += self._build_signature()
         doc.build(
@@ -1527,10 +1528,12 @@ class EstadoCuentaCliente:
         """Banner azul corporativo: logo (izq) + título+ciclo+fecha (der)."""
         story = []
         company_name = self.settings.get("company_name", "DACTA S.A.C.")
+        _tmpl        = self.settings.get("email_template", {})
+        pdf_title    = (_tmpl.get("pdf_title") or "ESTADO DE CUENTA").strip().upper()
 
         # Celda derecha: título + ciclo + fecha
         title_tbl = Table([
-            [Paragraph("ESTADO DE CUENTA",
+            [Paragraph(pdf_title,
                 _style("EC_Hdr", "Normal", fontSize=15, leading=19,
                        textColor=C_WHITE, fontName=_F_HEADING))],
             [Paragraph(f"Ciclo: {self.cycle_id}",
@@ -1579,19 +1582,33 @@ class EstadoCuentaCliente:
         return story
 
     def _build_salutation(self) -> List:
-        """Lima, fecha  +  Señores / Empresa / Código / Presente.-"""
+        """Bloque destinatario premium (tipografía limpia) + saludo + presente."""
+        _tmpl        = self.settings.get("email_template", {})
+        raw_saludo   = (_tmpl.get("pdf_saludo") or "Estimado cliente,").strip()
+        saludo_txt   = raw_saludo.replace("{CLIENTE}", self.empresa).replace("{cliente}", self.empresa)
+        pdf_presente = (_tmpl.get("pdf_presente") or "Presente.-").strip()
+
         story = []
-        story.append(Paragraph(self._fecha_larga(), ST_BODY))
-        story.append(_spacer(0.30))
-        story.append(Paragraph("Señores:", ST_BODY))
-        story.append(Paragraph(
-            f"<b>{self.empresa}</b>",
-            _style("EC_EmpNm", "Normal", fontSize=11, leading=14,
-                   textColor=C_TEXT, fontName=_F_HEADING),
-        ))
-        story.append(Paragraph(f"Código de cliente: {self.cod_cliente}", ST_BODY))
-        story.append(Paragraph("Presente.-", ST_BODY))
+
+        # ── Identificación del destinatario — tipografía pura, sin cajas ──────
+        empresa_st = _style("EC_EmpB",  "Normal", fontSize=14, leading=18,
+                            textColor=C_PRIMARY, fontName=_F_HEADING)
+        cod_st     = _style("EC_CodB",  "Normal", fontSize=8.5, leading=12,
+                            textColor=C_MUTED, fontName=_F_BODY)
+
+        story.append(Paragraph(self.empresa, empresa_st))
+        story.append(Paragraph(f"Código de cliente: {self.cod_cliente}", cod_st))
+        story.append(_spacer(0.2))
+        # Línea de acento teal (2pt) — divide el destinatario del cuerpo de la carta
+        story.append(_hr(C_ACCENT, 2.0))
         story.append(_spacer(0.35))
+
+        # ── Saludo + Presente ─────────────────────────────────────────────────
+        saludo_st = _style("EC_Sal", "Normal", fontSize=9.5, leading=13,
+                           textColor=C_TEXT, fontName=_F_BODY)
+        story.append(Paragraph(saludo_txt, saludo_st))
+        story.append(Paragraph(pdf_presente, saludo_st))
+        story.append(_spacer(0.4))
         return story
 
     def _build_intro(self) -> List:
@@ -1814,6 +1831,99 @@ class EstadoCuentaCliente:
         story.append(_spacer(0.35))
         return story
 
+    def _build_payment_accounts(self) -> List:
+        """Sección de cuentas bancarias — desde Tab Configuración > Información de Pago.
+        Solo se renderiza si hay al menos una cuenta con número configurado."""
+        tmpl          = self.settings.get("email_template", {})
+        cuentas_sol   = [c for c in (tmpl.get("cuentas_sol") or []) if isinstance(c, dict) and c.get("numero", "").strip()]
+        cuentas_usd   = [c for c in (tmpl.get("cuentas_usd") or []) if isinstance(c, dict) and c.get("numero", "").strip()]
+        contact_email = (tmpl.get("contact_email") or "").strip()
+        contact_phone = (tmpl.get("contact_phone") or "").strip()
+        voucher_raw   = (tmpl.get("voucher_text") or "").strip()
+
+        if not cuentas_sol and not cuentas_usd and not contact_email and not contact_phone:
+            return []
+
+        story = []
+        story += _section_title("INFORMACIÓN DE PAGO", self._page_w)
+        story.append(_spacer(0.15))
+
+        hdr_st  = _style("EC_PayHdr", "Normal", fontSize=8, leading=10,
+                         textColor=C_PRIMARY, fontName=_F_BOLD)
+        lbl_st  = _style("EC_PayLbl", "Normal", fontSize=7.5, leading=10,
+                         textColor=C_MUTED, fontName=_F_BODY)
+        val_st  = _style("EC_PayVal", "Normal", fontSize=8, leading=11,
+                         textColor=C_TEXT, fontName=_F_BODY)
+        cci_st  = _style("EC_PayCCI", "Normal", fontSize=7, leading=9,
+                         textColor=C_MUTED, fontName=_F_BODY)
+
+        def _cuenta_block(cuentas: list) -> List:
+            block = []
+            for c in cuentas:
+                banco  = c.get("banco",  "").strip()
+                numero = c.get("numero", "").strip()
+                cci    = c.get("cci",    "").strip()
+                if banco:
+                    block.append(Paragraph(f"<b>{banco}:</b> {numero}", val_st))
+                else:
+                    block.append(Paragraph(numero, val_st))
+                if cci:
+                    block.append(Paragraph(f"CCI: {cci}", cci_st))
+            return block
+
+        # Construir columnas de cuentas (sol izquierda, usd derecha)
+        col_sol_content: List = []
+        col_usd_content: List = []
+
+        if cuentas_sol:
+            col_sol_content.append(Paragraph("CUENTAS EN SOLES (S/)", hdr_st))
+            col_sol_content += _cuenta_block(cuentas_sol)
+
+        if cuentas_usd:
+            col_usd_content.append(Paragraph("CUENTAS EN DÓLARES (US$)", hdr_st))
+            col_usd_content += _cuenta_block(cuentas_usd)
+
+        if col_sol_content or col_usd_content:
+            half_w = self._page_w / 2 - 4
+            tbl_cuentas = Table(
+                [[col_sol_content or [""], col_usd_content or [""]]],
+                colWidths=[half_w, half_w],
+            )
+            tbl_cuentas.setStyle(TableStyle([
+                ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+                ("LINEAFTER",     (0, 0), (0, -1),  0.5, C_BORDER),
+                ("BACKGROUND",    (0, 0), (-1, -1), C_LIGHT_ROW),
+                ("TOPPADDING",    (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
+                ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+            ]))
+            story.append(tbl_cuentas)
+
+        # Datos de contacto
+        contact_parts = []
+        if contact_email:
+            contact_parts.append(f"Envío de vouchers: <b>{contact_email}</b>")
+        if contact_phone:
+            contact_parts.append(f"Consultas: {contact_phone}")
+        if contact_parts:
+            story.append(_spacer(0.1))
+            story.append(Paragraph(" &nbsp;&bull;&nbsp; ".join(contact_parts),
+                _style("EC_Contact", "Normal", fontSize=7.5, leading=10,
+                       textColor=C_MUTED, fontName=_F_BODY)))
+
+        # Instrucciones adicionales de pago
+        if voucher_raw:
+            story.append(_spacer(0.1))
+            for line in voucher_raw.split("\n"):
+                story.append(Paragraph(line or " ",
+                    _style("EC_Voucher", "Normal", fontSize=7.5, leading=10,
+                           textColor=C_MUTED, fontName=_F_BODY)))
+
+        story.append(_spacer(0.30))
+        return story
+
     def _build_footer_block(self) -> List:
         """Texto de cierre desde Tab Configuración > footer_text."""
         tmpl  = self.settings.get("email_template", {})
@@ -1821,23 +1931,39 @@ class EstadoCuentaCliente:
         story = []
         if not raw:
             return story
-        story.append(_hr(C_BORDER, 0.5))
-        story.append(_spacer(0.15))
-        for line in raw.split("\n"):
-            story.append(Paragraph(line or " ", ST_SMALL))
         story.append(_spacer(0.2))
+        # Caja sutil para el texto de cierre (evitar confusión con el cuerpo)
+        note_st = _style("EC_Note", "Normal", fontSize=7.5, leading=11,
+                         textColor=C_MUTED, fontName=_F_BODY)
+        lines = [Paragraph(line or " ", note_st) for line in raw.split("\n")]
+        box = Table([[lines]], colWidths=[self._page_w])
+        box.setStyle(TableStyle([
+            ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+            ("BACKGROUND",    (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+            ("TOPPADDING",    (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 12),
+        ]))
+        story.append(box)
+        story.append(_spacer(0.25))
         return story
 
     def _build_signature(self) -> List:
-        """Atentamente + Área de Cobranzas + datos empresa."""
-        company = self.settings.get("company_name", "DACTA S.A.C.")
-        ruc     = self.settings.get("company_ruc", "")
-        phone   = self.settings.get("phone_contact", "")
-        story   = []
-        story.append(_spacer(0.2))
-        story.append(Paragraph("Atentamente,", ST_BODY))
-        story.append(_spacer(0.15))
-        story.append(Paragraph("Área de Cobranzas y Facturación", ST_BODY_BOLD))
+        """Frase de despedida configurable + cargo + datos empresa."""
+        company         = self.settings.get("company_name", "DACTA S.A.C.")
+        ruc             = self.settings.get("company_ruc", "")
+        phone           = self.settings.get("phone_contact", "")
+        _tmpl           = self.settings.get("email_template", {})
+        firma_cargo     = (_tmpl.get("firma_cargo")     or "Area de Cobranzas y Facturacion").strip()
+        pdf_atentamente = (_tmpl.get("pdf_atentamente") or "Atentamente,").strip()
+
+        story = []
+        story.append(_hr(C_BORDER, 0.5))
+        story.append(_spacer(0.25))
+        story.append(Paragraph(pdf_atentamente, ST_BODY))
+        story.append(_spacer(0.5))   # espacio para firma manual
+        story.append(Paragraph(firma_cargo, ST_BODY_BOLD))
         footer_line = company
         if ruc:
             footer_line += f" · RUC: {ruc}"
@@ -1847,13 +1973,27 @@ class EstadoCuentaCliente:
         return story
 
     def _add_page_footer(self, canvas_obj: Any, doc: Any) -> None:
-        """Ref: CYCLE_ID · fecha  (izq)  ·  Pág. N  (der)."""
+        """Línea decorativa + Ref (izq) · Empresa (centro) · Pág. N (der)."""
         canvas_obj.saveState()
-        y = 0.9 * cm
+        page_w = A4[0]
+        y_line = 1.15 * cm
+        y_text = 0.65 * cm
+
+        # Línea separadora tenue
+        canvas_obj.setStrokeColor(C_BORDER)
+        canvas_obj.setLineWidth(0.5)
+        canvas_obj.line(2 * cm, y_line, page_w - 2 * cm, y_line)
+
+        company = self.settings.get("company_name", "DACTA S.A.C.")
+        ruc     = self.settings.get("company_ruc", "")
+        center_txt = company + (f" · RUC: {ruc}" if ruc else "")
+
         canvas_obj.setFont(_F_BODY, 6.5)
         canvas_obj.setFillColor(C_MUTED)
-        canvas_obj.drawString(2 * cm, y, f"Ref: {self.cycle_id} · {self._now.strftime('%d/%m/%Y')}")
-        canvas_obj.drawRightString(A4[0] - 2 * cm, y, f"Pág. {doc.page}")
+        canvas_obj.drawString(2 * cm, y_text,
+                              f"Ref: {self.cycle_id} · {self._now.strftime('%d/%m/%Y')}")
+        canvas_obj.drawCentredString(page_w / 2, y_text, center_txt)
+        canvas_obj.drawRightString(page_w - 2 * cm, y_text, f"Pág. {doc.page}")
         canvas_obj.restoreState()
 
 

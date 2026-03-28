@@ -39,16 +39,18 @@ COLOR_TEXT = "#333333"
 
 def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
     """
-    Genera el cuerpo HTML de la carta de presentación premium del email.
-    El detalle completo va en el PDF adjunto — este email es la portada corporativa.
-    RC-FEAT-040: Reemplaza generate_premium_email_body_cid() como cuerpo principal.
+    Genera el cuerpo HTML premium del correo de notificación de cobranza.
+    RC-FEAT-041: Email corporativo de clase mundial — solo resumen ejecutivo,
+    sin tabla de documentos (el detalle completo va en el PDF adjunto).
 
-    Parámetros:
-        client_name     -- nombre del cliente (empresa)
-        docs_df         -- pd.DataFrame con los documentos del cliente
-        cycle_id        -- ID del ciclo (CIC-YYYYMMDD-HHMM)
-        branding_config -- dict con company_name, company_ruc, phone_contact,
-                           primary_color, email_template, logo_path/logo_bytes
+    Contenido 100% configurable desde Tab Configuración → Plantillas de Correo:
+      email_body_text — cuerpo breve con variables dinámicas
+      footer_text     — cierre (incluye mensaje "caso omiso")
+      firma_cargo     — cargo del área firmante
+      cuentas_sol/usd — cuentas bancarias (antes hardcodeadas)
+
+    Variables en email_body_text: {CLIENTE}, {DEUDA_SOL}, {DOCS_SOL},
+                                   {DEUDA_USD}, {DOCS_USD}, {DETRACCION}, {FECHA}
     """
     company_name  = branding_config.get("company_name", "DACTA S.A.C.")
     company_ruc   = branding_config.get("company_ruc", "")
@@ -59,80 +61,197 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
     def _nl2br(txt):
         return html.escape(str(txt or "")).replace("\n", "<br>")
 
-    # Calcular KPIs exactamente igual que generate_premium_email_body_cid
-    sum_detr = 0.0
+    # ── Calcular KPIs ─────────────────────────────────────────────────────────
+    sum_s = sum_d = sum_detr = 0.0
+    count_s = count_d = count_detr = 0
     try:
         df_calc = docs_df.copy()
-        df_calc['SALDO_REAL_CLEAN']  = df_calc['SALDO REAL'].apply(helpers.safe_clean_decimal)
-        df_calc['DETRACCION_CLEAN']  = df_calc['DETRACCIÓN'].apply(helpers.safe_clean_decimal)
+        df_calc['SALDO_REAL_CLEAN'] = df_calc['SALDO REAL'].apply(helpers.safe_clean_decimal)
+        df_calc['DETRACCION_CLEAN'] = df_calc['DETRACCIÓN'].apply(helpers.safe_clean_decimal)
         mask_soles = df_calc['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
-        df_sol = df_calc[mask_soles]
-        df_dol = df_calc[~mask_soles]
-        sum_s  = df_sol['SALDO_REAL_CLEAN'].sum()
+        df_sol  = df_calc[mask_soles]
+        df_dol  = df_calc[~mask_soles]
+        sum_s   = df_sol['SALDO_REAL_CLEAN'].sum()
         count_s = len(df_sol)
-        sum_d  = df_dol['SALDO_REAL_CLEAN'].sum()
+        sum_d   = df_dol['SALDO_REAL_CLEAN'].sum()
         count_d = len(df_dol)
-        kpi_sol  = f"S/ {sum_s:,.2f} ({count_s:02d} documentos)"
-        kpi_usd  = f"US$ {sum_d:,.2f} ({count_d:02d} documentos)"
         try:
-            mask_dv = df_calc['DETRACCION_CLEAN'] > 0.01
-            mask_ds = df_calc['ESTADO DETRACCION'].astype(str).str.strip().str.upper() == 'PENDIENTE'
-            df_detr = df_calc[mask_dv & mask_ds]
+            mask_dv    = df_calc['DETRACCION_CLEAN'] > 0.01
+            mask_ds    = df_calc['ESTADO DETRACCION'].astype(str).str.strip().str.upper() == 'PENDIENTE'
+            df_detr    = df_calc[mask_dv & mask_ds]
             sum_detr   = df_detr['DETRACCION_CLEAN'].sum()
             count_detr = len(df_detr)
         except Exception:
-            sum_detr, count_detr = 0.0, 0
-        kpi_sunat = f"S/ {sum_detr:,.2f} ({count_detr:02d} documentos afectos)"
+            pass
     except Exception:
-        kpi_sol   = "S/ 0.00 (00 documentos)"
-        kpi_usd   = "US$ 0.00 (00 documentos)"
-        kpi_sunat = "S/ 0.00 (00 documentos afectos)"
+        pass
 
+    kpi_sol   = f"S/ {sum_s:,.2f}"
+    kpi_sol_n = f"{count_s:02d} doc{'umento' if count_s == 1 else 'umentos'}"
+    kpi_usd   = f"US$ {sum_d:,.2f}"
+    kpi_usd_n = f"{count_d:02d} doc{'umento' if count_d == 1 else 'umentos'}"
+    kpi_detr  = f"S/ {sum_detr:,.2f}"
+    kpi_detr_n = f"{count_detr:02d} doc{'umento afecto' if count_detr == 1 else 'umentos afectos'}"
+
+    fecha_str = datetime.now().strftime("%d/%m/%Y")
     safe_client = html.escape(str(client_name))
 
-    # Resumen financiero — mismo formato que el email anterior
-    td_lbl = f'style="color:#486581;padding:5px 0;font-size:13px"'
-    td_val = f'style="text-align:right;font-weight:700;color:{primary_color};padding:5px 0;font-size:14px"'
-    resumen_rows = (
-        f'<tr><td {td_lbl}>Deuda Total <strong>Soles</strong>:</td>'
-        f'<td {td_val}>{kpi_sol}</td></tr>'
-        f'<tr><td {td_lbl}>Deuda Total <strong>Dólares</strong>:</td>'
-        f'<td {td_val}>{kpi_usd}</td></tr>'
-        f'<tr><td {td_lbl}>Detracciones SUNAT Pendientes:</td>'
-        f'<td {td_val}>{kpi_sunat}</td></tr>'
-    )
+    # ── Variables para sustitución en email_body_text ─────────────────────────
+    _var_map = {
+        "{CLIENTE}":    safe_client,
+        "{cliente}":    safe_client,
+        "{DEUDA_SOL}":  f"S/ {sum_s:,.2f}",
+        "{DOCS_SOL}":   f"{count_s:02d} documentos",
+        "{DEUDA_USD}":  f"US$ {sum_d:,.2f}",
+        "{DOCS_USD}":   f"{count_d:02d} documentos",
+        "{DETRACCION}": f"S/ {sum_detr:,.2f}",
+        "{FECHA}":      fecha_str,
+    }
 
-    # Textos configurables
-    intro_raw  = (tmpl.get("intro_text") or "").strip()
-    footer_raw = (tmpl.get("footer_text") or "").strip()
+    def _apply_vars(raw: str) -> str:
+        result = html.escape(str(raw or ""))
+        for var, val in _var_map.items():
+            result = result.replace(html.escape(var), val)
+        return result.replace("\n", "<br>")
 
-    safe_client_plain = str(client_name)
-    intro_html = _nl2br(intro_raw).replace("{CLIENTE}", safe_client).replace("{cliente}", safe_client) if intro_raw else (
+    # ── Textos configurables ──────────────────────────────────────────────────
+    body_raw    = (tmpl.get("email_body_text") or tmpl.get("intro_text") or "").strip()
+    footer_raw  = (tmpl.get("footer_text") or "").strip()
+    firma_cargo = html.escape(tmpl.get("firma_cargo", "Area de Cobranzas y Facturacion").strip())
+
+    body_html = _apply_vars(body_raw) if body_raw else (
+        f"Estimado {safe_client},<br><br>"
         "Le informamos que a la fecha presenta documentos pendientes de pago.<br>"
-        "Agradeceremos gestionar la cancelación para mantener su servicio activo."
+        "Le agradeceremos gestionar la cancelaci&#243;n para mantener su servicio activo."
     )
     footer_html = _nl2br(footer_raw) if footer_raw else (
-        f"Área de Cobranzas y Facturación<br><strong>{html.escape(company_name)}</strong>"
+        "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje."
     )
 
-    # Logo
+    # ── Logo ──────────────────────────────────────────────────────────────────
     has_logo = bool(branding_config.get("logo_path") or branding_config.get("logo_bytes"))
-    logo_block = ""
-    if has_logo:
-        logo_block = (
-            '<tr>'
-            f'<td style="padding:28px 40px 12px;text-align:center">'
-            f'<img src="cid:logo_dacta" width="200" alt="{html.escape(company_name)}"'
-            ' style="max-width:200px;height:auto;display:block;margin:0 auto">'
-            '</td>'
-            '</tr>'
+    logo_img = (
+        f'<img src="cid:logo_dacta" width="160" alt="{html.escape(company_name)}"'
+        ' style="max-width:160px;max-height:64px;height:auto;display:block;margin:0 auto">'
+        if has_logo else
+        f'<div style="font-size:20px;font-weight:700;color:{primary_color};'
+        f'letter-spacing:1px;font-family:Georgia,serif">{html.escape(company_name)}</div>'
+    )
+
+    # ── Barra inferior empresa ────────────────────────────────────────────────
+    company_parts = [html.escape(company_name)]
+    if company_ruc:
+        company_parts.append(f"RUC {html.escape(company_ruc)}")
+    if phone:
+        company_parts.append(html.escape(phone))
+    company_line = " &nbsp;&nbsp;·&nbsp;&nbsp; ".join(company_parts)
+
+    # ── KPI rows del resumen de cuenta ────────────────────────────────────────
+    def _kpi_row(label: str, amount: str, qty: str, show: bool = True) -> str:
+        if not show:
+            return ""
+        return (
+            f'<tr>'
+            f'<td style="padding:12px 0;color:#4A5568;font-size:13px;'
+            f'border-bottom:1px solid #EDF2F7;font-weight:400;'
+            f'font-family:\'Helvetica Neue\',Arial,sans-serif">{label}</td>'
+            f'<td style="padding:12px 0;text-align:right;border-bottom:1px solid #EDF2F7">'
+            f'<span style="font-weight:700;font-size:16px;color:{primary_color};'
+            f'font-family:Georgia,serif">{amount}</span>'
+            f'<br><span style="font-size:11px;color:#A0AEC0;font-family:\'Helvetica Neue\',Arial,sans-serif">{qty}</span>'
+            f'</td>'
+            f'</tr>'
         )
 
-    company_line = html.escape(company_name)
-    if company_ruc:
-        company_line += f" &bull; RUC: {html.escape(company_ruc)}"
-    if phone:
-        company_line += f" &bull; {html.escape(phone)}"
+    resumen_rows = (
+        _kpi_row("Deuda Total <strong>Soles</strong>", kpi_sol, kpi_sol_n)
+        + _kpi_row("Deuda Total <strong>D&oacute;lares</strong>", kpi_usd, kpi_usd_n)
+        + _kpi_row("Detracciones SUNAT Pendientes", kpi_detr, kpi_detr_n, show=(sum_detr > 0.01))
+    )
+
+    # ── Sección cuentas bancarias ─────────────────────────────────────────────
+    def _render_cuenta_col(cuentas: list, titulo: str) -> str:
+        cuentas_validas = [c for c in (cuentas or []) if isinstance(c, dict) and c.get("numero", "").strip()]
+        if not cuentas_validas:
+            return ""
+        items_html = ""
+        for c in cuentas_validas:
+            banco  = html.escape(c.get("banco",  "").strip())
+            numero = html.escape(c.get("numero", "").strip())
+            cci    = html.escape(c.get("cci",    "").strip())
+            items_html += (
+                f'<p style="margin:0 0 8px;font-size:13px;color:#2D3748;'
+                f'font-family:\'Helvetica Neue\',Arial,sans-serif">'
+                f'<span style="font-weight:600">{banco}:</span> {numero}'
+                + (f'<br><span style="font-size:11px;color:#718096">CCI: {cci}</span>' if cci else "")
+                + '</p>'
+            )
+        return (
+            f'<td style="padding:20px 24px;vertical-align:top;width:50%">'
+            f'<p style="margin:0 0 10px;font-size:10px;font-weight:700;letter-spacing:1px;'
+            f'color:{primary_color};text-transform:uppercase;'
+            f'font-family:\'Helvetica Neue\',Arial,sans-serif">{titulo}</p>'
+            f'{items_html}'
+            f'</td>'
+        )
+
+    _col_sol = _render_cuenta_col(tmpl.get("cuentas_sol", []), "Cuentas en Soles (S/)")
+    _col_usd = _render_cuenta_col(tmpl.get("cuentas_usd", []), "Cuentas en D&oacute;lares (US$)")
+    _contact_email = html.escape(tmpl.get("contact_email", "").strip())
+    _contact_phone = html.escape(tmpl.get("contact_phone", "").strip())
+    _voucher_raw   = (tmpl.get("voucher_text") or "").strip()
+
+    cuentas_block = ""
+    if _col_sol or _col_usd:
+        contact_row = ""
+        if _contact_email or _contact_phone:
+            parts = []
+            if _contact_email:
+                parts.append(f"Envío de vouchers: <strong>{_contact_email}</strong>")
+            if _contact_phone:
+                parts.append(f"Tel: {_contact_phone}")
+            contact_row = (
+                f'<tr><td colspan="2" style="padding:4px 24px 16px;font-size:12px;'
+                f'color:#718096;border-top:1px solid #EDF2F7;'
+                f'font-family:\'Helvetica Neue\',Arial,sans-serif">'
+                + " &nbsp;&bull;&nbsp; ".join(parts)
+                + "</td></tr>"
+            )
+        if _voucher_raw:
+            contact_row += (
+                f'<tr><td colspan="2" style="padding:0 24px 16px;font-size:12px;'
+                f'color:#718096;font-family:\'Helvetica Neue\',Arial,sans-serif">'
+                + _nl2br(_voucher_raw) + "</td></tr>"
+            )
+        cuentas_block = f"""
+        <tr>
+          <td style="padding:0 44px 0">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+                   style="border:1px solid #E2E8F0;border-top:3px solid {primary_color}">
+              <tr>
+                <td colspan="2" style="padding:14px 24px 8px">
+                  <span style="font-size:10px;font-weight:700;letter-spacing:1px;
+                               color:{primary_color};text-transform:uppercase;
+                               font-family:'Helvetica Neue',Arial,sans-serif">
+                    Datos para el Pago
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                {_col_sol}
+                {_col_usd if _col_usd else '<td style="width:50%"></td>'}
+              </tr>
+              {contact_row}
+            </table>
+          </td>
+        </tr>
+        <tr><td style="height:32px;font-size:0">&nbsp;</td></tr>"""
+
+    # ── Mes en español para el encabezado ─────────────────────────────────────
+    _MESES = ["enero","febrero","marzo","abril","mayo","junio",
+              "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+    _now = datetime.now()
+    fecha_larga = f"{_now.day} de {_MESES[_now.month-1]} de {_now.year}"
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -141,41 +260,81 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Estado de Cuenta</title>
 </head>
-<body style="margin:0;padding:0;background:#F1F5FB;font-family:'Helvetica Neue',Arial,sans-serif">
+<body style="margin:0;padding:0;background:#E8ECF1;
+             font-family:'Helvetica Neue',Helvetica,Arial,sans-serif">
+
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
   <tr>
-    <td style="padding:30px 20px">
-      <table role="presentation" width="620" align="center" cellspacing="0" cellpadding="0" border="0"
-             style="max-width:620px;margin:0 auto;background:#FFFFFF;border-radius:6px;
-                    overflow:hidden;box-shadow:0 2px 12px rgba(13,59,102,.12)">
+    <td align="center" style="padding:36px 16px 48px">
 
-        <!-- Banda azul superior -->
+      <!-- ╔═══════════════ CARD 600px ═══════════════╗ -->
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0"
+             style="max-width:600px;width:100%;background:#FFFFFF;
+                    box-shadow:0 2px 4px rgba(0,0,0,.06),0 12px 40px rgba(0,0,0,.10)">
+
+        <!-- ── LOGO (fondo blanco — siempre visible) ─────────────────── -->
         <tr>
-          <td style="background:{primary_color};height:8px;font-size:0;line-height:0">&nbsp;</td>
+          <td align="center"
+              style="background:#FFFFFF;padding:28px 48px 24px;
+                     border-bottom:1px solid #E2E8F0">
+            {logo_img}
+          </td>
         </tr>
 
-        {logo_block}
-
-        <!-- Intro (texto íntegro desde Tab Configuración — sin línea hardcodeada) -->
+        <!-- ── HEADER CORPORATIVO (título + fecha) ──────────────────── -->
         <tr>
-          <td style="padding:28px 40px 0">
-            <p style="margin:0 0 24px;font-size:14px;line-height:22px;color:#486581">
-              {intro_html}
+          <td align="center"
+              style="background:{primary_color};padding:28px 48px 26px">
+
+            <!-- Separador decorativo -->
+            <div style="width:40px;height:1px;background:rgba(255,255,255,.30);
+                        margin:0 auto 18px"></div>
+
+            <!-- Título principal -->
+            <div style="font-family:Georgia,'Times New Roman',serif;
+                        font-size:24px;font-weight:400;font-style:normal;
+                        color:#FFFFFF;letter-spacing:3px;text-transform:uppercase;
+                        line-height:1.2;margin-bottom:8px">
+              Estado de Cuenta
+            </div>
+
+            <!-- Fecha -->
+            <div style="font-family:'Helvetica Neue',Arial,sans-serif;
+                        font-size:11px;color:rgba(255,255,255,.60);
+                        letter-spacing:1.5px;text-transform:uppercase">
+              Al {fecha_larga}
+            </div>
+
+          </td>
+        </tr>
+
+        <!-- ── CUERPO DEL MENSAJE ─────────────────────────────────────── -->
+        <tr>
+          <td align="center" style="padding:40px 52px 0">
+            <p style="margin:0;font-size:15px;line-height:27px;
+                      color:#4A5568;text-align:center;
+                      font-family:'Helvetica Neue',Arial,sans-serif">
+              {body_html}
             </p>
           </td>
         </tr>
 
-        <!-- Resumen de cuenta -->
+        <!-- ── RESUMEN FINANCIERO ─────────────────────────────────────── -->
         <tr>
-          <td style="padding:0 40px 24px">
+          <td style="padding:32px 44px 0">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                   style="background:#EEF4FB;border-radius:4px;border-left:4px solid {primary_color}">
+                   style="border:1px solid #E2E8F0;border-top:3px solid {primary_color}">
               <tr>
-                <td style="padding:14px 20px">
-                  <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:.6px;
-                             color:{primary_color};text-transform:uppercase">
-                    RESUMEN DE CUENTA
-                  </p>
+                <td style="padding:16px 24px 8px">
+                  <span style="font-size:10px;font-weight:700;letter-spacing:1px;
+                               color:{primary_color};text-transform:uppercase;
+                               font-family:'Helvetica Neue',Arial,sans-serif">
+                    Resumen de Cuenta
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 24px 16px">
                   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                     {resumen_rows}
                   </table>
@@ -185,15 +344,18 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
           </td>
         </tr>
 
-        <!-- Aviso PDF adjunto -->
+        <!-- ── AVISO PDF ADJUNTO ──────────────────────────────────────── -->
         <tr>
-          <td style="padding:0 40px 28px">
+          <td style="padding:20px 44px 0">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                   style="background:#F8FAFB;border:1px dashed #D9E2EC;border-radius:4px">
+                   style="border:1px dashed #CBD5E0;background:#F7FAFC">
               <tr>
-                <td style="padding:14px 20px;font-size:13px;color:#486581;line-height:20px">
-                  <strong style="color:#102A43">&#128206; Estado de Cuenta adjunto</strong><br>
-                  Se adjunta el detalle completo de sus documentos pendientes en formato PDF.
+                <td style="padding:14px 20px;font-size:13px;color:#718096;line-height:20px;
+                           font-family:'Helvetica Neue',Arial,sans-serif">
+                  <strong style="color:#2D3748;font-size:13px">
+                    &#128206; Estado de Cuenta adjunto en PDF
+                  </strong><br>
+                  El documento adjunto incluye el detalle completo de sus facturas pendientes.
                   Puede abrirlo, imprimirlo o archivarlo para su registro.
                 </td>
               </tr>
@@ -201,26 +363,50 @@ def generate_cover_email_html(client_name, docs_df, cycle_id, branding_config):
           </td>
         </tr>
 
-        <!-- Footer text -->
+        <!-- ── ESPACIADO ──────────────────────────────────────────────── -->
+        <tr><td style="height:32px;font-size:0;line-height:0">&nbsp;</td></tr>
+
+        {cuentas_block}
+
+        <!-- ── SEPARADOR ─────────────────────────────────────────────── -->
         <tr>
-          <td style="padding:0 40px 28px;font-size:13px;line-height:20px;
-                     color:#486581;border-top:1px solid #EEF4FB">
-            <p style="margin:16px 0 0">{footer_html}</p>
+          <td style="padding:0 44px">
+            <div style="height:1px;background:#EDF2F7"></div>
           </td>
         </tr>
 
-        <!-- Barra empresa -->
+        <!-- ── PIE Y FIRMA ────────────────────────────────────────────── -->
         <tr>
-          <td style="background:{primary_color};padding:12px 40px;font-size:11px;
-                     color:rgba(255,255,255,.75);text-align:center">
+          <td style="padding:24px 52px 32px;
+                     font-family:'Helvetica Neue',Arial,sans-serif">
+            <p style="margin:0 0 20px;font-size:13px;line-height:22px;color:#718096">
+              {footer_html}
+            </p>
+            <p style="margin:0;font-size:13px;font-weight:600;
+                      color:#2D3748;letter-spacing:.2px">
+              {firma_cargo}
+            </p>
+          </td>
+        </tr>
+
+        <!-- ── FOOTER EMPRESA ─────────────────────────────────────────── -->
+        <tr>
+          <td align="center"
+              style="background:{primary_color};padding:16px 48px;
+                     font-size:11px;color:rgba(255,255,255,.55);
+                     letter-spacing:.5px;text-transform:uppercase;
+                     font-family:'Helvetica Neue',Arial,sans-serif">
             {company_line}
           </td>
         </tr>
 
       </table>
+      <!-- ╚═══════════════════════════════════════════════╝ -->
+
     </td>
   </tr>
 </table>
+
 </body>
 </html>"""
 

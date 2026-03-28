@@ -308,24 +308,95 @@ def render_tab(df_final, df_filtered, config):
                             components.html(cover_html, height=580, scrolling=True)
                         with tab_pdf:
                             if pdf_preview_b64:
-                                # Blob URL via JS — compatible con Chrome/Edge/Firefox
-                                # (data: URIs bloqueados en iframes Chromium; blob: sí funciona)
-                                pdf_html = f"""<!DOCTYPE html>
+                                # PDF.js — renderiza PDF como canvas.
+                                # Fix: blob-worker trick para evitar el bloqueo de
+                                # workers cross-origin en iframes sandboxed de Chromium.
+                                # cMapUrl necesario para decodificar fonts TrueType embebidos.
+                                _CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174"
+                                pdf_js_html = f"""<!DOCTYPE html>
 <html><head>
-<style>html,body{{margin:0;padding:0;width:100%;height:100%;overflow:hidden}}</style>
-</head><body>
-<embed id="pv" type="application/pdf" width="100%" height="100%" style="display:block">
+<meta charset="utf-8">
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box}}
+  body{{
+    background:#525659;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:14px 10px;
+    gap:10px;
+    font-family:sans-serif;
+    overflow-y:auto;
+  }}
+  canvas{{display:block;max-width:100%;box-shadow:0 3px 16px rgba(0,0,0,.45);background:#fff}}
+  #msg{{color:#ccc;font-size:13px;padding:40px 0;text-align:center;letter-spacing:.02em}}
+</style>
+</head>
+<body>
+<div id="msg">⏳ Cargando vista previa…</div>
+<script src="{_CDN}/pdf.min.js" crossorigin="anonymous"></script>
 <script>
 (function(){{
-  var b64="{pdf_preview_b64}";
-  var bin=atob(b64),n=bin.length,arr=new Uint8Array(n);
-  for(var i=0;i<n;i++)arr[i]=bin.charCodeAt(i);
-  var url=URL.createObjectURL(new Blob([arr],{{type:'application/pdf'}}));
-  document.getElementById('pv').src=url;
+  // Blob-worker: evita bloqueo cross-origin en iframe sandboxed de Chromium
+  var WORKER = '{_CDN}/pdf.worker.min.js';
+  try {{
+    var blob = new Blob(
+      ['importScripts("' + WORKER + '");'],
+      {{type:'application/javascript'}}
+    );
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+  }} catch(e) {{
+    pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER;
+  }}
+
+  var b64 = "{pdf_preview_b64}";
+  var raw = atob(b64), buf = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
+
+  pdfjsLib.getDocument({{
+    data: buf,
+    cMapUrl: '{_CDN}/cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: '{_CDN}/standard_fonts/',
+  }}).promise.then(function(pdf) {{
+    document.getElementById('msg').remove();
+    var scale = Math.min(1.55, (window.innerWidth - 28) / 595);
+    function renderPage(n) {{
+      pdf.getPage(n).then(function(page) {{
+        var vp = page.getViewport({{scale: scale}});
+        var canvas = document.createElement('canvas');
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        document.body.appendChild(canvas);
+        return page.render({{
+          canvasContext: canvas.getContext('2d'),
+          viewport: vp,
+        }}).promise;
+      }}).then(function() {{
+        if (n < pdf.numPages) renderPage(n + 1);
+      }});
+    }}
+    renderPage(1);
+  }}).catch(function(e) {{
+    var m = document.getElementById('msg');
+    m.style.color = '#ff8080';
+    m.innerHTML = '⚠️ No se pudo renderizar el PDF.<br><small>' + e.message + '</small>';
+  }});
 }})();
 </script>
 </body></html>"""
-                                components.html(pdf_html, height=560)
+                                components.html(pdf_js_html, height=820, scrolling=True)
+                                # Botón de descarga — siempre disponible como alternativa
+                                _slug = "".join(c for c in info_sel['empresa'][:18]
+                                                if c.isalnum() or c in " -_").strip().replace(" ","_")
+                                st.download_button(
+                                    label="⬇️ Descargar PDF",
+                                    data=pdf_bytes_prev,
+                                    file_name=f"EstadoCuenta_{_slug}_{cycle_id_prev}.pdf",
+                                    mime="application/pdf",
+                                    key=f"dl_pdf_prev_{info_sel['cod']}",
+                                    use_container_width=True,
+                                )
                             else:
                                 st.info("Vista previa del PDF no disponible.")
                 

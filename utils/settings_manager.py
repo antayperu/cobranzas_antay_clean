@@ -16,17 +16,43 @@ DEFAULT_SETTINGS = {
     "primary_color": "#2E86AB",
     "secondary_color": "#A23B72",
     "email_template": {
+        # --- CORREO ELECTRÓNICO ---
+        "email_subject": "Estado de Cuenta | {CLIENTE}",
+        "email_body_text": (
+            "Estimado {CLIENTE},\n\n"
+            "Le informamos que a la fecha presenta documentos pendientes de pago.\n"
+            "Le agradeceremos gestionar la cancelacion para mantener su servicio activo y evitar inconvenientes."
+        ),
+        # --- PDF: CABECERA ---
+        "pdf_title": "ESTADO DE CUENTA",
+        # --- PDF: CUERPO DE LA CARTA ---
+        "pdf_saludo": "Estimado cliente,",
+        "pdf_presente": "Presente.-",
         "intro_text": (
             "Le informamos que a la fecha presenta documentos pendientes de pago.\n"
             "Agradeceremos gestionar la cancelacion para mantener su servicio activo y evitar inconvenientes."
         ),
-        "footer_text": (
-            "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje.\n\n"
-            "Atentamente,\nArea de Cobranzas y Facturacion"
-        ),
+        # --- PDF: ALERTA DETRACCIÓN ---
         "alert_text": (
             "Si el documento esta afecto a Detraccion, debe abonarlo en nuestra cuenta del Banco de la Nacion Nro 00-058-420913."
         ),
+        # --- INFORMACIÓN DE PAGO (cuentas bancarias — antes hardcodeadas) ---
+        "cuentas_sol": [
+            {"banco": "BCP",  "numero": "", "cci": ""},
+            {"banco": "BBVA", "numero": "", "cci": ""},
+        ],
+        "cuentas_usd": [
+            {"banco": "BCP", "numero": "", "cci": ""},
+        ],
+        "contact_email": "",   # Correo para envío de vouchers
+        "contact_phone": "",   # Teléfono de consulta
+        "voucher_text": "",    # Instrucciones adicionales de pago
+        # --- PIE Y FIRMA ---
+        "footer_text": (
+            "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje."
+        ),
+        "pdf_atentamente": "Atentamente,",
+        "firma_cargo": "Area de Cobranzas y Facturacion",
     },
     "smtp_config": {
         "server": "smtp.gmail.com",
