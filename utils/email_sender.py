@@ -37,6 +37,179 @@ COLOR_BG = "#f4f4f4"
 COLOR_TEXT = "#333333"
 
 
+def generate_cover_email_html(client_name, total_sol, total_usd, cycle_id, branding_config):
+    """
+    Genera el cuerpo HTML de la carta de presentación premium del email.
+    El detalle va en el PDF adjunto — este email es la portada corporativa.
+    RC-FEAT-040: Reemplaza generate_premium_email_body_cid() como cuerpo principal.
+
+    Parámetros:
+        client_name    -- nombre del cliente (empresa)
+        total_sol      -- float, total en soles
+        total_usd      -- float, total en dólares
+        cycle_id       -- ID del ciclo (CIC-YYYYMMDD-HHMM)
+        branding_config -- dict con company_name, company_ruc, phone_contact,
+                           primary_color, email_template, logo_path/logo_bytes
+    """
+    company_name  = branding_config.get("company_name", "DACTA S.A.C.")
+    company_ruc   = branding_config.get("company_ruc", "")
+    phone         = branding_config.get("phone_contact", "")
+    primary_color = branding_config.get("primary_color", "#0D3B66")
+    tmpl          = branding_config.get("email_template", {})
+
+    def _nl2br(txt):
+        return html.escape(str(txt or "")).replace("\n", "<br>")
+
+    intro_raw  = (tmpl.get("intro_text") or "").strip()
+    footer_raw = (tmpl.get("footer_text") or "").strip()
+
+    intro_html  = _nl2br(intro_raw) if intro_raw else (
+        "Le informamos que a la fecha presenta documentos pendientes de pago.<br>"
+        "Agradeceremos gestionar la cancelación para mantener su servicio activo."
+    )
+    footer_html = _nl2br(footer_raw) if footer_raw else (
+        f"Área de Cobranzas y Facturación<br><strong>{html.escape(company_name)}</strong>"
+    )
+
+    safe_client = html.escape(str(client_name))
+
+    # Resumen financiero
+    resumen_rows = ""
+    if total_sol and float(total_sol) > 0:
+        resumen_rows += (
+            f'<tr>'
+            f'<td style="color:#486581;padding:5px 0;font-size:13px">Total pendiente S/:</td>'
+            f'<td style="text-align:right;font-weight:700;color:{primary_color};'
+            f'padding:5px 0;font-size:14px">S/ {float(total_sol):,.0f}</td>'
+            f'</tr>'
+        )
+    if total_usd and float(total_usd) > 0:
+        resumen_rows += (
+            f'<tr>'
+            f'<td style="color:#486581;padding:5px 0;font-size:13px">Total pendiente US$:</td>'
+            f'<td style="text-align:right;font-weight:700;color:{primary_color};'
+            f'padding:5px 0;font-size:14px">US$ {float(total_usd):,.0f}</td>'
+            f'</tr>'
+        )
+    if not resumen_rows:
+        resumen_rows = (
+            '<tr><td colspan="2" style="color:#486581;font-size:13px;padding:5px 0">'
+            'Ver detalle completo en el PDF adjunto.</td></tr>'
+        )
+
+    # Logo
+    has_logo = bool(branding_config.get("logo_path") or branding_config.get("logo_bytes"))
+    logo_block = ""
+    if has_logo:
+        logo_block = (
+            '<tr>'
+            f'<td style="padding:28px 40px 12px;text-align:center">'
+            f'<img src="cid:logo_dacta" width="200" alt="{html.escape(company_name)}"'
+            ' style="max-width:200px;height:auto;display:block;margin:0 auto">'
+            '</td>'
+            '</tr>'
+        )
+
+    company_line = html.escape(company_name)
+    if company_ruc:
+        company_line += f" &bull; RUC: {html.escape(company_ruc)}"
+    if phone:
+        company_line += f" &bull; {html.escape(phone)}"
+
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estado de Cuenta</title>
+</head>
+<body style="margin:0;padding:0;background:#F1F5FB;font-family:'Helvetica Neue',Arial,sans-serif">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+  <tr>
+    <td style="padding:30px 20px">
+      <table role="presentation" width="620" align="center" cellspacing="0" cellpadding="0" border="0"
+             style="max-width:620px;margin:0 auto;background:#FFFFFF;border-radius:6px;
+                    overflow:hidden;box-shadow:0 2px 12px rgba(13,59,102,.12)">
+
+        <!-- Banda azul superior -->
+        <tr>
+          <td style="background:{primary_color};height:8px;font-size:0;line-height:0">&nbsp;</td>
+        </tr>
+
+        {logo_block}
+
+        <!-- Saludo e intro -->
+        <tr>
+          <td style="padding:28px 40px 0">
+            <p style="margin:0 0 14px;font-size:15px;line-height:22px;color:#102A43">
+              Estimados señores <strong>{safe_client}</strong>,
+            </p>
+            <p style="margin:0 0 24px;font-size:14px;line-height:22px;color:#486581">
+              {intro_html}
+            </p>
+          </td>
+        </tr>
+
+        <!-- Resumen de cuenta -->
+        <tr>
+          <td style="padding:0 40px 24px">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+                   style="background:#EEF4FB;border-radius:4px;border-left:4px solid {primary_color}">
+              <tr>
+                <td style="padding:14px 20px">
+                  <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:.6px;
+                             color:{primary_color};text-transform:uppercase">
+                    RESUMEN DE CUENTA
+                  </p>
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                    {resumen_rows}
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Aviso PDF adjunto -->
+        <tr>
+          <td style="padding:0 40px 28px">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+                   style="background:#F8FAFB;border:1px dashed #D9E2EC;border-radius:4px">
+              <tr>
+                <td style="padding:14px 20px;font-size:13px;color:#486581;line-height:20px">
+                  <strong style="color:#102A43">&#128206; Estado de Cuenta adjunto</strong><br>
+                  Se adjunta el detalle completo de sus documentos pendientes en formato PDF.
+                  Puede abrirlo, imprimirlo o archivarlo para su registro.
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Footer text -->
+        <tr>
+          <td style="padding:0 40px 28px;font-size:13px;line-height:20px;
+                     color:#486581;border-top:1px solid #EEF4FB">
+            <p style="margin:16px 0 0">{footer_html}</p>
+          </td>
+        </tr>
+
+        <!-- Barra empresa -->
+        <tr>
+          <td style="background:{primary_color};padding:12px 40px;font-size:11px;
+                     color:rgba(255,255,255,.75);text-align:center">
+            {company_line}
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>"""
+
+
 def generate_premium_email_body_cid(client_name, docs_df, total_s, total_d, branding_config):
     """
     Genera cuerpo HTML asumiendo que el logo se adjunta con Content-ID: <logo_dacta>
@@ -822,6 +995,20 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     except Exception as e_img:
                          stats['log'].append(f"⚠️ [RunID:{run_id}] No se pudo adjuntar logo: {str(e_img)}")
 
+                # Adjuntar PDF Estado de Cuenta (RC-FEAT-040)
+                if not use_api:
+                    pdf_data   = msg_data.get('pdf_bytes')
+                    pdf_name   = msg_data.get('pdf_filename', 'EstadoCuenta.pdf')
+                    if pdf_data:
+                        try:
+                            from email.mime.application import MIMEApplication
+                            pdf_part = MIMEApplication(pdf_data, _subtype="pdf")
+                            pdf_part.add_header('Content-Disposition', 'attachment', filename=pdf_name)
+                            msg.attach(pdf_part)
+                            stats['log'].append(f"📄 [RunID:{run_id}] PDF_ATTACHED: {pdf_name} ({len(pdf_data)} bytes)")
+                        except Exception as e_pdf:
+                            stats['log'].append(f"⚠️ [RunID:{run_id}] No se pudo adjuntar PDF: {e_pdf}")
+
                 # Log PRE-SEND (Forensic)
                 stats['log'].append(f"📡 [RunID:{run_id}] SEND_CALL #{send_call_index} PREPARE -> To: {msg_data['email']} | MsgID: {msg_id}")
                 
@@ -921,16 +1108,27 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                                 "subject": msg_data['subject'],
                                 "html": msg_data['html_body']
                             }
-                            
-                            # Add logo attachment if exists
+
+                            attachments = []
+                            # Logo inline
                             if logo_path:
                                 with open(logo_path, 'rb') as f:
                                     logo_data = f.read()
-                                params["attachments"] = [{
+                                attachments.append({
                                     "filename": "logo.png",
-                                    "content": list(logo_data)  # Resend expects list of bytes
-                                }]
-                            
+                                    "content": list(logo_data)
+                                })
+                            # PDF adjunto (RC-FEAT-040)
+                            pdf_data = msg_data.get('pdf_bytes')
+                            pdf_name = msg_data.get('pdf_filename', 'EstadoCuenta.pdf')
+                            if pdf_data:
+                                attachments.append({
+                                    "filename": pdf_name,
+                                    "content": list(pdf_data)
+                                })
+                            if attachments:
+                                params["attachments"] = attachments
+
                             response = resend.Emails.send(params)
                             stats['log'].append(f"[{i+1}/{total}] ✅ [API] Enviado vía Resend (ID: {response.get('id', 'N/A')})")
                         
@@ -942,7 +1140,7 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                                 subject=msg_data['subject'],
                                 html_content=msg_data['html_body']
                             )
-                            
+
                             if logo_path:
                                 with open(logo_path, 'rb') as f:
                                     encoded_file = base64.b64encode(f.read()).decode()
@@ -954,7 +1152,19 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                                     ContentId('logo_dacta')
                                 )
                                 message.add_attachment(attached_file)
-                            
+
+                            # PDF adjunto (RC-FEAT-040)
+                            pdf_data = msg_data.get('pdf_bytes')
+                            pdf_name = msg_data.get('pdf_filename', 'EstadoCuenta.pdf')
+                            if pdf_data:
+                                pdf_att = Attachment(
+                                    FileContent(base64.b64encode(pdf_data).decode()),
+                                    FileName(pdf_name),
+                                    FileType('application/pdf'),
+                                    Disposition('attachment'),
+                                )
+                                message.add_attachment(pdf_att)
+
                             response = sg_client.send(message)
                             stats['log'].append(f"[{i+1}/{total}] ✅ [API] Enviado vía SendGrid (Status: {response.status_code})")
                     except Exception as e_api:
