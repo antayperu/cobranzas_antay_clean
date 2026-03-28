@@ -458,58 +458,220 @@ def render_tab(config):
     # SECCIÓN 5: PLANTILLAS DE CORREO
     # =========================================================================
     with st.expander("📝 Plantillas de Correo", expanded=False):
+        _tmpl = config.get('email_template', {})
+
+        # Helper: leer cuentas bancarias del config
+        def _get_cuentas(moneda: str) -> list:
+            key = f"cuentas_{moneda}"
+            cuentas = _tmpl.get(key, [])
+            if not isinstance(cuentas, list):
+                return []
+            return cuentas
+
+        _cuentas_sol = _get_cuentas("sol")
+        _cuentas_usd = _get_cuentas("usd")
+
+        # Valores por defecto para cuentas (hasta 2 en soles, 1 en USD)
+        def _cuenta_val(lista: list, idx: int, campo: str) -> str:
+            try:
+                return lista[idx].get(campo, "") or ""
+            except IndexError:
+                return ""
+
+        # ------ Chips de variables disponibles ------
+        _VARS_EMAIL = ["{CLIENTE}", "{DEUDA_SOL}", "{DOCS_SOL}", "{DEUDA_USD}", "{DOCS_USD}", "{DETRACCION}", "{FECHA}"]
+        _VARS_PDF   = ["{CLIENTE}"]
+        _vars_chip_email = " &nbsp; ".join(f"<code style='background:#EEF4FB;color:#0D3B66;padding:2px 7px;border-radius:4px;font-size:12px'>{v}</code>" for v in _VARS_EMAIL)
+        _vars_chip_pdf   = " &nbsp; ".join(f"<code style='background:#EEF4FB;color:#0D3B66;padding:2px 7px;border-radius:4px;font-size:12px'>{v}</code>" for v in _VARS_PDF)
+
         try:
             _plant_form_ctx = st.form(key="form_plantillas", enter_to_submit=False)
         except TypeError:
             _plant_form_ctx = st.form(key="form_plantillas")
+
         with _plant_form_ctx:
-            st.caption("Personaliza el contenido de los correos que se enviarán automáticamente")
-            col_t1, col_t2 = st.columns(2)
-            with col_t1:
-                new_intro = st.text_area(
-                    "Texto Introductorio",
-                    value=config['email_template']['intro_text'],
-                    height=120,
-                    help="Texto antes de la tabla de deuda. Usa {CLIENTE} para el nombre."
-                )
-            with col_t2:
-                new_footer = st.text_area(
-                    "Texto Pie de Página",
-                    value=config['email_template']['footer_text'],
-                    height=120,
-                    help="Texto después de los totales."
-                )
+
+            # ── SECCIÓN A: CORREO ELECTRÓNICO ─────────────────────────────────
+            st.markdown("#### 📧 Correo Electrónico")
+            st.caption("Define el asunto y el cuerpo breve del correo que recibirá el cliente.")
+            st.markdown(f"**Variables disponibles:** {_vars_chip_email}", unsafe_allow_html=True)
+            st.markdown("")
+
+            new_subject = st.text_input(
+                "Asunto del correo",
+                value=_tmpl.get("email_subject", "Estado de Cuenta | {CLIENTE}"),
+                help="Línea de asunto. Usa {CLIENTE} para incluir el nombre de la empresa.",
+                key="planta_subject"
+            )
+            new_email_body = st.text_area(
+                "Cuerpo del mensaje",
+                value=_tmpl.get("email_body_text", ""),
+                height=110,
+                help="Texto principal del correo. Breve y directo. El resumen de deuda se inserta automáticamente.",
+                key="planta_email_body"
+            )
+
+            st.divider()
+
+            # ── SECCIÓN B: CABECERA DEL DOCUMENTO PDF ─────────────────────────
+            st.markdown("#### 📄 Cabecera del Documento PDF")
+            st.caption("Título que aparece en la parte superior del documento Estado de Cuenta.")
+
+            new_pdf_title = st.text_input(
+                "Título del documento",
+                value=_tmpl.get("pdf_title", "ESTADO DE CUENTA"),
+                help="Ejemplo: ESTADO DE CUENTA · NOTIFICACIÓN DE COBRANZA",
+                key="planta_pdf_title"
+            )
+
+            st.divider()
+
+            # ── SECCIÓN C: CUERPO DE LA CARTA (PDF) ───────────────────────────
+            st.markdown("#### ✉️ Cuerpo de la Carta (PDF)")
+            st.caption("Texto que se dirige directamente al cliente en el documento PDF.")
+            st.markdown(f"**Variables disponibles:** {_vars_chip_pdf}", unsafe_allow_html=True)
+            st.markdown("")
+
+            new_pdf_saludo = st.text_input(
+                "Saludo / Apertura",
+                value=_tmpl.get("pdf_saludo", "Estimado cliente: {CLIENTE},"),
+                help="Primera línea de la carta. Usa {CLIENTE} para personalizar.",
+                key="planta_pdf_saludo"
+            )
+            new_intro = st.text_area(
+                "Texto introductorio",
+                value=_tmpl.get("intro_text", ""),
+                height=100,
+                help="Párrafo principal de la carta. Explica el motivo del documento.",
+                key="planta_intro"
+            )
+
+            st.divider()
+
+            # ── SECCIÓN D: ALERTA DE DETRACCIÓN ───────────────────────────────
+            st.markdown("#### ⚠️ Alerta de Detracción SUNAT")
+            st.caption("Este bloque aparece en el PDF **solo si** el cliente tiene documentos afectos a detracción. Déjalo vacío para no mostrar nada.")
+
             new_alert = st.text_area(
-                "Texto Alerta Detracción",
-                value=config['email_template']['alert_text'],
+                "Texto de alerta detracción",
+                value=_tmpl.get("alert_text", ""),
                 height=80,
-                help="Mensaje sobre cuentas de detracción SUNAT."
+                help="Instrucción sobre el Banco de la Nación y número de cuenta de detracciones.",
+                key="planta_alert"
             )
+
+            st.divider()
+
+            # ── SECCIÓN E: INFORMACIÓN DE PAGO ────────────────────────────────
+            st.markdown("#### 🏦 Información de Pago")
+            st.caption("Cuentas bancarias que aparecerán tanto en el correo como en el PDF. Deja vacío los campos que no apliquen.")
+
+            st.markdown("**Cuentas en Soles (S/)**")
+            _col_s1, _col_s2 = st.columns(2)
+            with _col_s1:
+                new_sol_b1_banco  = st.text_input("Banco 1 — Nombre",  value=_cuenta_val(_cuentas_sol, 0, "banco"),  key="planta_sol_b1_banco", placeholder="BCP")
+                new_sol_b1_num    = st.text_input("Banco 1 — Número",  value=_cuenta_val(_cuentas_sol, 0, "numero"), key="planta_sol_b1_num",   placeholder="1234567890")
+                new_sol_b1_cci    = st.text_input("Banco 1 — CCI",     value=_cuenta_val(_cuentas_sol, 0, "cci"),    key="planta_sol_b1_cci",   placeholder="00210300...")
+            with _col_s2:
+                new_sol_b2_banco  = st.text_input("Banco 2 — Nombre",  value=_cuenta_val(_cuentas_sol, 1, "banco"),  key="planta_sol_b2_banco", placeholder="BBVA")
+                new_sol_b2_num    = st.text_input("Banco 2 — Número",  value=_cuenta_val(_cuentas_sol, 1, "numero"), key="planta_sol_b2_num",   placeholder="0011034...")
+                new_sol_b2_cci    = st.text_input("Banco 2 — CCI",     value=_cuenta_val(_cuentas_sol, 1, "cci"),    key="planta_sol_b2_cci",   placeholder="01134000...")
+
+            st.markdown("**Cuentas en Dólares (US$)**")
+            _col_u1, _col_u2 = st.columns(2)
+            with _col_u1:
+                new_usd_b1_banco  = st.text_input("Banco 1 — Nombre",  value=_cuenta_val(_cuentas_usd, 0, "banco"),  key="planta_usd_b1_banco", placeholder="BCP")
+                new_usd_b1_num    = st.text_input("Banco 1 — Número",  value=_cuenta_val(_cuentas_usd, 0, "numero"), key="planta_usd_b1_num",   placeholder="1912078...")
+                new_usd_b1_cci    = st.text_input("Banco 1 — CCI",     value=_cuenta_val(_cuentas_usd, 0, "cci"),    key="planta_usd_b1_cci",   placeholder="00219100...")
+
+            st.markdown("**Datos de contacto para pagos**")
+            _col_c1, _col_c2 = st.columns(2)
+            with _col_c1:
+                new_contact_email = st.text_input(
+                    "Correo para envío de vouchers",
+                    value=_tmpl.get("contact_email", ""),
+                    key="planta_contact_email",
+                    placeholder="cobranzas@empresa.com"
+                )
+            with _col_c2:
+                new_contact_phone = st.text_input(
+                    "Teléfono de consulta",
+                    value=_tmpl.get("contact_phone", ""),
+                    key="planta_contact_phone",
+                    placeholder="+51 999 000 000"
+                )
             new_voucher = st.text_area(
-                "Texto Nota (Vouchers)",
-                value=config['email_template'].get('voucher_text', ''),
-                height=80,
-                help="Instrucciones finales (ej: envío de vouchers). Déjalo vacío para no mostrar."
+                "Instrucciones adicionales de pago (opcional)",
+                value=_tmpl.get("voucher_text", ""),
+                height=60,
+                help="Texto libre para instrucciones específicas. Déjalo vacío para no mostrar.",
+                key="planta_voucher"
             )
+
+            st.divider()
+
+            # ── SECCIÓN F: PIE DE PÁGINA Y FIRMA ──────────────────────────────
+            st.markdown("#### 📝 Pie de Página y Firma")
+            st.caption("Texto final del documento y cargo del área que firma.")
+
+            new_footer = st.text_area(
+                "Texto de cierre / pie de página",
+                value=_tmpl.get("footer_text", ""),
+                height=100,
+                help='Incluye siempre: "En caso de haber realizado el pago recientemente, por favor hacer caso omiso a este mensaje."',
+                key="planta_footer"
+            )
+            new_firma_cargo = st.text_input(
+                "Cargo para la firma",
+                value=_tmpl.get("firma_cargo", "Area de Cobranzas y Facturacion"),
+                help="Ejemplo: Área de Cobranzas y Facturación",
+                key="planta_firma_cargo"
+            )
+
+            st.markdown("")
             _plant_submitted = st.form_submit_button(
                 "💾 Guardar Plantillas", type="primary", use_container_width=True
             )
+
         if _plant_submitted:
-            _plant_changed = (
-                new_intro   != config['email_template'].get('intro_text') or
-                new_footer  != config['email_template'].get('footer_text') or
-                new_alert   != config['email_template'].get('alert_text') or
-                new_voucher != config['email_template'].get('voucher_text', '')
-            )
+            # Reconstruir cuentas bancarias desde los campos del formulario
+            _new_cuentas_sol = []
+            if new_sol_b1_banco.strip() or new_sol_b1_num.strip():
+                _new_cuentas_sol.append({"banco": new_sol_b1_banco.strip(), "numero": new_sol_b1_num.strip(), "cci": new_sol_b1_cci.strip()})
+            if new_sol_b2_banco.strip() or new_sol_b2_num.strip():
+                _new_cuentas_sol.append({"banco": new_sol_b2_banco.strip(), "numero": new_sol_b2_num.strip(), "cci": new_sol_b2_cci.strip()})
+
+            _new_cuentas_usd = []
+            if new_usd_b1_banco.strip() or new_usd_b1_num.strip():
+                _new_cuentas_usd.append({"banco": new_usd_b1_banco.strip(), "numero": new_usd_b1_num.strip(), "cci": new_usd_b1_cci.strip()})
+
+            _new_tmpl = {
+                # Correo
+                "email_subject":   new_subject.strip(),
+                "email_body_text": new_email_body,
+                # PDF cabecera
+                "pdf_title":       new_pdf_title.strip(),
+                # PDF cuerpo
+                "pdf_saludo":      new_pdf_saludo.strip(),
+                "intro_text":      new_intro,
+                # Alerta
+                "alert_text":      new_alert,
+                # Cuentas
+                "cuentas_sol":     _new_cuentas_sol,
+                "cuentas_usd":     _new_cuentas_usd,
+                "contact_email":   new_contact_email.strip(),
+                "contact_phone":   new_contact_phone.strip(),
+                "voucher_text":    new_voucher,
+                # Pie y firma
+                "footer_text":     new_footer,
+                "firma_cargo":     new_firma_cargo.strip(),
+            }
+
+            _plant_changed = _new_tmpl != {k: _tmpl.get(k) for k in _new_tmpl}
             if not _plant_changed:
                 st.info("✅ Sin cambios en plantillas.")
             else:
-                config['email_template'] = {
-                    "intro_text":   new_intro,
-                    "footer_text":  new_footer,
-                    "alert_text":   new_alert,
-                    "voucher_text": new_voucher,
-                }
+                config['email_template'] = _new_tmpl
                 if sm.save_settings(config):
                     st.toast("✅ Plantillas actualizadas", icon="📝")
                     import time
