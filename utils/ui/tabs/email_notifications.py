@@ -308,24 +308,69 @@ def render_tab(df_final, df_filtered, config):
                             components.html(cover_html, height=580, scrolling=True)
                         with tab_pdf:
                             if pdf_preview_b64:
-                                # Blob URL via JS — compatible con Chrome/Edge/Firefox
-                                # (data: URIs bloqueados en iframes Chromium; blob: sí funciona)
-                                pdf_html = f"""<!DOCTYPE html>
-<html><head>
-<style>html,body{{margin:0;padding:0;width:100%;height:100%;overflow:hidden}}</style>
-</head><body>
-<embed id="pv" type="application/pdf" width="100%" height="100%" style="display:block">
+                                # PDF.js — renderiza PDF como canvas directo.
+                                # <embed>/<object> con PDF están bloqueados en iframes
+                                # sandboxed de Chromium; PDF.js no usa el plugin del
+                                # navegador y funciona en cualquier contexto.
+                                pdf_js_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box}}
+  body{{
+    background:#525659;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:14px 10px;
+    gap:10px;
+    font-family:sans-serif;
+    overflow-y:auto;
+  }}
+  canvas{{
+    display:block;
+    max-width:100%;
+    box-shadow:0 3px 16px rgba(0,0,0,.45);
+    background:#fff;
+  }}
+  #pdfjs-msg{{color:#ccc;font-size:13px;padding:40px 0;letter-spacing:.03em}}
+</style>
+</head>
+<body>
+<div id="pdfjs-msg">⏳ Cargando PDF…</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+  crossorigin="anonymous"></script>
 <script>
 (function(){{
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   var b64="{pdf_preview_b64}";
-  var bin=atob(b64),n=bin.length,arr=new Uint8Array(n);
-  for(var i=0;i<n;i++)arr[i]=bin.charCodeAt(i);
-  var url=URL.createObjectURL(new Blob([arr],{{type:'application/pdf'}}));
-  document.getElementById('pv').src=url;
+  var raw=atob(b64), buf=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++) buf[i]=raw.charCodeAt(i);
+  pdfjsLib.getDocument({{data:buf}}).promise.then(function(pdf){{
+    document.getElementById('pdfjs-msg').remove();
+    var scale=Math.min(1.55,(window.innerWidth-28)/595);
+    function renderPage(n){{
+      pdf.getPage(n).then(function(page){{
+        var vp=page.getViewport({{scale:scale}});
+        var c=document.createElement('canvas');
+        c.width=vp.width; c.height=vp.height;
+        document.body.appendChild(c);
+        page.render({{canvasContext:c.getContext('2d'),viewport:vp}});
+        if(n<pdf.numPages) renderPage(n+1);
+      }});
+    }}
+    renderPage(1);
+  }}).catch(function(e){{
+    var m=document.getElementById('pdfjs-msg');
+    m.style.color='#ff8a8a';
+    m.textContent='Error al renderizar: '+e.message;
+  }});
 }})();
 </script>
 </body></html>"""
-                                components.html(pdf_html, height=560)
+                                components.html(pdf_js_html, height=820, scrolling=True)
                             else:
                                 st.info("Vista previa del PDF no disponible.")
                 
