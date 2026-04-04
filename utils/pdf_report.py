@@ -22,6 +22,11 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import matplotlib
+matplotlib.use("Agg")  # backend sin GUI — imprescindible en servidor
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -233,6 +238,8 @@ class InformeGerencial:
         recovery: Optional[Dict[str, Any]] = None,
         scope: str = "activa",
         docs_recuperados: Optional[List[Dict[str, Any]]] = None,
+        tendencia: Optional[List[Dict[str, Any]]] = None,
+        meta_pct: float = 0.20,
     ) -> None:
         self.cycle_id         = cycle_id
         self.funnel           = funnel
@@ -240,10 +247,14 @@ class InformeGerencial:
         self.aging            = aging
         self.gestiones        = gestiones
         self.empresa          = empresa
-        self.secciones        = secciones or {"A", "B", "C", "D", "E"}
         self.recovery         = recovery or {}
         self.scope            = scope   # "activa" | "general"
         self.docs_recuperados = docs_recuperados or []
+        self.tendencia        = tendencia or []
+        self.meta_pct         = max(0.01, min(1.0, meta_pct))  # 1%–100%, default 20%
+        # Secciones: base del caller + G automático cuando hay tendencia con ≥2 ciclos
+        _sec_base = secciones if secciones else {"A", "B", "C", "D", "E"}
+        self.secciones = _sec_base | ({"G"} if len(self.tendencia) >= 2 else set())
         self.generated_at = datetime.now(timezone.utc)
         # Ancho disponible para contenido (A4 portrait con márgenes 1.8cm)
         self._page_w = A4[0] - 2 * 1.8 * cm
@@ -296,6 +307,10 @@ class InformeGerencial:
 
         if "F" in self.secciones:
             story += self._seccion_f_recuperados()
+
+        if "G" in self.secciones and len(self.tendencia) >= 2:
+            story.append(_spacer(0.5))
+            story += self._seccion_g_tendencia()
 
         # Nota al pie del informe
         story.append(_spacer(0.8))
@@ -395,6 +410,10 @@ class InformeGerencial:
         total_usd = sum(b.get("saldo_usd", 0) for b in aging)
         total_clientes = sum(b.get("clientes", 0) for b in aging)
 
+        # Cartera actual: usar valor directo de BD (rf_act) cuando disponible
+        act_sol = self.recovery.get("saldo_actual_sol") or total_sol
+        act_usd = self.recovery.get("saldo_actual_usd") or total_usd
+
         cobertura_pct_val = alcanzados / cartera if cartera > 0 else 0.0
         tasa_cobertura_p = f"{cobertura_pct_val * 100:.0f}%" if cartera > 0 else "—"
 
@@ -434,8 +453,11 @@ class InformeGerencial:
         story.append(_spacer(0.4))
 
         # --- KPI strip: 4 métricas clave al primer vistazo ---
+        _cartera_val = _fmt_sol(act_sol)
+        if act_usd > 0:
+            _cartera_val += f"<br/>{_fmt_usd(act_usd)}"
         kpi_def = [
-            (_fmt_sol(total_sol),  "CARTERA VENCIDA TOTAL",      C_PRIMARY),
+            (_cartera_val, "CARTERA ACTUAL", C_PRIMARY),
             (tasa_cobertura_p,     "COBERTURA DEL CICLO",         C_ACCENT if cobertura_pct_val >= 0.7 else C_WARNING),
             (str(con_respuesta),   "CON RESULTADO REGISTRADO",    C_SUCCESS),
             (
@@ -490,8 +512,8 @@ class InformeGerencial:
             ["Alcance del informe", scope_label],
             ["Total cartera del ciclo", f"{cartera_total} clientes"],
             ["Cartera activa (notificable)", f"{cartera} clientes"],
-            ["Saldo total en Soles", _fmt_sol(total_sol)],
-            ["Saldo total en Dólares", _fmt_usd(total_usd)],
+            ["Saldo total en Soles", _fmt_sol(act_sol)],
+            ["Saldo total en Dólares", _fmt_usd(act_usd)],
             ["Clientes alcanzados", f"{alcanzados} ({_pct(alcanzados, cartera)} de cartera)"],
             ["Sin ningún contacto", f"{sin_contactar} clientes {'⚠️' if sin_contactar > 0 else '✅'}"],
             ["Con resultado registrado", f"{con_respuesta} clientes"],
@@ -564,10 +586,22 @@ class InformeGerencial:
         tasa_recup   = self.recovery.get("tasa_recuperacion", 0.0)
         tiene_ant    = self.recovery.get("tiene_anterior", False)
 
-        # --- AR Roll Forward: cartera_anterior = aging_actual + recuperado ---
-        # La identidad contable: cartera_ant - recuperado = cartera_actual (aging)
-        # Aproximacion valida para portafolios B2B sin crecimiento explosivo entre ciclos.
-        if tiene_ant:
+        # RC-FEAT-042: Roll Forward — datos directos del ciclo (no derivados)
+        rf_ant_sol   = self.recovery.get("saldo_anterior_sol", 0.0)
+        rf_ant_usd   = self.recovery.get("saldo_anterior_usd", 0.0)
+        rf_nueva_sol = self.recovery.get("cartera_nueva_sol", 0.0)
+        rf_nueva_usd = self.recovery.get("cartera_nueva_usd", 0.0)
+        rf_nueva_docs = self.recovery.get("docs_nuevos", 0)
+        rf_act_sol   = self.recovery.get("saldo_actual_sol", 0.0)
+        rf_act_usd   = self.recovery.get("saldo_actual_usd", 0.0)
+
+        # --- Saldo anterior: directo de BD (rc-feat-042) ---
+        # rf_ant_sol/usd son sumas directas de saldo_real del ciclo anterior,
+        # mas precisas que la formula derivada aging + recuperado.
+        if tiene_ant and rf_ant_sol > 0:
+            cartera_ant_sol = rf_ant_sol
+            cartera_ant_usd = rf_ant_usd
+        elif tiene_ant:
             cartera_ant_sol = total_sol + rec_sol
             cartera_ant_usd = total_usd + rec_usd
         else:
@@ -611,24 +645,16 @@ class InformeGerencial:
             ]))
             return t
 
-        # --- RC-BUG-071 — Semaforo Ejecutivo: AR Roll Forward narrative ---
-        # Tarjeta 1 — SALDO ANTERIOR: cartera al inicio del periodo
-        total_docs_sol = sum(b.get("docs_sol", 0) for b in aging)
-        total_docs_usd = sum(b.get("docs_usd", 0) for b in aging)
+        # Tarjetas del Semaforo — 4 KPIs del Movimiento de Cartera
+        # T1: SALDO ANTERIOR — cartera al inicio del periodo (valor directo de BD)
         val1 = _fmt_sol(cartera_ant_sol)
         if cartera_ant_usd > 0:
             val1 += f"<br/>{_fmt_usd(cartera_ant_usd)}"
-        sub1_note = "Saldo al inicio del periodo" if tiene_ant else "Ciclo actual (sin anterior)"
-        sub1_parts = []
-        if total_docs_sol > 0:
-            sub1_parts.append(f"{total_docs_sol} docs S/")
-        if total_docs_usd > 0:
-            sub1_parts.append(f"{total_docs_usd} docs US$")
-        sub1 = sub1_note + ("  .  " + "  .  ".join(sub1_parts) if sub1_parts else "")
+        sub1 = "Cartera al inicio del periodo" if tiene_ant else "Ciclo actual (sin anterior)"
 
         # Tarjeta 2 — RECUPERADO: lo cobrado en el periodo
         # monto_recuperado_sol ya es combinado (docs completos + amortizaciones parciales)
-        _c2 = C_MUTED  # color neutro — el semaforo de eficiencia va en T3
+        _c2 = _c_efic  # semaforo de eficiencia en RECUPERADO (T2)
         if not tiene_ant:
             val2 = _fmt_sol(0)
             sub2 = "Sin ciclo anterior"
@@ -637,39 +663,48 @@ class InformeGerencial:
             if rec_usd > 0:
                 val2 += f"<br/>{_fmt_usd(rec_usd)}"
             docs_txt = f"{docs_rec} docs + {docs_amort} amortiz." if docs_amort > 0 else f"{docs_rec} docs"
-            sub2 = f"{docs_txt}<br/>Tasa S/: {tasa_sol:.1f}%"
+            sub2 = f"Efic. S/: {tasa_sol:.1f}%  (meta: 55%)"
             if rec_usd > 0:
-                sub2 += f"  .  US$: {tasa_usd:.1f}%"
+                sub2 += f"<br/>Efic. US$: {tasa_usd:.1f}%"
+            sub2 += f"<br/>{docs_txt}"
         else:
             val2 = _fmt_sol(0)
             sub2 = f"0 recuperaciones  .  {docs_rec} docs"
 
-        # Tarjeta 3 — EFICIENCIA DE COBRO: semaforo de rendimiento vs meta
+        # Tarjeta 3 — CARTERA NUEVA: documentos que no estaban en el ciclo anterior
         if not tiene_ant:
             val3 = "—"
-            sub3 = "Sin ciclo anterior para calcular"
+            sub3 = "Sin ciclo anterior para comparar"
+            _c3  = C_MUTED
+        elif rf_nueva_sol > 0 or rf_nueva_usd > 0:
+            val3 = _fmt_sol(rf_nueva_sol) if rf_nueva_sol > 0 else "S/ —"
+            if rf_nueva_usd > 0:
+                val3 += f"<br/>{_fmt_usd(rf_nueva_usd)}"
+            docs_n = rf_nueva_docs
+            sub3 = f"{docs_n} doc{'s' if docs_n != 1 else ''} nuevo{'s' if docs_n != 1 else ''}"
+            sub3 += "<br/>No estaban en el ciclo anterior"
+            _c3  = C_WARNING
         else:
-            val3 = f"S/: {tasa_sol:.1f}%"
-            if cartera_ant_usd > 0:
-                val3 += f"<br/>US$: {tasa_usd:.1f}%"
-            sub3 = f"Meta: 55%  .  Faltan {_fmt_sol(faltan_sol)}"
-            if faltan_usd > 0:
-                sub3 += f"<br/>Faltan {_fmt_usd(faltan_usd)}"
+            val3 = "S/ —"
+            sub3 = "Sin facturas nuevas en este ciclo"
+            _c3  = C_MUTED
 
-        # Tarjeta 4 — CARTERA ACTUAL: aging real = saldo anterior - recuperado
-        val4 = _fmt_sol(total_sol)
-        if total_usd > 0:
-            val4 += f"<br/>{_fmt_usd(total_usd)}"
-        pct_pend = total_sol / cartera_ant_sol * 100 if cartera_ant_sol > 0 else 0
-        sub4 = f"{pct_pend:.0f}% aun pendiente"
+        # Tarjeta 4 — CARTERA ACTUAL: saldo pendiente directo del ciclo actual (= resultado)
+        act_sol = rf_act_sol if rf_act_sol > 0 else total_sol
+        act_usd = rf_act_usd if rf_act_usd > 0 else total_usd
+        val4 = _fmt_sol(act_sol)
+        if act_usd > 0:
+            val4 += f"<br/>{_fmt_usd(act_usd)}"
+        pct_pend = act_sol / cartera_ant_sol * 100 if cartera_ant_sol > 0 else 0
+        sub4 = f"{pct_pend:.0f}% aun pendiente de cobro"
         if legal > 0:
             sub4 += f"<br/>{legal} cliente(s) en Legal"
 
         cards = [
-            _card("SALDO ANTERIOR",      val1, sub1, C_PRIMARY),
-            _card("RECUPERADO",          val2, sub2, _c2),
-            _card("EFICIENCIA DE COBRO", val3, sub3, _c_efic),
-            _card("CARTERA ACTUAL",      val4, sub4, C_WARNING),
+            _card("SALDO ANTERIOR", val1, sub1, C_PRIMARY),
+            _card("RECUPERADO",     val2, sub2, _c2),
+            _card("CARTERA NUEVA",  val3, sub3, _c3),
+            _card("CARTERA ACTUAL", val4, sub4, C_WARNING),
         ]
 
         cards_row = Table(
@@ -1396,6 +1431,382 @@ class InformeGerencial:
             f"Total S/: {_fmt_m(tot_sol, 'PEN')}"
             + (f"  ·  Total US$: {_fmt_m(tot_usd, 'USD')}" if tot_usd > 0 else ""),
             ST_NOTE,
+        ))
+
+        return story
+
+    # ------------------------------------------------------------------
+    # Sección G — Evolución Histórica de Cartera (RC-FEAT-043)
+    # ------------------------------------------------------------------
+
+    def _build_tendencia_chart(self) -> List:
+        """Gráficos de evolución de cartera por moneda.
+
+        Genera un gráfico por cada moneda con datos (S/ siempre, US$ solo si existe).
+        Cada gráfico: barras (saldo final) + línea (eficiencia %) + meta 55%.
+        Devuelve lista de elementos reportlab listos para insertar en el story.
+        """
+        tend = self.tendencia
+
+        # Colores Antay
+        _C_PRIMARY = "#0D3B66"
+        _C_ACCENT  = "#0B7285"
+        _C_WARN    = "#E67700"
+        _C_SUCCESS = "#2B8A3E"
+        _C_BG      = "#F1F5FB"
+        _C_GRID    = "#D9E2EC"
+        _C_TEXT    = "#102A43"
+
+        # Etiquetas eje X — fecha corta
+        labels = []
+        for t in tend:
+            fc = t.get("fecha_ciclo") or ""
+            try:
+                if fc and len(fc) >= 10:
+                    labels.append(datetime.strptime(fc[:10], "%Y-%m-%d").strftime("%d/%m\n%Y"))
+                else:
+                    raw = t["cycle_id"].replace("HIST_", "").replace("CIC-", "").replace("-", "_")
+                    labels.append(datetime.strptime(raw[:8], "%Y%m%d").strftime("%d/%m\n%Y"))
+            except Exception:
+                labels.append(t["cycle_id"][-8:])
+
+        xs = list(range(len(tend)))
+
+        def _make_chart(bar_color: str, sym: str,
+                        saldos: List[float], efics: List[float]) -> Image:
+            """Construye un gráfico individual y lo devuelve como Image reportlab."""
+            fig, ax1 = plt.subplots(figsize=(6.85, 2.5))
+            fig.patch.set_facecolor("white")
+            ax1.set_facecolor(_C_BG)
+
+            # Barras — saldo final
+            bars = ax1.bar(xs, saldos, color=bar_color, alpha=0.82, width=0.55,
+                           zorder=2, label=f"Saldo Final {sym}")
+            ax1.set_ylabel(f"Saldo {sym}", color=bar_color, fontsize=7, labelpad=4)
+            ax1.tick_params(axis="y", labelcolor=bar_color, labelsize=6.5)
+            ax1.yaxis.set_major_formatter(
+                mticker.FuncFormatter(
+                    lambda v, _: f"{sym}{v/1000:.0f}k" if v >= 1000 else f"{sym}{v:.0f}"
+                )
+            )
+            ax1.set_xticks(xs)
+            ax1.set_xticklabels(labels, fontsize=6.5)
+            ax1.grid(axis="y", color=_C_GRID, linewidth=0.5, zorder=0)
+            ax1.spines[["top", "right"]].set_visible(False)
+            ax1.spines["left"].set_color(_C_GRID)
+            ax1.spines["bottom"].set_color(_C_GRID)
+
+            # Valores encima de cada barra
+            max_s = max(saldos) if saldos else 1
+            for bar, val in zip(bars, saldos):
+                if val > 0:
+                    ax1.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        bar.get_height() + max_s * 0.015,
+                        f"{sym}{val/1000:.1f}k" if val >= 1000 else f"{sym}{val:.0f}",
+                        ha="center", va="bottom", fontsize=5.5, color=bar_color,
+                        fontweight="bold",
+                    )
+
+            # Eje derecho — eficiencia %
+            ax2 = ax1.twinx()
+            efics_validas = [e for e in efics if e > 0]
+            ax2.plot(xs, efics, color=_C_WARN, linewidth=1.8,
+                     marker="o", markersize=5, zorder=3, label="Eficiencia %")
+            _meta_y = self.meta_pct * 100
+            ax2.axhline(y=_meta_y, color=_C_SUCCESS, linewidth=1.2, linestyle="--",
+                        zorder=1, alpha=0.85, label=f"Meta {_meta_y:.0f}%")
+            ax2.set_ylabel("Eficiencia %", color=_C_WARN, fontsize=7, labelpad=4)
+            ax2.tick_params(axis="y", labelcolor=_C_WARN, labelsize=6.5)
+            y_max = max(max(efics_validas) * 1.4 if efics_validas else 100, 70)
+            ax2.set_ylim(0, y_max)
+            ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:.0f}%"))
+            ax2.spines[["top", "left"]].set_visible(False)
+            ax2.spines["right"].set_color(_C_GRID)
+            ax2.spines["bottom"].set_color(_C_GRID)
+
+            # Leyenda compacta
+            lines1, lbl1 = ax1.get_legend_handles_labels()
+            lines2, lbl2 = ax2.get_legend_handles_labels()
+            ax1.legend(lines1 + lines2, lbl1 + lbl2,
+                       loc="upper right", fontsize=6, framealpha=0.9,
+                       edgecolor=_C_GRID, fancybox=False)
+
+            plt.tight_layout(pad=0.4)
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", dpi=150, bbox_inches="tight",
+                        facecolor="white")
+            plt.close(fig)
+            buf.seek(0)
+            return Image(buf, width=self._page_w, height=6.3 * cm)
+
+        # --- Gráfico S/ (siempre) -------------------------------------------
+        saldos_sol = [t.get("saldo_final_sol", 0.0) for t in tend]
+        efics_sol  = [
+            t["cobrado_sol"] / t["saldo_inicial_sol"] * 100
+            if t.get("saldo_inicial_sol", 0) > 0 else 0.0
+            for t in tend
+        ]
+
+        # --- Gráfico US$ (solo si hay datos) ---------------------------------
+        saldos_usd = [t.get("saldo_final_usd", 0.0) for t in tend]
+        efics_usd  = [
+            t["cobrado_usd"] / t["saldo_inicial_usd"] * 100
+            if t.get("saldo_inicial_usd", 0) > 0 else 0.0
+            for t in tend
+        ]
+        hay_usd = any(s > 0 for s in saldos_usd)
+
+        elementos: List = []
+        elementos.append(_make_chart(_C_PRIMARY, "S/",  saldos_sol, efics_sol))
+        if hay_usd:
+            elementos.append(_spacer(0.3))
+            elementos.append(_make_chart(_C_ACCENT,  "US$", saldos_usd, efics_usd))
+        return elementos
+
+    def _seccion_g_tendencia(self) -> List:
+        """Kardex de cartera: dos sub-tablas separadas (S/ y US$) + gráfico + resumen."""
+        story: List = []
+        story += _section_title("G.  Evolución Histórica de Cartera", self._page_w)
+
+        scope_badge = (
+            "Vista: Cartera Activa — solo clientes notificables (Envío Email = SI)"
+            if self.scope == "activa"
+            else "Vista: Cartera General — todos los clientes con deuda real"
+        )
+        story.append(Paragraph(scope_badge, ST_SMALL))
+        story.append(_spacer(0.25))
+
+        tend = self.tendencia
+
+        # ---- Helpers de formato -------------------------------------------
+        def _fs(v: float) -> str:
+            return f"S/ {v:,.0f}" if v else "—"
+
+        def _fu(v: float) -> str:
+            return f"US$ {v:,.0f}" if v else "—"
+
+        _meta_efic = self.meta_pct * 100  # umbral configurado (ej: 20.0)
+        def _efic_color(pct: float) -> Any:
+            if pct >= _meta_efic:              return C_SUCCESS  # cumplió o superó la meta
+            if pct >= _meta_efic * 0.75:       return C_WARNING  # cerca (≥75% de la meta)
+            if pct > 0:                        return C_DANGER   # lejos de la meta
+            return C_MUTED
+
+        def _fecha_desde(t: Dict[str, Any]) -> str:
+            # Preferir fecha_ciclo (YYYY-MM-DD) del kardex; fallback a cycle_id
+            fc = t.get("fecha_ciclo") or ""
+            if fc and len(fc) >= 10:
+                try:
+                    return datetime.strptime(fc[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+                except Exception:
+                    pass
+            cid = t["cycle_id"]
+            try:
+                raw = cid.replace("HIST_", "").replace("CIC-", "").replace("-", "_")
+                return datetime.strptime(raw[:8], "%Y%m%d").strftime("%d/%m/%Y")
+            except Exception:
+                return cid
+
+        _ST_TH_G = ParagraphStyle("gth",  parent=ST_TH,       fontSize=7)
+        _ST_TD_G = ParagraphStyle("gtd",  parent=ST_TD,        fontSize=7.5)
+        _ST_TD_R = ParagraphStyle("gtdr", parent=ST_TD_RIGHT,  fontSize=7.5)
+        _ST_TD_C = ParagraphStyle("gtdc", parent=ST_TD_CENTER, fontSize=7.5)
+        _ST_BOLD = ParagraphStyle("gtb",  parent=_ST_TD_R, fontName=_F_HEADING,
+                                  textColor=C_PRIMARY)
+
+        _TABLE_STYLE_BASE = [
+            ("BACKGROUND",    (0, 0), (-1, 0),  C_PRIMARY),
+            ("ROWBACKGROUNDS",(0, 1), (-1, -1), [C_WHITE, colors.HexColor("#F8FAFD")]),
+            ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+            ("LINEBELOW",     (0, 0), (-1, -1), 0.25, C_BORDER),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 5),
+            ("ALIGN",         (1, 0), (-1, -1), "RIGHT"),
+            ("ALIGN",         (5, 0), (5, -1),  "CENTER"),
+            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+        ]
+
+        _w = self._page_w
+        _meta_lbl = f"Meta ({int(self.meta_pct * 100)}%)"
+        _col_w = [
+            _w * 0.12,  # Período
+            _w * 0.14,  # Saldo Inicio
+            _w * 0.12,  # (+) Nueva
+            _w * 0.13,  # (−) Cobrado
+            _w * 0.12,  # Meta (X%)
+            _w * 0.13,  # vs. Meta
+            _w * 0.14,  # = Saldo Final
+            _w * 0.10,  # Eficiencia
+        ]
+
+        def _build_subtable(moneda: str) -> Table:
+            """Construye una sub-tabla kardex para una moneda (SOL o USD)."""
+            es_usd = (moneda == "USD")
+            get_ini = lambda t: t.get("saldo_inicial_usd", 0.0) if es_usd else t.get("saldo_inicial_sol", 0.0)
+            get_nue = lambda t: t.get("cartera_nueva_usd", 0.0) if es_usd else t.get("cartera_nueva_sol", 0.0)
+            get_cob = lambda t: t.get("cobrado_usd",       0.0) if es_usd else t.get("cobrado_sol",       0.0)
+            get_fin = lambda t: t.get("saldo_final_usd",   0.0) if es_usd else t.get("saldo_final_sol",   0.0)
+            fmt     = _fu if es_usd else _fs
+
+            hdr = [
+                Paragraph("Período",       _ST_TH_G),
+                Paragraph("Saldo Inicio",  _ST_TH_G),
+                Paragraph("(+) Nueva",     _ST_TH_G),
+                Paragraph("(−) Cobrado",   _ST_TH_G),
+                Paragraph(_meta_lbl,        _ST_TH_G),
+                Paragraph("vs. Meta",      _ST_TH_G),
+                Paragraph("= Saldo Final", _ST_TH_G),
+                Paragraph("Eficiencia",    _ST_TH_G),
+            ]
+            rows = [hdr]
+            row_styles: List = []
+            prev_efic: Optional[float] = None
+
+            for i, t in enumerate(tend):
+                es_primer = get_ini(t) == 0.0
+                ini  = get_ini(t)
+                nue  = get_nue(t)
+                cob  = get_cob(t)
+                fin  = get_fin(t)
+                efic = cob / ini * 100 if ini > 0 else 0.0
+
+                # Meta y desviación vs. meta
+                meta    = ini * self.meta_pct
+                vs_meta = cob - meta
+                vs_color = C_SUCCESS if vs_meta >= 0 else C_DANGER
+                if es_primer:
+                    meta_txt   = "—"
+                    vs_meta_txt = "—"
+                else:
+                    meta_txt    = fmt(meta)
+                    vs_meta_txt = (f"+{fmt(vs_meta)}" if vs_meta >= 0
+                                   else f"−{fmt(abs(vs_meta))}")
+
+                if prev_efic is not None and efic > 0:
+                    flecha = " ↑" if efic > prev_efic else (" ↓" if efic < prev_efic else " →")
+                else:
+                    flecha = ""
+                if efic > 0:
+                    prev_efic = efic
+
+                efic_txt = f"{efic:.1f}%{flecha}" if efic > 0 else "—"
+
+                row = [
+                    Paragraph(_fecha_desde(t), _ST_TD_G),
+                    Paragraph("—" if es_primer else fmt(ini), _ST_TD_R),
+                    Paragraph("—" if es_primer else f"+{fmt(nue)}", _ST_TD_R),
+                    Paragraph("—" if es_primer else f"−{fmt(cob)}", _ST_TD_R),
+                    Paragraph(meta_txt, _ST_TD_R),
+                    Paragraph(
+                        vs_meta_txt,
+                        ParagraphStyle("gtvs", parent=_ST_TD_R,
+                                       fontSize=7.5, textColor=vs_color),
+                    ),
+                    Paragraph(fmt(fin), _ST_BOLD),
+                    Paragraph(
+                        efic_txt,
+                        ParagraphStyle("gtefic", parent=_ST_TD_C,
+                                       fontSize=7.5, textColor=_efic_color(efic)),
+                    ),
+                ]
+                rows.append(row)
+                if i == len(tend) - 1:
+                    row_styles.append(
+                        ("BACKGROUND", (0, i + 1), (-1, i + 1), colors.HexColor("#EBF4FF"))
+                    )
+
+            tbl_style = _TABLE_STYLE_BASE + [
+                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("ALIGN", (7, 0), (7, -1),  "CENTER"),  # Eficiencia centrada (col 7)
+            ] + row_styles
+            tbl = Table(rows, colWidths=_col_w, repeatRows=1)
+            tbl.setStyle(TableStyle(tbl_style))
+            return tbl
+
+        # ---- Sub-tabla SOLES (siempre visible) ----------------------------
+        story.append(Paragraph(
+            "<b>Cartera en Soles (S/)</b>",
+            ParagraphStyle("gsub", parent=ST_TD, fontName=_F_HEADING, fontSize=8,
+                           textColor=C_PRIMARY, spaceBefore=4, spaceAfter=3),
+        ))
+        story.append(_build_subtable("SOL"))
+
+        # ---- Sub-tabla DÓLARES (solo si hay datos USD) --------------------
+        hay_usd = any(t.get("saldo_final_usd", 0) > 0 for t in tend)
+        if hay_usd:
+            story.append(_spacer(0.3))
+            story.append(Paragraph(
+                "<b>Cartera en Dólares (US$)</b>",
+                ParagraphStyle("gsubu", parent=ST_TD, fontName=_F_HEADING, fontSize=8,
+                               textColor=C_ACCENT, spaceBefore=4, spaceAfter=3),
+            ))
+            story.append(_build_subtable("USD"))
+
+        # ---- Gráficos por moneda ----------------------------------------
+        story.append(_spacer(0.35))
+        try:
+            story.extend(self._build_tendencia_chart())
+        except Exception as e:
+            story.append(Paragraph(f"Grafico no disponible: {e}", ST_NOTE))
+
+        # ---- Bloque resumen ejecutivo ------------------------------------
+        story.append(_spacer(0.35))
+
+        primer = tend[0]
+        ultimo = tend[-1]
+        f0 = _fecha_desde(primer)
+        f1 = _fecha_desde(ultimo)
+
+        s_ini = primer.get("saldo_inicial_sol", 0.0)
+        s_fin = ultimo.get("saldo_final_sol",   0.0)
+        variacion = s_fin - s_ini
+        pct_var   = variacion / s_ini * 100 if s_ini > 0 else 0.0
+        signo     = "−" if variacion <= 0 else "+"
+        color_var = C_SUCCESS if variacion <= 0 else C_DANGER
+
+        tot_rec_sol = sum(t.get("cobrado_sol", 0.0) for t in tend)
+        tot_rec_usd = sum(t.get("cobrado_usd", 0.0) for t in tend)
+
+        efics_validas = [
+            t["cobrado_sol"] / t["saldo_inicial_sol"] * 100
+            for t in tend
+            if t.get("saldo_inicial_sol", 0) > 0
+        ]
+        if len(efics_validas) >= 2:
+            tend_efic = "↑ Mejorando" if efics_validas[-1] > efics_validas[0] else \
+                        ("↓ Deteriorando" if efics_validas[-1] < efics_validas[0] else "→ Estable")
+            color_tend = C_SUCCESS if "Mejorando" in tend_efic else \
+                         (C_DANGER if "Deteriorando" in tend_efic else C_MUTED)
+        else:
+            tend_efic  = "Datos insuficientes"
+            color_tend = C_MUTED
+
+        _ST_RESUMEN = ParagraphStyle("gres", parent=ST_TD, fontSize=8,
+                                     leading=12, spaceAfter=2)
+
+        story.append(Paragraph(
+            f"<b>Período analizado:</b>  {f0}  →  {f1}",
+            _ST_RESUMEN,
+        ))
+        story.append(Paragraph(
+            f"<b>Saldo inicial:</b>  {_fs(s_ini)}  "
+            f"<b>|</b>  <b>Saldo final:</b>  {_fs(s_fin)}  "
+            f"<b>|</b>  <b>Variación:</b>  "
+            + f"<font color='{color_var}'>{signo}{_fs(abs(variacion))}  "
+              f"({signo}{abs(pct_var):.1f}%)</font>",
+            _ST_RESUMEN,
+        ))
+        rec_txt = f"<b>Total cobrado acumulado:</b>  {_fs(tot_rec_sol)}"
+        if tot_rec_usd > 0:
+            rec_txt += f"  +  {_fu(tot_rec_usd)}"
+        story.append(Paragraph(rec_txt, _ST_RESUMEN))
+        story.append(Paragraph(
+            f"<b>Tendencia de eficiencia:</b>  "
+            f"<font color='{color_tend}'>{tend_efic}</font>",
+            _ST_RESUMEN,
         ))
 
         return story

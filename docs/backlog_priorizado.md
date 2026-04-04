@@ -1,7 +1,7 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-03-28
-Version actual: v2.0.0 (RELEASED — RC-FEAT-039/040/041 + RC-BUG-063→073 + RC-UX-001/002/003/004 · 162/162 tests)
+Ultima actualizacion: 2026-04-03
+Version actual: v2.2.0 (RELEASED — RC-FEAT-042 Kardex + Sección G + Meta Cobro · 162/162 tests)
 Estado migracion Supabase: Completada. Todas las fases MIG-000 a MIG-009 + SUPABASE-002 + CONFIG-001 cerradas.
 Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). TIER 2 completado 2026-03-16. TIER 3 pendiente.
 Informe Gerencial PDF: completado 2026-03-28. Email+PDF Premium: completado 2026-03-28. Tag v2.0.0 en main.
@@ -133,7 +133,15 @@ Informe Gerencial PDF: completado 2026-03-28. Email+PDF Premium: completado 2026
   - Fix: deduplicar `CodCliente` en cálculo (un cliente tiene fila Envío + fila Gestión)
 - Criterios de aceptación definidos y documentados en `RETOMAR_SESION.md`
 
-### Completados — TIER 2 (Sprint 2026-03-24/28) ✅ → v2.0.0 · Gate 3 pendiente
+### Completados — Sprint 2026-04-03 ✅ → v2.2.0
+- RC-FEAT-042: Kardex de Cartera — tabla `kardex_cartera` (1 fila/ciclo, encadenamiento saldo_final=saldo_inicial_sig) ✅
+- RC-FEAT-042: Sección G rediseñada — 2 sub-tablas separadas S/ y US$, gráfico dual-moneda ✅
+- RC-FEAT-042: Meta de Cobro configurable — columnas "Meta (X%)" y "vs. Meta" con semáforo verde/rojo ✅
+- RC-FEAT-042: Separador de miles corregido en PDF (coma, no punto) ✅
+- RC-FEAT-042: Sección F — ordenamiento por moneda (S/ primero, luego US$) ✅
+- RC-BUG-074: kardex backfill — cadena rota en campos generales del primer ciclo (saldo_inicial_sol=0) ✅
+
+### Completados — TIER 2 (Sprint 2026-03-24/28) ✅ → v2.0.0
 - RC-FEAT-039: Informe Gerencial PDF para Comité de Directorio — Secciones A-F ✅
 - RC-FIX-062: Recuperado real dual moneda (S/ + US$) desde resumen_ciclo — diferencia CxC ✅
 - RC-UX-001: Sidebar progressive disclosure + slots duales con feedback visual por archivo ✅

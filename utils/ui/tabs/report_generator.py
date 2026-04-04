@@ -215,6 +215,20 @@ def render_panel_informe(
 
         st.markdown("---")
 
+        # --- Meta de cobro por ciclo (Sección G) ---
+        st.markdown("**Meta de cobro por ciclo (Sección G):**")
+        meta_pct_ui = st.slider(
+            "% del saldo de apertura a cobrar por ciclo",
+            min_value=5, max_value=50, value=20, step=5,
+            key="informe_meta_pct",
+            format="%d%%",
+            help=(
+                "La Sección G mostrará si cada ciclo superó o quedó debajo de esta meta. "
+                "Ejemplo: 20% significa que la meta es cobrar el 20% del saldo de apertura en cada período."
+            ),
+        )
+        st.markdown("---")
+
         # --- Destinatarios para envío por email ---
         with st.expander("📧 Configurar envío al Directorio", expanded=False):
             st.text_input(
@@ -275,6 +289,19 @@ def render_panel_informe(
                         selected_cycle, solo_notificable=solo_notificable
                     )
 
+            # Sección G — Evolución histórica: todos los ciclos disponibles
+            with st.spinner("Cargando evolución histórica de cartera…"):
+                _ciclos_disp = dbm.get_ciclos_para_informe(limit=24)
+                _cycle_ids   = [c["cycle_id"] for c in _ciclos_disp]
+                # Asegurar que cada ciclo tenga su fila en resumen_ciclo (lazy reconciliation)
+                for _cid in _cycle_ids:
+                    dbm.get_recovery_stats(_cid, solo_notificable=solo_notificable)
+                # Llenar kardex para ciclos históricos que aún no tienen entrada
+                dbm.backfill_kardex_from_resumen(_cycle_ids)
+                _tendencia   = dbm.get_kardex_tendencia(
+                    _cycle_ids, solo_notificable=solo_notificable
+                )
+
             with st.spinner("Generando PDF…"):
                 pdf_bytes = InformeGerencial(
                     cycle_id=selected_cycle,
@@ -287,6 +314,8 @@ def render_panel_informe(
                     recovery=_recovery,
                     scope=scope,
                     docs_recuperados=_docs_rec,
+                    tendencia=_tendencia,
+                    meta_pct=meta_pct_ui / 100,
                 ).generate()
 
             fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
