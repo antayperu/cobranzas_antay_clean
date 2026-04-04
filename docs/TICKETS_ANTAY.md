@@ -24,18 +24,19 @@
 
 ## 3. Registro de Tickets ACTIVOS (Roadmap v5.0)
 
-| ID | Título | Prioridad | Estado | Asignado | Fecha Inicio |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **RC-FEAT-042** | Kardex de Cartera + Sección G rediseñada + Meta de Cobro | **P1** (Alto) | Done ✅ | Claude | 2026-04-03 |
-| **RC-FEAT-039** | Informe Gerencial PDF para Comité de Directorio | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 |
-| **RC-FIX-062** | Recuperado real dual moneda desde resumen_ciclo | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 |
-| **RC-UX-001** | Sidebar progressive disclosure + feedback visual archivos | **P2** (Medio) | Done ✅ | Claude | 2026-03-24 |
-| **RC-UX-002** | Informe Gerencial — tipografía Manrope/IBM Plex Sans + visual premium | **P2** (Medio) | Done ✅ | Claude | 2026-03-24 |
-| **RC-FEAT-040** | Email premium con PDF adjunto Estado de Cuenta | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 |
-| **RC-FEAT-041** | Email premium sin tabla + PDF premium configurable + Plantillas de Correo | **P1** (Alto) | Done ✅ | Claude | 2026-03-28 |
-| **RC-UX-003** | Precision Editor Plantillas de Correo — 6 expanders colapsados + CSS premium | **P2** (Medio) | Done ✅ | Claude | 2026-03-28 |
-| **RC-BUG-072** | PDF adjunto en Vista Previa renderizaba canvas en blanco (PDF.js blob-worker) | **P1** (Alto) | Done ✅ | Claude | 2026-03-28 |
-| **RC-BUG-073** | EstadoCuenta PDF duplicaba fecha y nombre empresa en saludo | **P1** (Alto) | Done ✅ | Claude | 2026-03-28 |
+| ID | Título | Prioridad | Estado | Asignado | Fecha Inicio | Fecha Cierre |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **RC-FEAT-042** | Kardex de Cartera + Sección G dual-moneda + Meta de Cobro configurable | **P1** (Alto) | Done ✅ · Gate 3 PASS | Claude | 2026-04-03 | 2026-04-04 |
+| **RC-BUG-074** | Kardex: saldo_inicial_sol del primer ciclo histórico corregido a 0 | **P1** (Alto) | Done ✅ | Claude | 2026-04-03 | 2026-04-04 |
+| **RC-FEAT-039** | Informe Gerencial PDF para Comité de Directorio | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 | 2026-03-28 |
+| **RC-FIX-062** | Recuperado real dual moneda desde resumen_ciclo | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 | 2026-03-28 |
+| **RC-UX-001** | Sidebar progressive disclosure + feedback visual archivos | **P2** (Medio) | Done ✅ | Claude | 2026-03-24 | 2026-03-28 |
+| **RC-UX-002** | Informe Gerencial — tipografía Manrope/IBM Plex Sans + visual premium | **P2** (Medio) | Done ✅ | Claude | 2026-03-24 | 2026-03-28 |
+| **RC-FEAT-040** | Email premium con PDF adjunto Estado de Cuenta | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 | 2026-03-28 |
+| **RC-FEAT-041** | Email premium sin tabla + PDF premium configurable + Plantillas de Correo | **P1** (Alto) | Done ✅ | Claude | 2026-03-28 | 2026-03-28 |
+| **RC-UX-003** | Precision Editor Plantillas de Correo — 6 expanders colapsados + CSS premium | **P2** (Medio) | Done ✅ | Claude | 2026-03-28 | 2026-03-28 |
+| **RC-BUG-072** | PDF adjunto en Vista Previa renderizaba canvas en blanco (PDF.js blob-worker) | **P1** (Alto) | Done ✅ | Claude | 2026-03-28 | 2026-03-28 |
+| **RC-BUG-073** | EstadoCuenta PDF duplicaba fecha y nombre empresa en saludo | **P1** (Alto) | Done ✅ | Claude | 2026-03-28 | 2026-03-28 |
 | **RC-QA-001** | Validar Envío PDF (Estrategia Force-Click + Loop) | **P0** (Critico) | Ready | Antigravity | 2025-12-22 |
 | **RC-FEAT-001** | Selector Tri-modal (Texto / Imagen / +PDF) | **P1** (Alto) | Backlog | - | - |
 | **RC-ARCH-001** | Estandarización Selectores DOM WhatsApp Web | **P2** (Medio) | Backlog | - | - |
