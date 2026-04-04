@@ -1,7 +1,7 @@
 import os
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
@@ -1599,16 +1599,15 @@ def update_cuota_estado(
 # ---------------------------------------------------------------------------
 
 def _get_docs_simple_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
-    """Fetch match_key, cliente_id, saldo from documentos_ciclo for a cycle."""
+    """Fetch match_key, cod_cliente, saldo from documentos_ciclo for a cycle."""
     client = get_supabase_client()
     if not client:
         return []
     try:
         resp = _safe_execute(
             client.table("documentos_ciclo")
-            .select("match_key,cliente_id,saldo_real,saldo_original,moneda,enviar_email")
+            .select("match_key,cod_cliente,saldo_real,moneda,enviar_email")
             .eq("cycle_id", str(cycle_id))
-            .limit(5000)
         )
         return resp.data if resp and resp.data else []
     except Exception as e:
@@ -1686,7 +1685,7 @@ def reconcile_ciclo_recovery(
         # Build per-client stats for cycle_id_nuevo
         cliente_nuevo: Dict[str, Dict[str, Any]] = {}
         for doc in docs_nue:
-            cid = str(doc.get("cliente_id", "")).strip()
+            cid = str(doc.get("cod_cliente", "")).strip()
             if not cid:
                 continue
             if cid not in cliente_nuevo:
@@ -1705,7 +1704,7 @@ def reconcile_ciclo_recovery(
         total_monto_rec_usd_activa = 0.0
         for mk in keys_recuperados:
             doc = keys_ant[mk]
-            cid = str(doc.get("cliente_id", "")).strip()
+            cid = str(doc.get("cod_cliente", "")).strip()
             if not cid:
                 continue
             if cid not in cliente_nuevo:
@@ -1793,6 +1792,50 @@ def reconcile_ciclo_recovery(
         total_monto_rec_usd_activa_comb = total_monto_rec_usd_activa + total_monto_amort_usd_activa
         total_monto_rec = total_monto_rec_sol_comb + total_monto_rec_usd_comb
 
+        # RC-FEAT-042: Roll Forward — nuevas facturas, saldo anterior y actual
+        keys_nuevos        = set(keys_nue.keys()) - set(keys_ant.keys())
+        keys_nuevos_activa = set(keys_nue_activa.keys()) - set(keys_ant_activa.keys())
+
+        cartera_nueva_sol = cartera_nueva_usd = 0.0
+        cartera_nueva_sol_activa = cartera_nueva_usd_activa = 0.0
+        for mk in keys_nuevos:
+            doc  = keys_nue[mk]
+            monto  = float(doc.get("saldo_real") or 0)
+            moneda = str(doc.get("moneda") or "").upper().strip()
+            es_activa = mk in keys_nuevos_activa
+            if moneda in _MONEDAS_USD:
+                cartera_nueva_usd += monto
+                if es_activa: cartera_nueva_usd_activa += monto
+            else:
+                cartera_nueva_sol += monto
+                if es_activa: cartera_nueva_sol_activa += monto
+
+        saldo_ant_sol = saldo_ant_usd = 0.0
+        saldo_ant_sol_activa = saldo_ant_usd_activa = 0.0
+        for mk, doc in keys_ant.items():
+            monto  = float(doc.get("saldo_real") or 0)
+            moneda = str(doc.get("moneda") or "").upper().strip()
+            es_activa = mk in keys_ant_activa
+            if moneda in _MONEDAS_USD:
+                saldo_ant_usd += monto
+                if es_activa: saldo_ant_usd_activa += monto
+            else:
+                saldo_ant_sol += monto
+                if es_activa: saldo_ant_sol_activa += monto
+
+        saldo_act_sol = saldo_act_usd = 0.0
+        saldo_act_sol_activa = saldo_act_usd_activa = 0.0
+        for mk, doc in keys_nue.items():
+            monto  = float(doc.get("saldo_real") or 0)
+            moneda = str(doc.get("moneda") or "").upper().strip()
+            es_activa = mk in keys_nue_activa
+            if moneda in _MONEDAS_USD:
+                saldo_act_usd += monto
+                if es_activa: saldo_act_usd_activa += monto
+            else:
+                saldo_act_sol += monto
+                if es_activa: saldo_act_sol_activa += monto
+
         total_gestiones = len(gestiones_nuevas)
         total_acuerdos_resp = _safe_execute(
             client.table("acuerdos_pago").select("id", count="exact").eq("estado", "ACTIVO")
@@ -1827,10 +1870,32 @@ def reconcile_ciclo_recovery(
             "gestiones_total": total_gestiones,
             "acuerdos_total": total_acuerdos or 0,
             "updated_at": ahora,
+            # RC-FEAT-042: Roll Forward
+            "saldo_anterior_sol":          round(saldo_ant_sol, 2),
+            "saldo_anterior_usd":          round(saldo_ant_usd, 2),
+            "saldo_anterior_sol_activa":   round(saldo_ant_sol_activa, 2),
+            "saldo_anterior_usd_activa":   round(saldo_ant_usd_activa, 2),
+            "cartera_nueva_sol":           round(cartera_nueva_sol, 2),
+            "cartera_nueva_usd":           round(cartera_nueva_usd, 2),
+            "cartera_nueva_sol_activa":    round(cartera_nueva_sol_activa, 2),
+            "cartera_nueva_usd_activa":    round(cartera_nueva_usd_activa, 2),
+            "docs_nuevos":                 len(keys_nuevos),
+            "docs_nuevos_activa":          len(keys_nuevos_activa),
+            "saldo_actual_sol":            round(saldo_act_sol, 2),
+            "saldo_actual_usd":            round(saldo_act_usd, 2),
+            "saldo_actual_sol_activa":     round(saldo_act_sol_activa, 2),
+            "saldo_actual_usd_activa":     round(saldo_act_usd_activa, 2),
         }
         _safe_execute(
             client.table("resumen_ciclo")
             .upsert([resumen_ciclo_row], on_conflict="cycle_id")
+        )
+
+        # RC-FEAT-042: Kardex — snapshot de saldos encadenados por ciclo
+        upsert_kardex_entry(
+            cycle_id_nuevo=cycle_id_nuevo,
+            cycle_id_anterior=cycle_id_anterior,
+            datos=resumen_ciclo_row,
         )
 
         stats_out = {
@@ -1873,7 +1938,14 @@ def get_recovery_stats(cycle_id: str, solo_notificable: bool = False) -> Dict[st
                 "monto_recuperado_sol_activa,monto_recuperado_usd_activa,"
                 "docs_recuperados_activa,tasa_recuperacion_activa,cycle_id_anterior,"
                 "docs_amortizados,monto_amortizado_sol,monto_amortizado_usd,"
-                "docs_amortizados_activa,monto_amortizado_sol_activa,monto_amortizado_usd_activa"
+                "docs_amortizados_activa,monto_amortizado_sol_activa,monto_amortizado_usd_activa,"
+                "saldo_anterior_sol,saldo_anterior_usd,"
+                "saldo_anterior_sol_activa,saldo_anterior_usd_activa,"
+                "cartera_nueva_sol,cartera_nueva_usd,"
+                "cartera_nueva_sol_activa,cartera_nueva_usd_activa,"
+                "docs_nuevos,docs_nuevos_activa,"
+                "saldo_actual_sol,saldo_actual_usd,"
+                "saldo_actual_sol_activa,saldo_actual_usd_activa"
             )
             .eq("cycle_id", str(cycle_id))
             .limit(1)
@@ -1890,6 +1962,14 @@ def get_recovery_stats(cycle_id: str, solo_notificable: bool = False) -> Dict[st
                 "docs_amortizados":     int(row.get("docs_amortizados_activa") or 0),
                 "cycle_id_anterior":    row.get("cycle_id_anterior"),
                 "tiene_anterior":       row.get("cycle_id_anterior") is not None,
+                # RC-FEAT-042: Roll Forward (Cartera Activa)
+                "saldo_anterior_sol":   float(row.get("saldo_anterior_sol_activa") or 0),
+                "saldo_anterior_usd":   float(row.get("saldo_anterior_usd_activa") or 0),
+                "cartera_nueva_sol":    float(row.get("cartera_nueva_sol_activa") or 0),
+                "cartera_nueva_usd":    float(row.get("cartera_nueva_usd_activa") or 0),
+                "docs_nuevos":          int(row.get("docs_nuevos_activa") or 0),
+                "saldo_actual_sol":     float(row.get("saldo_actual_sol_activa") or 0),
+                "saldo_actual_usd":     float(row.get("saldo_actual_usd_activa") or 0),
             }
         return {
             "monto_recuperado_sol": float(row.get("monto_recuperado_sol") or 0),
@@ -1899,6 +1979,14 @@ def get_recovery_stats(cycle_id: str, solo_notificable: bool = False) -> Dict[st
             "docs_amortizados":     int(row.get("docs_amortizados") or 0),
             "cycle_id_anterior":    row.get("cycle_id_anterior"),
             "tiene_anterior":       row.get("cycle_id_anterior") is not None,
+            # RC-FEAT-042: Roll Forward (Cartera General)
+            "saldo_anterior_sol":   float(row.get("saldo_anterior_sol") or 0),
+            "saldo_anterior_usd":   float(row.get("saldo_anterior_usd") or 0),
+            "cartera_nueva_sol":    float(row.get("cartera_nueva_sol") or 0),
+            "cartera_nueva_usd":    float(row.get("cartera_nueva_usd") or 0),
+            "docs_nuevos":          int(row.get("docs_nuevos") or 0),
+            "saldo_actual_sol":     float(row.get("saldo_actual_sol") or 0),
+            "saldo_actual_usd":     float(row.get("saldo_actual_usd") or 0),
         }
 
     try:
@@ -1927,6 +2015,14 @@ def _recovery_zero() -> Dict[str, Any]:
         "docs_amortizados": 0,
         "cycle_id_anterior": None,
         "tiene_anterior": False,
+        # RC-FEAT-042: Roll Forward
+        "saldo_anterior_sol": 0.0,
+        "saldo_anterior_usd": 0.0,
+        "cartera_nueva_sol": 0.0,
+        "cartera_nueva_usd": 0.0,
+        "docs_nuevos": 0,
+        "saldo_actual_sol": 0.0,
+        "saldo_actual_usd": 0.0,
     }
 
 
@@ -2033,8 +2129,15 @@ def get_docs_recuperados_detalle(
                     "monto_recuperado": round(diff, 2),
                 })
 
-        # Ordenar: COMPLETO primero, luego AMORTIZACION; dentro de cada grupo por monto DESC
-        result.sort(key=lambda x: (0 if x["tipo"] == "COMPLETO" else 1, -x["monto_recuperado"]))
+        # Ordenar: COMPLETO primero, luego AMORTIZACION
+        #          dentro de cada grupo: S/ primero (moneda=0), US$ después (moneda=1)
+        #          dentro de cada moneda: mayor monto primero
+        _mon_ord = lambda m: 0 if str(m).upper() not in _MONEDAS_USD else 1
+        result.sort(key=lambda x: (
+            0 if x["tipo"] == "COMPLETO" else 1,
+            _mon_ord(x["moneda"]),
+            -x["monto_recuperado"],
+        ))
         return result
 
     except Exception as e:
@@ -2687,6 +2790,399 @@ def get_ciclos_para_informe(limit: int = 12) -> List[Dict[str, Any]]:
     except Exception as e:
         print(f"get_ciclos_para_informe Error: {e}")
         return []
+
+
+def get_resumen_tendencia(
+    cycle_ids: List[str],
+    solo_notificable: bool = False,
+) -> List[Dict[str, Any]]:
+    """Métricas de múltiples ciclos para la tabla de Evolución Histórica (Sección G).
+
+    Retorna lista ordenada cronológicamente (más antiguo primero).
+    Cada elemento tiene las claves normalizadas:
+        cycle_id, saldo_anterior, saldo_anterior_usd,
+        cartera_nueva, cartera_nueva_usd,
+        recuperado, recuperado_usd,
+        saldo_actual, saldo_actual_usd,
+        tasa_efic
+    """
+    if not cycle_ids:
+        return []
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        res = _safe_execute(
+            client.table("resumen_ciclo")
+            .select(
+                "cycle_id, cycle_id_anterior,"
+                "saldo_anterior_sol, saldo_anterior_usd,"
+                "saldo_anterior_sol_activa, saldo_anterior_usd_activa,"
+                "cartera_nueva_sol, cartera_nueva_usd,"
+                "cartera_nueva_sol_activa, cartera_nueva_usd_activa,"
+                "monto_recuperado_sol, monto_recuperado_usd,"
+                "saldo_actual_sol, saldo_actual_usd,"
+                "saldo_actual_sol_activa, saldo_actual_usd_activa,"
+                "tasa_recuperacion, tasa_recuperacion_activa,"
+                "docs_recuperados, docs_nuevos"
+            )
+            .in_("cycle_id", cycle_ids)
+        )
+        rows = res.data or []
+        # Orden cronológico — cycle_id tiene formato HIST_YYYYMMDD_HHMM o CIC-YYYYMMDD-HHMM
+        rows.sort(key=lambda r: r.get("cycle_id", ""))
+        result = []
+        for row in rows:
+            if solo_notificable:
+                result.append({
+                    "cycle_id":           row["cycle_id"],
+                    "cycle_id_anterior":  row.get("cycle_id_anterior"),
+                    "saldo_anterior":     float(row.get("saldo_anterior_sol_activa") or 0),
+                    "saldo_anterior_usd": float(row.get("saldo_anterior_usd_activa") or 0),
+                    "cartera_nueva":      float(row.get("cartera_nueva_sol_activa") or 0),
+                    "cartera_nueva_usd":  float(row.get("cartera_nueva_usd_activa") or 0),
+                    "recuperado":         float(row.get("monto_recuperado_sol") or 0),
+                    "recuperado_usd":     float(row.get("monto_recuperado_usd") or 0),
+                    "saldo_actual":       float(row.get("saldo_actual_sol_activa") or 0),
+                    "saldo_actual_usd":   float(row.get("saldo_actual_usd_activa") or 0),
+                    "tasa_efic":          float(row.get("tasa_recuperacion_activa") or 0),
+                })
+            else:
+                result.append({
+                    "cycle_id":           row["cycle_id"],
+                    "cycle_id_anterior":  row.get("cycle_id_anterior"),
+                    "saldo_anterior":     float(row.get("saldo_anterior_sol") or 0),
+                    "saldo_anterior_usd": float(row.get("saldo_anterior_usd") or 0),
+                    "cartera_nueva":      float(row.get("cartera_nueva_sol") or 0),
+                    "cartera_nueva_usd":  float(row.get("cartera_nueva_usd") or 0),
+                    "recuperado":         float(row.get("monto_recuperado_sol") or 0),
+                    "recuperado_usd":     float(row.get("monto_recuperado_usd") or 0),
+                    "saldo_actual":       float(row.get("saldo_actual_sol") or 0),
+                    "saldo_actual_usd":   float(row.get("saldo_actual_usd") or 0),
+                    "tasa_efic":          float(row.get("tasa_recuperacion") or 0),
+                })
+        return result
+    except Exception as e:
+        print(f"get_resumen_tendencia Error: {e}")
+        return []
+
+
+# ---------------------------------------------------------------------------
+# RC-FEAT-042 — Kardex de Cartera: ledger de saldos por ciclo
+# ---------------------------------------------------------------------------
+
+def get_kardex_entry(cycle_id: str) -> Dict[str, Any]:
+    """Lee una fila de kardex_cartera para el ciclo dado. Retorna {} si no existe."""
+    client = get_supabase_client()
+    if not client or not cycle_id:
+        return {}
+    try:
+        res = _safe_execute(
+            client.table("kardex_cartera")
+            .select("*")
+            .eq("cycle_id", str(cycle_id))
+            .limit(1)
+        )
+        rows = res.data or []
+        return rows[0] if rows else {}
+    except Exception as e:
+        print(f"get_kardex_entry Error: {e}")
+        return {}
+
+
+def upsert_kardex_entry(
+    cycle_id_nuevo: str,
+    cycle_id_anterior: Optional[str],
+    datos: Dict[str, Any],
+) -> None:
+    """Escribe o actualiza una fila en kardex_cartera para el ciclo nuevo.
+
+    El saldo_inicial se lee del saldo_final guardado del ciclo anterior en kardex.
+    Si no hay ciclo anterior, saldo_inicial = 0 (primer ciclo de la historia).
+
+    Fórmula garantizada: saldo_inicial + cartera_nueva − cobrado = saldo_final
+    """
+    client = get_supabase_client()
+    if not client or not cycle_id_nuevo:
+        return
+    try:
+        # 1. Saldo inicial = saldo final guardado del ciclo anterior en kardex (snapshot)
+        prev       = get_kardex_entry(cycle_id_anterior) if cycle_id_anterior else {}
+        si_sol     = float(prev.get("saldo_final_sol",          0) or 0)
+        si_usd     = float(prev.get("saldo_final_usd",          0) or 0)
+        si_sol_act = float(prev.get("saldo_final_sol_activa",   0) or 0)
+        si_usd_act = float(prev.get("saldo_final_usd_activa",   0) or 0)
+
+        # 2. Movimientos del ciclo nuevo (calculados por reconcile_ciclo_recovery)
+        cn_sol     = float(datos.get("cartera_nueva_sol",           0) or 0)
+        cn_usd     = float(datos.get("cartera_nueva_usd",           0) or 0)
+        cn_sol_act = float(datos.get("cartera_nueva_sol_activa",    0) or 0)
+        cn_usd_act = float(datos.get("cartera_nueva_usd_activa",    0) or 0)
+
+        cob_sol     = float(datos.get("monto_recuperado_sol",       0) or 0)
+        cob_usd     = float(datos.get("monto_recuperado_usd",       0) or 0)
+        cob_sol_act = float(datos.get("monto_recuperado_sol_activa",0) or 0)
+        cob_usd_act = float(datos.get("monto_recuperado_usd_activa",0) or 0)
+
+        # 3. Saldo final = suma directa de saldo_real del ciclo nuevo (snapshot)
+        sf_sol     = float(datos.get("saldo_actual_sol",            0) or 0)
+        sf_usd     = float(datos.get("saldo_actual_usd",            0) or 0)
+        sf_sol_act = float(datos.get("saldo_actual_sol_activa",     0) or 0)
+        sf_usd_act = float(datos.get("saldo_actual_usd_activa",     0) or 0)
+
+        # 4. fecha_ciclo — parsear desde cycle_id (CIC-YYYYMMDD-HHMM o HIST_YYYYMMDD_HHMM)
+        import re as _re
+        _m = _re.search(r"(\d{8})", cycle_id_nuevo)
+        if _m:
+            _d = _m.group(1)
+            fecha_ciclo = f"{_d[:4]}-{_d[4:6]}-{_d[6:]}"
+        else:
+            fecha_ciclo = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        # 5. Log de verificación cuadre S/ (no bloquea el flujo)
+        cuadre_sol = abs(si_sol + cn_sol - cob_sol - sf_sol)
+        if cuadre_sol > 1.0:
+            print(
+                f"[kardex] Cuadre S/ {cycle_id_nuevo}: "
+                f"ini({si_sol:.0f}) + nueva({cn_sol:.0f}) - cob({cob_sol:.0f}) "
+                f"!= final({sf_sol:.0f}) | diff={cuadre_sol:.2f}"
+            )
+
+        ahora = datetime.now(timezone.utc).isoformat()
+        row = {
+            "cycle_id":                   cycle_id_nuevo,
+            "cycle_id_anterior":          cycle_id_anterior,
+            "fecha_ciclo":                fecha_ciclo,
+            # General
+            "saldo_inicial_sol":          round(si_sol,     2),
+            "cartera_nueva_sol":          round(cn_sol,     2),
+            "cobrado_sol":                round(cob_sol,    2),
+            "saldo_final_sol":            round(sf_sol,     2),
+            "saldo_inicial_usd":          round(si_usd,     2),
+            "cartera_nueva_usd":          round(cn_usd,     2),
+            "cobrado_usd":                round(cob_usd,    2),
+            "saldo_final_usd":            round(sf_usd,     2),
+            # Activa
+            "saldo_inicial_sol_activa":   round(si_sol_act, 2),
+            "cartera_nueva_sol_activa":   round(cn_sol_act, 2),
+            "cobrado_sol_activa":         round(cob_sol_act,2),
+            "saldo_final_sol_activa":     round(sf_sol_act, 2),
+            "saldo_inicial_usd_activa":   round(si_usd_act, 2),
+            "cartera_nueva_usd_activa":   round(cn_usd_act, 2),
+            "cobrado_usd_activa":         round(cob_usd_act,2),
+            "saldo_final_usd_activa":     round(sf_usd_act, 2),
+            "updated_at":                 ahora,
+        }
+        _safe_execute(
+            client.table("kardex_cartera")
+            .upsert([row], on_conflict="cycle_id")
+        )
+    except Exception as e:
+        print(f"upsert_kardex_entry Error: {e}")
+
+
+def get_kardex_tendencia(
+    cycle_ids: List[str],
+    solo_notificable: bool = False,
+) -> List[Dict[str, Any]]:
+    """Métricas del kardex para la Sección G del Informe Gerencial.
+
+    Retorna lista ordenada cronológicamente (más antiguo primero).
+    Cada elemento tiene las claves normalizadas:
+        cycle_id, fecha_ciclo,
+        saldo_inicial_sol, cartera_nueva_sol, cobrado_sol, saldo_final_sol,
+        saldo_inicial_usd, cartera_nueva_usd, cobrado_usd, saldo_final_usd
+    """
+    if not cycle_ids:
+        return []
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        res = _safe_execute(
+            client.table("kardex_cartera")
+            .select(
+                "cycle_id, cycle_id_anterior, fecha_ciclo,"
+                "saldo_inicial_sol, cartera_nueva_sol, cobrado_sol, saldo_final_sol,"
+                "saldo_inicial_usd, cartera_nueva_usd, cobrado_usd, saldo_final_usd,"
+                "saldo_inicial_sol_activa, cartera_nueva_sol_activa, cobrado_sol_activa, saldo_final_sol_activa,"
+                "saldo_inicial_usd_activa, cartera_nueva_usd_activa, cobrado_usd_activa, saldo_final_usd_activa"
+            )
+            .in_("cycle_id", cycle_ids)
+        )
+        rows = res.data or []
+        rows.sort(key=lambda r: r.get("cycle_id", ""))
+        result = []
+        for row in rows:
+            if solo_notificable:
+                result.append({
+                    "cycle_id":          row["cycle_id"],
+                    "fecha_ciclo":       row.get("fecha_ciclo") or "",
+                    "saldo_inicial_sol": float(row.get("saldo_inicial_sol_activa") or 0),
+                    "cartera_nueva_sol": float(row.get("cartera_nueva_sol_activa") or 0),
+                    "cobrado_sol":       float(row.get("cobrado_sol_activa")        or 0),
+                    "saldo_final_sol":   float(row.get("saldo_final_sol_activa")    or 0),
+                    "saldo_inicial_usd": float(row.get("saldo_inicial_usd_activa") or 0),
+                    "cartera_nueva_usd": float(row.get("cartera_nueva_usd_activa") or 0),
+                    "cobrado_usd":       float(row.get("cobrado_usd_activa")        or 0),
+                    "saldo_final_usd":   float(row.get("saldo_final_usd_activa")    or 0),
+                })
+            else:
+                result.append({
+                    "cycle_id":          row["cycle_id"],
+                    "fecha_ciclo":       row.get("fecha_ciclo") or "",
+                    "saldo_inicial_sol": float(row.get("saldo_inicial_sol") or 0),
+                    "cartera_nueva_sol": float(row.get("cartera_nueva_sol") or 0),
+                    "cobrado_sol":       float(row.get("cobrado_sol")        or 0),
+                    "saldo_final_sol":   float(row.get("saldo_final_sol")    or 0),
+                    "saldo_inicial_usd": float(row.get("saldo_inicial_usd") or 0),
+                    "cartera_nueva_usd": float(row.get("cartera_nueva_usd") or 0),
+                    "cobrado_usd":       float(row.get("cobrado_usd")        or 0),
+                    "saldo_final_usd":   float(row.get("saldo_final_usd")    or 0),
+                })
+        return result
+    except Exception as e:
+        print(f"get_kardex_tendencia Error: {e}")
+        return []
+
+
+def backfill_kardex_from_resumen(cycle_ids: List[str]) -> int:
+    """Llena kardex_cartera para ciclos históricos que aún no tienen entrada.
+
+    - Si el ciclo tiene datos válidos (saldo_actual_sol > 0) en resumen_ciclo → usa esos datos.
+    - Si saldo_actual_sol = 0 (ciclo anterior a la migración 105) → fuerza re-reconciliación
+      completa para obtener los valores reales desde documentos_ciclo.
+
+    Procesa en orden cronológico para garantizar el encadenamiento de saldos.
+    Solo escribe entradas que NO existen aún en kardex_cartera.
+    Retorna el número de entradas escritas.
+    """
+    if not cycle_ids:
+        return 0
+    client = get_supabase_client()
+    if not client:
+        return 0
+    try:
+        # 1. Leer resumen_ciclo para todos los ciclos solicitados
+        res = _safe_execute(
+            client.table("resumen_ciclo")
+            .select(
+                "cycle_id, cycle_id_anterior,"
+                "cartera_nueva_sol, cartera_nueva_usd,"
+                "cartera_nueva_sol_activa, cartera_nueva_usd_activa,"
+                "monto_recuperado_sol, monto_recuperado_usd,"
+                "monto_recuperado_sol_activa, monto_recuperado_usd_activa,"
+                "saldo_actual_sol, saldo_actual_usd,"
+                "saldo_actual_sol_activa, saldo_actual_usd_activa"
+            )
+            .in_("cycle_id", cycle_ids)
+        )
+        filas = res.data or []
+        # Ordenar SIEMPRE por cycle_id alfabético — para HIST_YYYYMMDD y CIC-YYYYMMDD
+        # el orden lexicográfico es equivalente al cronológico.
+        filas.sort(key=lambda r: r.get("cycle_id", ""))
+
+        # 2. Detectar cuáles ya existen en kardex CON encadenamiento válido.
+        #    El primer ciclo en orden cronológico tiene saldo_inicial=0 por diseño (correcto).
+        #    Los demás deben tener saldo_inicial > 0 para que el encadenamiento sea válido.
+        #    IMPORTANTE: NO usar resumen_ciclo.cycle_id_anterior para definir "primer ciclo"
+        #    porque esa columna puede estar en orden inverso en ciclos históricos migrados.
+        res_k = _safe_execute(
+            client.table("kardex_cartera")
+            .select(
+                "cycle_id,"
+                "saldo_inicial_sol, saldo_final_sol,"
+                "saldo_inicial_sol_activa, saldo_final_sol_activa"
+            )
+            .in_("cycle_id", cycle_ids)
+        )
+        kardex_map = {r["cycle_id"]: r for r in (res_k.data or [])}
+
+        # Verificar integridad de AMBAS cadenas (general y activa):
+        #   ini[N] debe ser igual a fin[N-1] en cada grupo.
+        # El primer ciclo es correcto solo si AMBOS saldo_inicial son ≈ 0
+        # (no tiene ciclo anterior → apertura debe ser cero).
+        # Si saldo_inicial_sol != 0 en el primer ciclo → dato fantasma → re-procesar.
+        ya_en_kardex: set = set()
+        for _i, _fila in enumerate(filas):
+            _cid    = _fila.get("cycle_id", "")
+            _r      = kardex_map.get(_cid, {})
+            _sf     = float(_r.get("saldo_final_sol_activa") or 0)
+            _si     = float(_r.get("saldo_inicial_sol_activa") or 0)
+            _sf_gen = float(_r.get("saldo_final_sol") or 0)
+            _si_gen = float(_r.get("saldo_inicial_sol") or 0)
+            if _sf == 0:
+                continue  # No tiene dato real → siempre re-procesar
+            if _i == 0:
+                # Primer ciclo: AMBOS saldo_inicial deben ser 0 (sin ciclo anterior).
+                # Si alguno != 0, es dato fantasma de un backfill roto → re-procesar.
+                if abs(_si) < 0.01 and abs(_si_gen) < 0.01:
+                    ya_en_kardex.add(_cid)
+            else:
+                # Ciclos siguientes: verificar que ini == fin del ciclo anterior
+                # en AMBAS cadenas (activa y general).
+                _prev_cid    = filas[_i - 1].get("cycle_id", "")
+                _prev_r      = kardex_map.get(_prev_cid, {})
+                _prev_sf     = float(_prev_r.get("saldo_final_sol_activa") or 0)
+                _prev_sf_gen = float(_prev_r.get("saldo_final_sol") or 0)
+                activa_ok  = abs(_si     - _prev_sf)     < 1.0
+                general_ok = abs(_si_gen - _prev_sf_gen) < 1.0
+                if activa_ok and general_ok:
+                    ya_en_kardex.add(_cid)
+
+        # 3. Procesar en orden cronológico usando la posición en la lista como cadena correcta.
+        #    NO se usa resumen_ciclo.cycle_id_anterior porque puede estar invertido en datos
+        #    históricos migrados. La cadena se construye por orden de sort.
+        escritos = 0
+        prev_cid: Optional[str] = None
+        for fila in filas:
+            cid              = fila.get("cycle_id", "")
+            cid_ant_correcto = prev_cid   # anterior según orden cronológico real
+            prev_cid         = cid        # actualizar siempre, incluso si saltamos este ciclo
+
+            if not cid or cid in ya_en_kardex:
+                continue
+
+            saldo_act        = float(fila.get("saldo_actual_sol")        or 0)
+            saldo_act_activa = float(fila.get("saldo_actual_sol_activa") or 0)
+
+            if saldo_act > 0 and saldo_act_activa > 0:
+                # Ambos campos válidos (ciclos post-migración 105) → escritura directa
+                datos = {
+                    "cartera_nueva_sol":           float(fila.get("cartera_nueva_sol")          or 0),
+                    "cartera_nueva_usd":           float(fila.get("cartera_nueva_usd")          or 0),
+                    "cartera_nueva_sol_activa":    float(fila.get("cartera_nueva_sol_activa")   or 0),
+                    "cartera_nueva_usd_activa":    float(fila.get("cartera_nueva_usd_activa")   or 0),
+                    "monto_recuperado_sol":        float(fila.get("monto_recuperado_sol")       or 0),
+                    "monto_recuperado_usd":        float(fila.get("monto_recuperado_usd")       or 0),
+                    "monto_recuperado_sol_activa": float(fila.get("monto_recuperado_sol_activa")or 0),
+                    "monto_recuperado_usd_activa": float(fila.get("monto_recuperado_usd_activa")or 0),
+                    "saldo_actual_sol":            saldo_act,
+                    "saldo_actual_usd":            float(fila.get("saldo_actual_usd")           or 0),
+                    "saldo_actual_sol_activa":     saldo_act_activa,
+                    "saldo_actual_usd_activa":     float(fila.get("saldo_actual_usd_activa")    or 0),
+                }
+                upsert_kardex_entry(
+                    cycle_id_nuevo=cid,
+                    cycle_id_anterior=cid_ant_correcto,
+                    datos=datos,
+                )
+            elif cid_ant_correcto:
+                # Sin datos activa válidos → reconciliar desde documentos reales.
+                # Se pasa el anterior CRONOLÓGICO (no el de resumen_ciclo que puede estar invertido).
+                reconcile_ciclo_recovery(
+                    cycle_id_anterior=cid_ant_correcto,
+                    cycle_id_nuevo=cid,
+                )
+            # Sin anterior y sin datos: primer ciclo sin data real → omitir
+
+            ya_en_kardex.add(cid)
+            escritos += 1
+
+        return escritos
+    except Exception as e:
+        print(f"backfill_kardex_from_resumen Error: {e}")
+        return 0
 
 
 _AGING_BUCKETS = [
