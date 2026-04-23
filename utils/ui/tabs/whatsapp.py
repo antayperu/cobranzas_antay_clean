@@ -919,7 +919,7 @@ def render_tab(df_filtered, config):
                             'Cliente': c['nombre_cliente'],
                             'CodCliente': _cod_c,
                             'Teléfono': c['telefono'],
-                            'Estado': '✅ Enviado' if results.get('resultados_por_cliente', {}).get(_cod_c, 'FALLIDO') == 'EXITOSO' else '❌ Fallido',
+                            'Estado': '✅ Enviado' if results.get('resultados_por_cliente', {}).get(_cod_c, 'FALLIDO') in ('EXITOSO', 'SIN_RESPUESTA') else '❌ Fallido',
                             'Deuda': c.get('TOTAL_SALDO_REAL', ''),
                             'DeudaS': c.get('TOTAL_SALDO_S', ''),  # "S/ 623.00"
                             'DeudaD': c.get('TOTAL_SALDO_D', ''),  # "$ 373.94"

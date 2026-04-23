@@ -129,16 +129,30 @@ def render_tab(df_final, config):
             df_filtered = df_filtered[df_filtered['TIPO PEDIDO'].astype(str).isin(sel_tipo_pedido)]
         
         # Aplicar filtro Saldo Real (con redondeo a 2 decimales para consistencia con Excel)
-        if opcion_saldo == "Mayor que":
-            df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) > monto_ref]
-        elif opcion_saldo == "Mayor o igual que":
-            df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) >= monto_ref]
-        elif opcion_saldo == "Menor que":
-            df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) < monto_ref]
-        elif opcion_saldo == "Menor o igual que":
-            df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) <= monto_ref]
-        elif opcion_saldo == "Igual a":
-            df_filtered = df_filtered[df_filtered['SALDO REAL'].round(2) == monto_ref]
+        # REGLA CRÍTICA: Un documento con Saldo Real = 0 pero con Detracción Pendiente
+        # SIEMPRE debe mantenerse en la vista — el cliente aún tiene deuda con el Estado.
+        if opcion_saldo != "Todos":
+            saldo_col = df_filtered['SALDO REAL'].round(2)
+            if opcion_saldo == "Mayor que":
+                mask_saldo = saldo_col > monto_ref
+            elif opcion_saldo == "Mayor o igual que":
+                mask_saldo = saldo_col >= monto_ref
+            elif opcion_saldo == "Menor que":
+                mask_saldo = saldo_col < monto_ref
+            elif opcion_saldo == "Menor o igual que":
+                mask_saldo = saldo_col <= monto_ref
+            elif opcion_saldo == "Igual a":
+                mask_saldo = saldo_col == monto_ref
+            else:
+                mask_saldo = pd.Series(True, index=df_filtered.index)
+
+            # Preservar documentos con detracción pendiente aunque no cumplan el filtro de saldo
+            mask_detrac_pendiente = (
+                df_filtered['DETRACCIÓN'].fillna(0) > 0
+            ) & (
+                df_filtered['ESTADO DETRACCION'].astype(str).str.upper() == 'PENDIENTE'
+            )
+            df_filtered = df_filtered[mask_saldo | mask_detrac_pendiente]
         
         # Aplicar filtro Enviar Email
         if sel_enviar_email and 'Enviar Email' in df_filtered.columns:
