@@ -741,8 +741,7 @@ def render_tab(df_final, df_filtered, config):
                                     st.session_state['last_send_timestamp'] = now_timestamp.strftime('%Y-%m-%d %H:%M:%S')
                                     
                                     # IMPORTANTE: Forzar rerun para refrescar KPIs
-                                    if len(updated_match_keys) > 0:
-                                        st.rerun()
+                                    st.rerun()
                         
                         # --- RC-UX-002: Panel de Resultados Amigable ---
                         st.divider()
