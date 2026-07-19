@@ -11,3 +11,4 @@ playwright
 nest_asyncio
 pyperclip
 reportlab>=4.0
+matplotlib>=3.7

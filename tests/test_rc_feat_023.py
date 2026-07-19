@@ -62,13 +62,13 @@ class TestReconcileCicloRecovery:
         """Docs en anterior pero no en nuevo → recuperados."""
         dbm = _import_dbm()
         docs_anterior = [
-            {"match_key": "MK-001", "cliente_id": "C001", "saldo_real": 1000, "saldo_original": 1200},
-            {"match_key": "MK-002", "cliente_id": "C001", "saldo_real": 500, "saldo_original": 600},
-            {"match_key": "MK-003", "cliente_id": "C002", "saldo_real": 800, "saldo_original": 900},
+            {"match_key": "MK-001", "cod_cliente": "C001", "saldo_real": 1000, "moneda": "PEN", "enviar_email": "SI"},
+            {"match_key": "MK-002", "cod_cliente": "C001", "saldo_real": 500,  "moneda": "PEN", "enviar_email": "SI"},
+            {"match_key": "MK-003", "cod_cliente": "C002", "saldo_real": 800,  "moneda": "PEN", "enviar_email": "SI"},
         ]
         # MK-001 y MK-002 pagados (no están en nuevo), MK-003 sigue pendiente
         docs_nuevo = [
-            {"match_key": "MK-003", "cliente_id": "C002", "saldo_real": 800, "saldo_original": 900},
+            {"match_key": "MK-003", "cod_cliente": "C002", "saldo_real": 800, "moneda": "PEN", "enviar_email": "SI"},
         ]
 
         call_count = [0]
@@ -92,11 +92,11 @@ class TestReconcileCicloRecovery:
         """Con 2 de 3 docs recuperados → tasa = 66.67%."""
         dbm = _import_dbm()
         docs_anterior = [
-            {"match_key": f"MK-{i:03d}", "cliente_id": "C001", "saldo_real": 100, "saldo_original": 100}
+            {"match_key": f"MK-{i:03d}", "cod_cliente": "C001", "saldo_real": 100, "moneda": "PEN", "enviar_email": "SI"}
             for i in range(3)
         ]
         docs_nuevo = [
-            {"match_key": "MK-002", "cliente_id": "C001", "saldo_real": 100, "saldo_original": 100}
+            {"match_key": "MK-002", "cod_cliente": "C001", "saldo_real": 100, "moneda": "PEN", "enviar_email": "SI"}
         ]
 
         def _mock_get(cycle_id):

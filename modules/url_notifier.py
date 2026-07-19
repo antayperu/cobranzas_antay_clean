@@ -3,7 +3,7 @@ import re
 import os
 import sys
 from datetime import datetime
-from email_sender import send_access_link # Nuevo modulo de notificacion
+from access_link_sender import send_access_link
 
 SENT_LOCK = "url_sent.lock"
 
@@ -58,9 +58,19 @@ def find_and_save_tunnel_url(log_file="tunnel.log", output_file="00_LINK_ACCESO_
                         _lf.write(url)
 
                     # Notificar por Email
-                    send_access_link(url)
+                    success = send_access_link(url)
+                    if success:
+                        print("✅ Notificacion de acceso enviada exitosamente.")
+                    else:
+                        # Borrar lock para que el proximo reinicio vuelva a intentarlo
+                        try:
+                            os.remove(SENT_LOCK)
+                        except OSError:
+                            pass
+                        print("⚠️  No se pudo enviar la notificacion.")
+                        print("     URL disponible en: 00_LINK_ACCESO_HOY.txt")
 
-                    return True
+                    return success
                     
         except Exception as e:
             print(f"⚠️ Error leyendo log: {e}")
@@ -75,5 +85,6 @@ if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     # Subir un nivel para estar en root del proyecto
     os.chdir("..")
-    
-    find_and_save_tunnel_url()
+
+    result = find_and_save_tunnel_url()
+    sys.exit(0 if result else 1)

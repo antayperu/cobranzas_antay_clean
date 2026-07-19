@@ -965,6 +965,74 @@ def render_tab(config):
 
     # --- SECTION 9: OPCIONES AVANZADAS ---
     with st.expander("⚙️ Opciones Avanzadas (Reenvío)", expanded=False):
+
+        # -- Notificación de inicio de servidor --
+        with st.container(border=True):
+            st.markdown("###### 🔔 Notificación de Inicio de Servidor")
+            st.caption(
+                "Cuando el servidor QA arranca, el sistema envía un email con el link de acceso. "
+                "Configura aquí quién lo recibe y cuántas veces reintenta si falla."
+            )
+
+            server_notif = config.get("server_notification", {})
+
+            try:
+                _sn_form = st.form(key="form_server_notification", enter_to_submit=False)
+            except TypeError:
+                _sn_form = st.form(key="form_server_notification")
+
+            with _sn_form:
+                col_a, col_b = st.columns([3, 1])
+                with col_a:
+                    sn_email = st.text_input(
+                        "Email del destinatario",
+                        value=server_notif.get("recipient_email", ""),
+                        placeholder="ej: cortega@antayperu.com",
+                        help=(
+                            "Quién recibe el link de acceso al arrancar el servidor QA. "
+                            "Si está vacío, se usa el correo del supervisor configurado arriba."
+                        ),
+                    )
+                with col_b:
+                    sn_enabled = st.toggle(
+                        "Activo",
+                        value=server_notif.get("send_enabled", True),
+                        help="Desactiva para no recibir el email al iniciar el servidor.",
+                    )
+
+                col_c, col_d = st.columns(2)
+                with col_c:
+                    sn_retry = st.number_input(
+                        "Reintentos si falla",
+                        min_value=1, max_value=5,
+                        value=int(server_notif.get("retry_attempts", 3)),
+                        step=1,
+                        help="Cuántas veces reintenta si el email falla al arrancar (ej: red no lista).",
+                    )
+                with col_d:
+                    sn_delay = st.number_input(
+                        "Espera entre intentos (seg)",
+                        min_value=5, max_value=60,
+                        value=int(server_notif.get("retry_delay_seconds", 15)),
+                        step=5,
+                        help="Segundos de espera entre cada reintento.",
+                    )
+
+                if st.form_submit_button("💾 Guardar configuración de notificación", use_container_width=True):
+                    updated_cfg = dict(config)
+                    updated_cfg["server_notification"] = {
+                        "recipient_email":      sn_email.strip(),
+                        "send_enabled":         sn_enabled,
+                        "retry_attempts":       int(sn_retry),
+                        "retry_delay_seconds":  int(sn_delay),
+                    }
+                    if sm.save_settings(updated_cfg):
+                        st.success("✅ Configuración guardada. Aplica al próximo inicio del servidor.")
+                        st.rerun()
+                    else:
+                        st.error("❌ No se pudo guardar. Verifica la conexión a Supabase.")
+
+        st.divider()
         st.markdown("##### Gestión Avanzada de Ciclos")
         st.caption("⚠️ Estas acciones son sensibles. Úsalas con precaución")
         

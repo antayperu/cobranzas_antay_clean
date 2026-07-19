@@ -113,7 +113,9 @@ if not dbm.initialize_db():
 # Si Supabase tiene ciclos guardados, el más reciente se carga automáticamente.
 # El gestor llega directamente a los tabs (WA, Email, CRM) sin interacción previa.
 # Si no hay ciclos, se muestra el selector/upload en la barra lateral como siempre.
-session_lib.attempt_auto_restore()
+if not st.session_state.get("data_ready", False) and not st.session_state.get("loading_new_files", False) and not st.session_state.get("skip_auto_restore", False):
+    with st.spinner("Conectando con Supabase y restaurando sesión..."):
+        session_lib.attempt_auto_restore()
 
 # Render Sidebar Wizard
 wizard_action = ui_sidebar.render_sidebar()

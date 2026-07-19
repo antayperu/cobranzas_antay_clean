@@ -66,6 +66,7 @@ ssot_output.txt
 docops_evidence.txt
 schema_keys.txt
 secrets.txt
+email_secrets.json
 
 # Reportes generados
 reports/
@@ -73,3 +74,8 @@ reports/
 # Archivos de datos Excel (no deben versionarse)
 *.xlsx
 *.xls
+
+# PDFs generados y archivos de debug
+*.pdf
+debug_*.py
+=3.7

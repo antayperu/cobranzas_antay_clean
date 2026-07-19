@@ -68,6 +68,12 @@ DEFAULT_SETTINGS = {
         "enabled": True,
         "mode": "BCC",
     },
+    "server_notification": {
+        "recipient_email": "",      # vacío = usa supervisor_config.email como fallback
+        "send_enabled": True,
+        "retry_attempts": 3,
+        "retry_delay_seconds": 15,
+    },
     "whatsapp_template": (
         "Estimados *{EMPRESA}*,\n\n"
         "Adjuntamos el Estado de Cuenta actualizado. A la fecha, presentan documentos pendientes por un *Total de: {TOTAL_SALDO_REAL}*.\n\n"

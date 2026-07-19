@@ -232,20 +232,20 @@ def render_tab(df_final, config):
     
     # --- DEBUG TOGGLE (QA Only) ---
     with st.expander("🔧 Debug: Tracking Stats (QA)", expanded=False):
-        if 'ESTADO_EMAIL' in df_final.columns:
-            total_records = len(df_final)
-            total_enviados = (df_final['ESTADO_EMAIL'] == "ENVIADO").sum()
+        if 'ESTADO_EMAIL' in df_filtered.columns:
+            total_records = len(df_filtered)
+            total_enviados = (df_filtered['ESTADO_EMAIL'] == "ENVIADO").sum()
             total_pendientes = total_records - total_enviados
-            
+
             col_d1, col_d2, col_d3 = st.columns(3)
             col_d1.metric("Total Registros", total_records)
             col_d2.metric("✅ Enviados", total_enviados)
             col_d3.metric("⏳ Pendientes", total_pendientes)
-            
+
             if 'last_tracking_update' in st.session_state:
                 st.caption(f"Última actualización: {st.session_state['last_tracking_update'].get('count', 0)} registros a las {st.session_state['last_tracking_update'].get('timestamp', 'N/A')}")
         else:
-            st.warning("Columnas de tracking no encontradas en df_final")
+            st.warning("Columnas de tracking no encontradas en df_filtered")
     
     # --- PASO 3: EXPORTAR ---
     st.subheader("Exportar Reporte")

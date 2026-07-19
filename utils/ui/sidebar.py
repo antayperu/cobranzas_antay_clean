@@ -29,7 +29,7 @@ def _render_sidebar_header() -> None:
         <div class="antay-sidebar-card antay-animate-in">
             <div class="antay-sidebar-card__top">
                 <span class="antay-pill">Enterprise</span>
-                <span class="antay-version">v2.0.0</span>
+                <span class="antay-version">v2.2.0</span>
             </div>
             <h3>Cobranzas Antay</h3>
             <p>Operacion principal con 2 archivos y cartera maestra en Supabase.</p>
