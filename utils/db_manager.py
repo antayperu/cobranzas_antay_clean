@@ -910,31 +910,38 @@ def list_clientes_full(search: str = "", estado: str = "", limit: int = 1000) ->
 
 def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
     """
-    Retorna cartera maestra de clientes desde Supabase para ciclos sin Excel de clientes.
+    Retorna cartera maestra de clientes desde Supabase.
+    Usa paginación de 200 filas por request para evitar statement_timeout en producción.
     """
     client = get_supabase_client()
     if not client:
         _set_last_error("Supabase no disponible para obtener cartera maestra.")
         return []
+
+    _COLS      = "cliente_id, nombre, email, telefono, dni, ruc, direccion, estado, enviar_email, notas, extra_fields"
+    _COLS_MIN  = "cliente_id, nombre, email, telefono, ruc, direccion, estado, notas"
+    _PAGE      = 200
+    all_rows: List[Dict[str, Any]] = []
+    offset     = 0
+
     try:
-        try:
-            res = _safe_execute(
-                client.table("clientes")
-                .select(
-                    "cliente_id, nombre, email, telefono, dni, ruc, direccion, estado, enviar_email, notas, extra_fields"
+        while offset < limit:
+            end = offset + _PAGE - 1
+            try:
+                res = _safe_execute(
+                    client.table("clientes").select(_COLS).order("cliente_id").range(offset, end)
                 )
-                .order("cliente_id")
-                .limit(limit)
-            )
-        except Exception:
-            res = _safe_execute(
-                client.table("clientes")
-                .select("cliente_id, nombre, email, telefono, ruc, direccion, estado, notas")
-                .order("cliente_id")
-                .limit(limit)
-            )
-        rows = list(res.data or [])
-        for row in rows:
+            except Exception:
+                res = _safe_execute(
+                    client.table("clientes").select(_COLS_MIN).order("cliente_id").range(offset, end)
+                )
+            batch = list(res.data or [])
+            all_rows.extend(batch)
+            if len(batch) < _PAGE:
+                break
+            offset += _PAGE
+
+        for row in all_rows:
             raw_note = row.get("notas")
             note_clean, note_extra = _extract_legacy_extra_from_notas(raw_note)
             if isinstance(raw_note, str) and LEGACY_EXTRA_PREFIX in raw_note:
@@ -954,7 +961,7 @@ def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
             if not enviar_source:
                 enviar_source = row["extra_fields"].get("enviar_email")
             row["enviar_email"] = _normalize_cliente_enviar_email(enviar_source)
-        return rows
+        return all_rows
     except Exception as e:
         _set_last_error(f"get_clientes_master: {e}")
         print(f"get_clientes_master Error: {e}")

@@ -322,61 +322,8 @@ if wizard_action == "PROCESS_TRIGGERED":
                     st.error(f"❌ Error de Procesamiento: {e}")
                     st.session_state['data_ready'] = False
 
-    # Main Area Placeholder if no data — tarjeta premium de estado del sistema
-    if not st.session_state.get('data_ready', False):
-        _h = st.session_state.get('_system_health', {})
-        _supa_ok  = _h.get('supabase_ok', True)
-        _count    = _h.get('clientes_count', 0)
-        _err      = _h.get('error')
-
-        if _supa_ok and _count > 0:
-            _cls, _icon = "ok", "🟢"
-            _title = "Sistema listo para operar"
-            _rows  = [
-                f"✅&nbsp; Supabase conectado correctamente",
-                f"👥&nbsp; {_count} clientes disponibles en cartera maestra",
-                "👈&nbsp; Sube los archivos desde el panel lateral para generar un nuevo ciclo",
-            ]
-            _note = None
-        elif _supa_ok and _count == 0:
-            _cls, _icon = "warn", "🟡"
-            _title = "Supabase conectado — sin clientes registrados"
-            _rows  = [
-                "✅&nbsp; Conexión a la base de datos: OK",
-                "⚠️&nbsp; La cartera maestra de clientes está vacía",
-                "👉&nbsp; Ve a la pestaña <strong>Clientes Premium</strong> para registrarlos antes de generar el ciclo",
-            ]
-            _note = "Esto no es un error de la app — es un dato que falta en la base de datos."
-        else:
-            _cls, _icon = "error", "🔴"
-            _title = "Base de datos no disponible"
-            _rows  = [
-                "❌&nbsp; No se pudo acceder a Supabase correctamente",
-                "⚠️&nbsp; Verifica tu conexión a internet y vuelve a intentarlo",
-            ]
-            if _err:
-                _rows.append(f"🔧&nbsp; Detalle técnico: <em>{str(_err)[:100]}</em>")
-            _note = "Esto NO es un error de la app — es un problema de conexión con la base de datos. Contacta a soporte si persiste."
-
-        _rows_html = "".join(
-            f'<div class="antay-health-card__row">{r}</div>' for r in _rows
-        )
-        _note_html = (
-            f'<div class="antay-health-card__note">{_note}</div>' if _note else ""
-        )
-        st.markdown(
-            f"""
-            <div class="antay-health-card antay-health-card--{_cls} antay-animate-in">
-                <div class="antay-health-card__icon">{_icon}</div>
-                <div class="antay-health-card__body">
-                    <div class="antay-health-card__title">{_title}</div>
-                    <div class="antay-health-card__rows">{_rows_html}</div>
-                    {_note_html}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    # Después de un error de ciclo — no mostrar tarjeta de salud aquí.
+    # La tarjeta se renderiza dentro del tab Inicio para evitar conflicto visual.
 
 # --- PASO 2: VISUALIZACIÓN Y FILTROS ---
 if st.session_state['data_ready']:
@@ -468,7 +415,67 @@ else:
     base_tabs = st.tabs(["Inicio", "6. Clientes Premium", "7. Centro de Gestiones", "8. Configuración"])
 
     with base_tabs[0]:
-        st.markdown(styles.get_welcome_html(), unsafe_allow_html=True)
+        _h = st.session_state.get('_system_health', {})
+        _supa_ok = _h.get('supabase_ok', True)
+        _count   = _h.get('clientes_count', 0)
+        _err     = _h.get('error')
+
+        if wizard_action == "PROCESS_TRIGGERED":
+            # Hubo un error durante la generación — orientar al usuario
+            st.info("Revisa el mensaje de error de arriba y vuelve a intentarlo desde el panel lateral.")
+        elif _supa_ok and _count > 0:
+            _cls, _icon = "ok", "🟢"
+            _title = "Sistema listo para operar"
+            _rows  = [
+                "Supabase conectado correctamente",
+                f"{_count} clientes disponibles en cartera maestra",
+                "Sube los archivos desde el panel lateral para generar un nuevo ciclo",
+            ]
+            _icons = ["✅", "👥", "👈"]
+            _note  = None
+        elif _supa_ok and _count == 0:
+            _cls, _icon = "warn", "🟡"
+            _title = "Supabase conectado — sin clientes registrados"
+            _rows  = [
+                "Conexión a la base de datos: OK",
+                "La cartera maestra de clientes está vacía",
+                "Ve a la pestaña Clientes Premium para registrarlos antes de generar el ciclo",
+            ]
+            _icons = ["✅", "⚠️", "👉"]
+            _note  = "Esto no es un error de la app — es un dato que falta en la base de datos."
+        else:
+            _cls, _icon = "error", "🔴"
+            _title = "Base de datos no disponible"
+            _rows  = [
+                "No se pudo acceder a Supabase correctamente",
+                "Verifica tu conexión a internet y vuelve a intentarlo",
+            ]
+            _icons = ["❌", "⚠️"]
+            _note  = "Esto NO es un error de la app — es un problema de conexión con la base de datos."
+            if _err:
+                _rows.append(f"Detalle técnico: {str(_err)[:120]}")
+                _icons.append("🔧")
+
+        if wizard_action != "PROCESS_TRIGGERED":
+            _rows_html = "".join(
+                f'<div class="antay-health-card__row">{ico}&nbsp; {txt}</div>'
+                for ico, txt in zip(_icons, _rows)
+            )
+            _note_html = (
+                f'<div class="antay-health-card__note">{_note}</div>' if _note else ""
+            )
+            st.markdown(
+                (
+                    f'<div class="antay-health-card antay-health-card--{_cls} antay-animate-in">'
+                    f'<div class="antay-health-card__icon">{_icon}</div>'
+                    f'<div class="antay-health-card__body">'
+                    f'<div class="antay-health-card__title">{_title}</div>'
+                    f'<div class="antay-health-card__rows">{_rows_html}</div>'
+                    f'{_note_html}'
+                    f'</div></div>'
+                ),
+                unsafe_allow_html=True,
+            )
 
     with base_tabs[1]:
         tab_clientes_premium.render_tab(pd.DataFrame(), CONFIG)
