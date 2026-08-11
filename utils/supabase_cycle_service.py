@@ -4,6 +4,7 @@ Servicios de persistencia de ciclo (3 Excel -> Supabase) para ejecución desde U
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict
 
 import pandas as pd
@@ -22,7 +23,7 @@ def persist_cycle_to_supabase(
     df_ctas: pd.DataFrame,
     df_cartera: pd.DataFrame,
     df_cobranza: pd.DataFrame,
-    batch_size: int = 100,
+    batch_size: int = 25,
 ) -> Dict[str, Any]:
     """
     Persiste el ciclo completo en Supabase.
@@ -114,8 +115,24 @@ def persist_cycle_to_supabase(
         }
 
     supabase = wrapper.get_client()
+
+    # Palabras clave que indican error transitorio de red/Supabase (reintentable)
+    _TRANSIENT_KEYS = ("520", "eof", "ssl", "json could not", "connection", "timeout")
+
     try:
-        ok_clientes, msg_clientes = dbm.upsert_clientes_rows(clientes_rows, batch_size=batch_size)
+        # Reintentar upsert de clientes hasta 3 veces ante errores transitorios (520/SSL/EOF)
+        ok_clientes, msg_clientes = False, ""
+        for _attempt in range(3):
+            if _attempt > 0:
+                time.sleep(4 * _attempt)          # 4s · 8s entre reintentos
+                wrapper = SupabaseClient.reset()  # conexión SSL fresca en cada reintento
+                supabase = wrapper.get_client()
+            ok_clientes, msg_clientes = dbm.upsert_clientes_rows(clientes_rows, batch_size=batch_size)
+            if ok_clientes:
+                break
+            if not any(kw in msg_clientes.lower() for kw in _TRANSIENT_KEYS):
+                break  # error permanente — no reintentar
+
         if not ok_clientes:
             return {
                 "ok": False,

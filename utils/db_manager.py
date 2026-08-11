@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -920,7 +921,7 @@ def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
 
     _COLS      = "cliente_id, nombre, email, telefono, dni, ruc, direccion, estado, enviar_email, notas, extra_fields"
     _COLS_MIN  = "cliente_id, nombre, email, telefono, ruc, direccion, estado, notas"
-    _PAGE      = 200
+    _PAGE      = 50
     all_rows: List[Dict[str, Any]] = []
     offset     = 0
 
@@ -1059,9 +1060,11 @@ def upsert_clientes_rows(rows: List[Dict[str, Any]], batch_size: int = 200) -> T
             msg += f" Errores: {errors[:3]}"
         return False, msg
 
-    safe_batch_size = max(int(batch_size or 200), 1)
+    safe_batch_size = max(int(batch_size or 50), 1)
     try:
-        for batch in _chunk_list(normalized_rows, safe_batch_size):
+        for _batch_idx, batch in enumerate(_chunk_list(normalized_rows, safe_batch_size)):
+            if _batch_idx > 0:
+                time.sleep(1)  # pausa entre lotes — evita saturar API Supabase
             fallback_batch = [dict(row) for row in batch]
             while True:
                 try:
