@@ -938,6 +938,7 @@ def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
             row["enviar_email"] = _normalize_cliente_enviar_email(enviar_source)
         return rows
     except Exception as e:
+        _set_last_error(f"get_clientes_master: {e}")
         print(f"get_clientes_master Error: {e}")
         return []
 

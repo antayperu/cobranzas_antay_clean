@@ -137,10 +137,13 @@ if wizard_action == "PROCESS_TRIGGERED":
                 st.write("☁️ Descargando cartera maestra desde Supabase...")
                 cartera_rows = dbm.get_clientes_master(limit=50000)
                 if not cartera_rows:
+                    _detail = dbm.get_last_error()
                     error = (
                         "No hay cartera maestra en Supabase. "
                         "Gestiona o migra clientes en la TAB Clientes Premium y vuelve a procesar."
                     )
+                    if _detail:
+                        error += f" — Detalle: {_detail}"
                     df_cartera_raw = pd.DataFrame()
                 else:
                     df_cartera_raw = pd.DataFrame(cartera_rows).rename(
