@@ -144,6 +144,7 @@ def render_sidebar():
                 )
                 if uploaded_ctas:
                     st.session_state["uploaded_files"]["ctas"] = uploaded_ctas
+                    st.rerun()
 
             st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
@@ -173,6 +174,7 @@ def render_sidebar():
                 )
                 if uploaded_cob:
                     st.session_state["uploaded_files"]["cobranza"] = uploaded_cob
+                    st.rerun()
 
             st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 

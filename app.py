@@ -127,11 +127,14 @@ if wizard_action == "PROCESS_TRIGGERED":
     file_cobranza = st.session_state['uploaded_files']['cobranza']
     
     if file_ctas and file_cobranza:
-        with st.spinner("🚀 Procesando Motor de Datos..."):
+        with st.status("🚀 Generando ciclo nuevo...", expanded=True) as _cycle_status:
             # Flujo oficial: 2 archivos + cartera maestra en Supabase.
             try:
+                st.write("📂 Leyendo archivos Excel...")
                 df_ctas_raw = pd.read_excel(file_ctas)
                 df_cobranza_raw = pd.read_excel(file_cobranza)
+
+                st.write("☁️ Descargando cartera maestra desde Supabase...")
                 cartera_rows = dbm.get_clientes_master(limit=50000)
                 if not cartera_rows:
                     error = (
@@ -154,8 +157,9 @@ if wizard_action == "PROCESS_TRIGGERED":
             except Exception as e_load_2files:
                 df_ctas_raw, df_cartera_raw, df_cobranza_raw = None, None, None
                 error = str(e_load_2files)
-            
+
             if error:
+                _cycle_status.update(label="❌ Error al cargar archivos", state="error")
                 st.error(f"❌ Error de Carga: {error}")
                 st.session_state['data_ready'] = False
             else:
@@ -184,6 +188,7 @@ if wizard_action == "PROCESS_TRIGGERED":
                             'COD CLIENTE': sorted(_missing_codes),
                             'EMPRESA (según CxC)': [_names_map.get(c, '—') for c in sorted(_missing_codes)],
                         })
+                        _cycle_status.update(label="⛔ Error de integridad — clientes faltantes", state="error")
                         st.error(
                             f"⛔ Error de Integridad: {len(_missing_codes)} cliente(s) del archivo CxC "
                             "no están registrados en la tabla maestra de clientes (Supabase)."
@@ -201,31 +206,34 @@ if wizard_action == "PROCESS_TRIGGERED":
                         st.stop()
 
                 try:
+                    st.write("⚙️ Procesando y cruzando datos...")
                     df_final = process_data(df_ctas_raw, df_cartera_raw, df_cobranza_raw)
-                    
+
                     # --- CYCLE_ID: Generar ID único para este ciclo (formato legible) ---
                     from datetime import datetime
                     cycle_id = datetime.now().strftime('CIC-%Y%m%d-%H%M')
-                    
+
                     st.session_state['df_final'] = df_final
                     st.session_state['data_ready'] = True
-                    
+
                     # FIX: Resetear flag de carga nueva después de procesar exitosamente
                     st.session_state['loading_new_files'] = False
-                    
+
                     # Mark as fresh load (for tracking init)
                     st.session_state['fresh_load'] = True
-                    st.session_state['cycle_id'] = cycle_id  # NUEVO: ID de ciclo
-                    
+                    st.session_state['cycle_id'] = cycle_id
+
                     # --- LIMPIEZA TTL: Purgar bloqueos del ciclo anterior ---
-                    # Limpiar TTL del ciclo anterior en Supabase (cloud-only)
+                    st.write("🧹 Preparando ciclo en Supabase...")
                     if not dbm.clear_all_ledger():
                         st.session_state['data_ready'] = False
+                        _cycle_status.update(label="❌ Error al preparar ciclo en Supabase", state="error")
                         st.error("No se pudo preparar el ciclo en Supabase. Operacion bloqueada.")
                         st.caption(dbm.get_last_error() or "Fallo al limpiar control TTL en ledger_last_send.")
                         st.stop()
 
                     # --- PERSISTENCIA DEL CICLO EN SUPABASE (UI -> DB) ---
+                    st.write("💾 Guardando clientes, documentos y cobranzas en Supabase...")
                     persist_result = supabase_cycle_service.persist_cycle_to_supabase(
                         df_ctas=df_ctas_raw,
                         df_cartera=df_cartera_raw,
@@ -233,6 +241,7 @@ if wizard_action == "PROCESS_TRIGGERED":
                     )
                     if not persist_result.get("ok", False):
                         st.session_state['data_ready'] = False
+                        _cycle_status.update(label="❌ Error al guardar ciclo en Supabase", state="error")
                         st.error("No se pudo persistir el ciclo en Supabase. Operacion bloqueada.")
                         st.caption(persist_result.get("message", "Error no especificado en persistencia."))
                         st.stop()
@@ -252,8 +261,7 @@ if wizard_action == "PROCESS_TRIGGERED":
                         )
 
                     # --- RC-FEAT-023: TRAZABILIDAD — reconcile recovery vs ciclo anterior ---
-                    # Lee el ciclo anterior desde Supabase (no session_state) para que
-                    # funcione aunque la app se haya reiniciado entre cargas de ciclos.
+                    st.write("🔍 Verificando trazabilidad con ciclo anterior...")
                     _prev_cycle = dbm.get_prev_cycle_id(cycle_id)
                     if _prev_cycle:
                         _rec_result = dbm.reconcile_ciclo_recovery(
@@ -268,7 +276,6 @@ if wizard_action == "PROCESS_TRIGGERED":
                                 icon="📊",
                             )
 
-                    
                     # Mark session start
                     st.session_state['session_start_ts'] = datetime.now()
 
@@ -277,6 +284,7 @@ if wizard_action == "PROCESS_TRIGGERED":
                     st.session_state['restored_from_cloud'] = False
 
                     # --- GUARDAR SESION EN CLOUD ---
+                    st.write("☁️ Guardando sesión en la nube...")
                     ok_cloud, msg_cloud = state_mgr.save_session_cloud(
                         df=df_final,
                         cycle_id=cycle_id,
@@ -293,15 +301,17 @@ if wizard_action == "PROCESS_TRIGGERED":
                     if not ok_cloud:
                         st.session_state['data_ready'] = False
                         st.session_state['df_final'] = pd.DataFrame()
+                        _cycle_status.update(label="❌ Error al guardar sesión en la nube", state="error")
                         st.error("No se pudo guardar el ciclo en Supabase. Operacion bloqueada.")
                         st.caption(msg_cloud or "Persistencia de ciclo fallida en cloud.")
                         st.stop()
 
                     st.toast("Sesion guardada en la nube", icon="☁️")
-
-                    st.success("✅ Datos procesados exitosamente")
+                    _cycle_status.update(label="✅ Ciclo generado exitosamente", state="complete")
+                    st.session_state['_cycle_just_created'] = cycle_id
                     st.rerun()
                 except Exception as e:
+                    _cycle_status.update(label="❌ Error inesperado en el procesamiento", state="error")
                     st.error(f"❌ Error de Procesamiento: {e}")
                     st.session_state['data_ready'] = False
 
@@ -311,6 +321,10 @@ if wizard_action == "PROCESS_TRIGGERED":
 
 # --- PASO 2: VISUALIZACIÓN Y FILTROS ---
 if st.session_state['data_ready']:
+    _new_cycle_id = st.session_state.pop('_cycle_just_created', None)
+    if _new_cycle_id:
+        st.success(f"✅ Ciclo **{_new_cycle_id}** generado correctamente — los datos están listos para operar.")
+
     df_final = st.session_state['df_final']
     # RC-FIX-SCOPE: Initialize df_filtered safely to avoid NameError if df_final is empty
     df_filtered = pd.DataFrame()

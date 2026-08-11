@@ -56,7 +56,10 @@ if ([string]::IsNullOrWhiteSpace($env:NOTION_TOKEN)) {
 Write-Host "Ambiente: PRODUCCION" -ForegroundColor Green
 Write-Host "SUPABASE_URL: $($env:SUPABASE_URL)"
 Write-Host "Puerto Streamlit: $Port"
+Write-Host ""
 
-Start-Process powershell -ArgumentList 'streamlit run app.py --server.port $Port'
-Start-Sleep -Seconds 2
+Write-Host "Abriendo navegador en http://localhost:$Port ..." -ForegroundColor Cyan
 Start-Process "http://localhost:$Port"
+
+Write-Host "Streamlit corriendo (Ctrl+C para detener)..." -ForegroundColor Yellow
+streamlit run app.py --server.port $Port
