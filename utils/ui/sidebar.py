@@ -59,6 +59,31 @@ def _render_stepper(step: int) -> None:
     )
 
 
+def _render_health_badge() -> None:
+    """Badge compacto de estado del sistema — visible en todos los estados."""
+    _h = st.session_state.get('_system_health', {})
+    _supa_ok = _h.get('supabase_ok', True)
+    _count   = _h.get('clientes_count', 0)
+    if _supa_ok and _count > 0:
+        _badge_cls  = "ok"
+        _badge_text = f"Supabase · {_count} clientes listos"
+    elif _supa_ok:
+        _badge_cls  = "warn"
+        _badge_text = "Conectado · Sin clientes registrados"
+    else:
+        _badge_cls  = "error"
+        _badge_text = "Sin conexión a la base de datos"
+    st.markdown(
+        f"""
+        <div class="sb-health-badge sb-health-badge--{_badge_cls} antay-animate-in">
+            <span class="sb-health-dot"></span>
+            <span>{_badge_text}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_sidebar():
     """Sidebar con progressive disclosure — máximo 4 elementos por estado."""
     with st.sidebar:
@@ -220,6 +245,9 @@ def render_sidebar():
         # ESTADO 3 — Ciclo activo (estado por defecto al abrir la app)
         # ──────────────────────────────────────────────────────────────────
         if data_ready:
+            _render_health_badge()
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
             cycle_id  = st.session_state.get("cycle_id", "—")
             ts        = st.session_state.get("session_start_ts")
             ts_str    = ts.strftime("%d/%m/%Y") if ts else date.today().strftime("%d/%m/%Y")
@@ -264,27 +292,7 @@ def render_sidebar():
         # ──────────────────────────────────────────────────────────────────
 
         # Badge de estado del sistema (conexión + clientes)
-        _h = st.session_state.get('_system_health', {})
-        _supa_ok = _h.get('supabase_ok', True)
-        _count   = _h.get('clientes_count', 0)
-        if _supa_ok and _count > 0:
-            _badge_cls  = "ok"
-            _badge_text = f"Supabase · {_count} clientes listos"
-        elif _supa_ok:
-            _badge_cls  = "warn"
-            _badge_text = "Conectado · Sin clientes registrados"
-        else:
-            _badge_cls  = "error"
-            _badge_text = "Sin conexión a la base de datos"
-        st.markdown(
-            f"""
-            <div class="sb-health-badge sb-health-badge--{_badge_cls} antay-animate-in">
-                <span class="sb-health-dot"></span>
-                <span>{_badge_text}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        _render_health_badge()
         st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
         sessions = _state_mgr.list_sessions_cloud(limit=10)
