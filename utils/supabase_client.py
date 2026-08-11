@@ -69,6 +69,15 @@ class SupabaseClient:
             cls._instance = cls()
         return cls._instance
 
+    @classmethod
+    def reset(cls) -> "SupabaseClient":
+        """Fuerza una reconexión fresca. Usar cuando la conexión SSL se cierra por inactividad."""
+        cls._instance = None
+        cls._initialized = False
+        cls._client = None
+        cls._last_error = None
+        return cls.get_instance()
+
     def is_available(self) -> bool:
         return self._client is not None
 

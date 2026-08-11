@@ -93,7 +93,9 @@ def persist_cycle_to_supabase(
             },
         }
 
-    wrapper = SupabaseClient.get_instance()
+    # Forzar reconexión fresca antes de escribir: la conexión SSL puede haberse
+    # cerrado por inactividad durante el procesamiento local de los archivos Excel.
+    wrapper = SupabaseClient.reset()
     if not wrapper.is_available():
         return {
             "ok": False,
