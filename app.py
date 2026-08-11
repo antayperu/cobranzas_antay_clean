@@ -109,6 +109,10 @@ if not dbm.initialize_db():
     st.caption(dbm.get_last_error() or "Sin detalle tecnico de conexion.")
     st.stop()
 
+# Cache health check una vez por sesión (no bloquea, es rápido)
+if '_system_health' not in st.session_state:
+    st.session_state['_system_health'] = dbm.get_system_health()
+
 # --- CRM: AUTO-RESTORE del último ciclo al abrir la app ---
 # Si Supabase tiene ciclos guardados, el más reciente se carga automáticamente.
 # El gestor llega directamente a los tabs (WA, Email, CRM) sin interacción previa.
@@ -318,9 +322,61 @@ if wizard_action == "PROCESS_TRIGGERED":
                     st.error(f"❌ Error de Procesamiento: {e}")
                     st.session_state['data_ready'] = False
 
-    # Main Area Placeholder if no data
+    # Main Area Placeholder if no data — tarjeta premium de estado del sistema
     if not st.session_state.get('data_ready', False):
-        st.info("👈 Utiliza el panel lateral para cargar tus archivos y comenzar.")
+        _h = st.session_state.get('_system_health', {})
+        _supa_ok  = _h.get('supabase_ok', True)
+        _count    = _h.get('clientes_count', 0)
+        _err      = _h.get('error')
+
+        if _supa_ok and _count > 0:
+            _cls, _icon = "ok", "🟢"
+            _title = "Sistema listo para operar"
+            _rows  = [
+                f"✅&nbsp; Supabase conectado correctamente",
+                f"👥&nbsp; {_count} clientes disponibles en cartera maestra",
+                "👈&nbsp; Sube los archivos desde el panel lateral para generar un nuevo ciclo",
+            ]
+            _note = None
+        elif _supa_ok and _count == 0:
+            _cls, _icon = "warn", "🟡"
+            _title = "Supabase conectado — sin clientes registrados"
+            _rows  = [
+                "✅&nbsp; Conexión a la base de datos: OK",
+                "⚠️&nbsp; La cartera maestra de clientes está vacía",
+                "👉&nbsp; Ve a la pestaña <strong>Clientes Premium</strong> para registrarlos antes de generar el ciclo",
+            ]
+            _note = "Esto no es un error de la app — es un dato que falta en la base de datos."
+        else:
+            _cls, _icon = "error", "🔴"
+            _title = "Base de datos no disponible"
+            _rows  = [
+                "❌&nbsp; No se pudo acceder a Supabase correctamente",
+                "⚠️&nbsp; Verifica tu conexión a internet y vuelve a intentarlo",
+            ]
+            if _err:
+                _rows.append(f"🔧&nbsp; Detalle técnico: <em>{str(_err)[:100]}</em>")
+            _note = "Esto NO es un error de la app — es un problema de conexión con la base de datos. Contacta a soporte si persiste."
+
+        _rows_html = "".join(
+            f'<div class="antay-health-card__row">{r}</div>' for r in _rows
+        )
+        _note_html = (
+            f'<div class="antay-health-card__note">{_note}</div>' if _note else ""
+        )
+        st.markdown(
+            f"""
+            <div class="antay-health-card antay-health-card--{_cls} antay-animate-in">
+                <div class="antay-health-card__icon">{_icon}</div>
+                <div class="antay-health-card__body">
+                    <div class="antay-health-card__title">{_title}</div>
+                    <div class="antay-health-card__rows">{_rows_html}</div>
+                    {_note_html}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 # --- PASO 2: VISUALIZACIÓN Y FILTROS ---
 if st.session_state['data_ready']:

@@ -27,6 +27,24 @@ def get_last_error() -> Optional[str]:
     return _last_error
 
 
+def get_system_health() -> dict:
+    """Lightweight check: Supabase connectivity + client count."""
+    client = get_supabase_client()
+    if not client:
+        return {
+            "supabase_ok": False,
+            "clientes_count": 0,
+            "error": get_last_error() or "No se pudo inicializar el cliente Supabase",
+        }
+    try:
+        res = client.table("clientes").select("cliente_id", count="exact").limit(0).execute()
+        count = res.count if res.count is not None else 0
+        return {"supabase_ok": True, "clientes_count": count, "error": None}
+    except Exception as e:
+        _set_last_error(str(e))
+        return {"supabase_ok": False, "clientes_count": 0, "error": str(e)}
+
+
 def get_supabase_client():
     """Initialize Supabase client lazily."""
     global _client

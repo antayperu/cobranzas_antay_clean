@@ -262,6 +262,31 @@ def render_sidebar():
         # ──────────────────────────────────────────────────────────────────
         # ESTADO 1 — Sin ciclo activo (primer uso o tras "Recuperar ciclo")
         # ──────────────────────────────────────────────────────────────────
+
+        # Badge de estado del sistema (conexión + clientes)
+        _h = st.session_state.get('_system_health', {})
+        _supa_ok = _h.get('supabase_ok', True)
+        _count   = _h.get('clientes_count', 0)
+        if _supa_ok and _count > 0:
+            _badge_cls  = "ok"
+            _badge_text = f"Supabase · {_count} clientes listos"
+        elif _supa_ok:
+            _badge_cls  = "warn"
+            _badge_text = "Conectado · Sin clientes registrados"
+        else:
+            _badge_cls  = "error"
+            _badge_text = "Sin conexión a la base de datos"
+        st.markdown(
+            f"""
+            <div class="sb-health-badge sb-health-badge--{_badge_cls} antay-animate-in">
+                <span class="sb-health-dot"></span>
+                <span>{_badge_text}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
         sessions = _state_mgr.list_sessions_cloud(limit=10)
 
         if sessions:

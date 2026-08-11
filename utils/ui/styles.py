@@ -458,6 +458,103 @@ def load_css():
             font-size: 0.8rem;
         }}
 
+        /* ── System Health Badge — sidebar compact ─────────────────── */
+        .sb-health-badge {{
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 9px 13px;
+            border-radius: 10px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            margin-bottom: 2px;
+        }}
+        .sb-health-badge--ok {{
+            background: rgba(43, 138, 62, 0.18);
+            border: 1px solid rgba(43, 138, 62, 0.42);
+            color: rgba(255, 255, 255, 0.92);
+        }}
+        .sb-health-badge--warn {{
+            background: rgba(230, 119, 0, 0.18);
+            border: 1px solid rgba(230, 119, 0, 0.42);
+            color: rgba(255, 255, 255, 0.92);
+        }}
+        .sb-health-badge--error {{
+            background: rgba(201, 42, 42, 0.20);
+            border: 1px solid rgba(201, 42, 42, 0.42);
+            color: rgba(255, 255, 255, 0.92);
+        }}
+        .sb-health-dot {{
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }}
+        .sb-health-badge--ok .sb-health-dot {{
+            background: #74e89a;
+            box-shadow: 0 0 7px rgba(116, 232, 154, 0.75);
+            animation: pulse-health 2.4s ease-in-out infinite;
+        }}
+        .sb-health-badge--warn .sb-health-dot {{ background: #ffb347; }}
+        .sb-health-badge--error .sb-health-dot {{ background: #ff8080; }}
+
+        @keyframes pulse-health {{
+            0%, 100% {{ opacity: 1; transform: scale(1); }}
+            50% {{ opacity: 0.5; transform: scale(0.80); }}
+        }}
+
+        /* ── System Health Card — área principal ────────────────────── */
+        .antay-health-card {{
+            background: var(--antay-surface);
+            border-radius: 14px;
+            border: 1px solid var(--antay-border);
+            border-left: 4px solid var(--health-accent, {COLORS['success']});
+            box-shadow: 0 8px 24px rgba(16, 42, 67, 0.07);
+            padding: 18px 22px;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 20px;
+        }}
+        .antay-health-card--ok    {{ --health-accent: {COLORS['success']}; }}
+        .antay-health-card--warn  {{ --health-accent: {COLORS['warning']}; }}
+        .antay-health-card--error {{ --health-accent: {COLORS['danger']};  }}
+        .antay-health-card__icon {{
+            font-size: 1.55rem;
+            line-height: 1;
+            flex-shrink: 0;
+            padding-top: 2px;
+        }}
+        .antay-health-card__body {{ flex: 1; }}
+        .antay-health-card__title {{
+            font-family: 'Manrope', sans-serif;
+            font-size: 0.97rem;
+            font-weight: 800;
+            color: var(--antay-text);
+            margin: 0 0 8px 0;
+            letter-spacing: -0.01em;
+        }}
+        .antay-health-card__rows {{
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }}
+        .antay-health-card__row {{
+            font-size: 0.83rem;
+            color: var(--antay-muted);
+            line-height: 1.45;
+        }}
+        .antay-health-card__note {{
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--antay-border);
+            font-size: 0.77rem;
+            color: var(--antay-muted);
+            font-style: italic;
+            line-height: 1.5;
+        }}
+
         .antay-animate-in {{
             animation: antay-fade-up .52s ease-out both;
         }}
