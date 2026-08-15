@@ -1064,7 +1064,7 @@ def upsert_clientes_rows(rows: List[Dict[str, Any]], batch_size: int = 200) -> T
     try:
         for _batch_idx, batch in enumerate(_chunk_list(normalized_rows, safe_batch_size)):
             if _batch_idx > 0:
-                time.sleep(1)  # pausa entre lotes — evita saturar API Supabase
+                time.sleep(0.1)  # pausa mínima entre lotes
             fallback_batch = [dict(row) for row in batch]
             while True:
                 try:

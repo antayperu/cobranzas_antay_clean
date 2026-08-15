@@ -20,6 +20,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+import threading
 
 from utils.processing import process_data
 # utils.excel_export moved to specific tabs
@@ -268,20 +269,22 @@ if wizard_action == "PROCESS_TRIGGERED":
                         )
 
                     # --- RC-FEAT-023: TRAZABILIDAD — reconcile recovery vs ciclo anterior ---
-                    st.write("🔍 Verificando trazabilidad con ciclo anterior...")
                     _prev_cycle = dbm.get_prev_cycle_id(cycle_id)
                     if _prev_cycle:
-                        _rec_result = dbm.reconcile_ciclo_recovery(
-                            cycle_id_anterior=_prev_cycle,
-                            cycle_id_nuevo=cycle_id,
-                        )
-                        if _rec_result.get("ok"):
-                            _s = _rec_result["stats"]
-                            st.toast(
-                                f"🔍 Trazabilidad: {_s.get('docs_recuperados', 0)} docs recuperados "
-                                f"({_s.get('tasa_recuperacion', 0)}%)",
-                                icon="📊",
-                            )
+                        def _reconcile_bg(prev_cid, new_cid):
+                            try:
+                                dbm.reconcile_ciclo_recovery(
+                                    cycle_id_anterior=prev_cid,
+                                    cycle_id_nuevo=new_cid,
+                                )
+                            except Exception:
+                                pass
+
+                        threading.Thread(
+                            target=_reconcile_bg,
+                            args=(_prev_cycle, cycle_id),
+                            daemon=True,
+                        ).start()
 
                     # Mark session start
                     st.session_state['session_start_ts'] = datetime.now()
