@@ -7,8 +7,8 @@
 
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
-| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 042 |
-| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 073 |
+| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 043 |
+| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 083 |
 | **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 004 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
@@ -26,6 +26,11 @@
 
 | ID | Título | Prioridad | Estado | Asignado | Fecha Inicio | Fecha Cierre |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **RC-BUG-083** | Performance generacion ciclo nuevo — batch 100, sleep 0.1s, reconcile en background | **P2** (Medio) | Done ✅ | Claude | 2026-08-15 | 2026-08-15 |
+| **RC-BUG-082b** | Reintento 520 + pausa entre lotes + batch 25 en persist_cycle | **P1** (Alto) | Done ✅ | Claude | 2026-04-04 | 2026-04-04 |
+| **RC-BUG-082** | Reconexion SSL fresca antes de persistir ciclo | **P1** (Alto) | Done ✅ | Claude | 2026-04-04 | 2026-04-04 |
+| **RC-BUG-081** | Tarjeta salud dentro de tab + paginacion clientes | **P2** (Medio) | Done ✅ | Claude | 2026-04-04 | 2026-04-04 |
+| **RC-FEAT-043** | Badge y panel de estado del sistema — sidebar y area principal | **P2** (Medio) | Done ✅ | Claude | 2026-04-04 | 2026-04-04 |
 | **RC-FEAT-042** | Kardex de Cartera + Sección G dual-moneda + Meta de Cobro configurable | **P1** (Alto) | Done ✅ · Gate 3 PASS | Claude | 2026-04-03 | 2026-04-04 |
 | **RC-BUG-074** | Kardex: saldo_inicial_sol del primer ciclo histórico corregido a 0 | **P1** (Alto) | Done ✅ | Claude | 2026-04-03 | 2026-04-04 |
 | **RC-FEAT-039** | Informe Gerencial PDF para Comité de Directorio | **P1** (Alto) | Done ✅ | Claude | 2026-03-24 | 2026-03-28 |
