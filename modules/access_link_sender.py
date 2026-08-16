@@ -11,9 +11,15 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from utils.settings_manager import load_settings
-
 _SECRETS_FILE = os.path.join(PROJECT_ROOT, "email_secrets.json")
+
+
+def _try_load_settings():
+    try:
+        from utils.settings_manager import load_settings
+        return load_settings() or {}
+    except Exception:
+        return {}
 
 
 def _load_secrets_file():
@@ -30,7 +36,7 @@ def _load_secrets_file():
 
 
 def _load_runtime_email_config():
-    settings = load_settings() or {}
+    settings = _try_load_settings()
     smtp_cfg       = settings.get("smtp_config", {})       if isinstance(settings, dict) else {}
     supervisor_cfg = settings.get("supervisor_config", {}) if isinstance(settings, dict) else {}
     server_notif   = settings.get("server_notification", {}) if isinstance(settings, dict) else {}

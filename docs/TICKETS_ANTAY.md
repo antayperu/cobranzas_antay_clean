@@ -16,7 +16,7 @@
 | **RC-SEC** | Seguridad | Manejo de datos sensibles, credenciales. | 000 |
 | **RC-QA** | Calidad | Pruebas, validaciones, checklists. | 002 |
 | **RC-DOC** | Documentación | Guías, manuales, actualización de estados. | 001 |
-| **RC-OPS** | Operación | Configuración, despliegue, limpieza. | 007 |
+| **RC-OPS** | Operación | Configuración, despliegue, limpieza. | 008 |
 
 ## 2. Flujo de Estados
 
@@ -26,6 +26,7 @@
 
 | ID | Título | Prioridad | Estado | Asignado | Fecha Inicio | Fecha Cierre |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **RC-OPS-008** | Reparar venv QA + bat inicio auto-reparable + deploy procedure seguro | **P1** (Alto) | Done ✅ | Claude | 2026-08-16 | 2026-08-16 |
 | **RC-BUG-084** | Eliminar persistencia cobranzas en ciclo nuevo — de 70 a 8 llamadas HTTP | **P1** (Alto) | Done ✅ | Claude | 2026-08-15 | 2026-08-15 |
 | **RC-BUG-083** | Performance generacion ciclo nuevo — batch 100, sleep 0.1s, reconcile en background | **P2** (Medio) | Done ✅ | Claude | 2026-08-15 | 2026-08-15 |
 | **RC-BUG-082b** | Reintento 520 + pausa entre lotes + batch 25 en persist_cycle | **P1** (Alto) | Done ✅ | Claude | 2026-04-04 | 2026-04-04 |

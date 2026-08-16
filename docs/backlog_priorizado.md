@@ -1,7 +1,8 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-08-15
-Version actual: v2.2.2 (RELEASED — RC-BUG-084 Eliminar persistencia cobranzas · de 70 a 8 HTTP calls · ciclo de 45-60s a 5-10s)
+Ultima actualizacion: 2026-08-16
+Version actual: v2.2.3 (RELEASED — RC-OPS-008 Bat QA auto-reparable + venv recovery + deploy procedure seguro)
+Version anterior: v2.2.2 (RC-BUG-084 Eliminar persistencia cobranzas · de 70 a 8 HTTP calls · ciclo de 45-60s a 5-10s · 2026-08-15)
 Version anterior: v2.2.1 (RC-BUG-083 Performance ciclo nuevo · batch 100 · sleep 0.1s · reconcile background · 2026-08-15)
 Version anterior: v2.2.0 (RC-FEAT-042 Kardex + Sección G + Meta Cobro · 162/162 tests · 2026-04-04)
 Estado migracion Supabase: Completada. Todas las fases MIG-000 a MIG-009 + SUPABASE-002 + CONFIG-001 cerradas.
