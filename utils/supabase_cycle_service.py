@@ -11,7 +11,6 @@ import pandas as pd
 
 from scripts.migrate_excel_to_supabase import (
     build_clientes,
-    build_cobranzas,
     build_documentos,
     upsert_records,
 )
@@ -42,15 +41,13 @@ def persist_cycle_to_supabase(
 
         documentos_result = build_documentos(df_ctas, valid_clientes)
         if len(documentos_result) == 3:
-            documentos_rows, documentos_errors, doc_lookup = documentos_result
+            documentos_rows, documentos_errors, _doc_lookup = documentos_result
         elif len(documentos_result) == 2:
             # Compatibilidad defensiva si el helper retorna solo filas+errores.
             documentos_rows, documentos_errors = documentos_result
-            doc_lookup = {}
         else:
             raise ValueError("Formato invalido de salida en build_documentos.")
 
-        cobranzas_rows, cobranzas_errors = build_cobranzas(df_cobranza, doc_lookup)
     except Exception as exc:
         return {
             "ok": False,
@@ -68,12 +65,10 @@ def persist_cycle_to_supabase(
             "errors": {
                 "clientes": len(clientes_errors),
                 "documentos": len(documentos_errors),
-                "cobranzas": len(cobranzas_errors),
             },
             "error_samples": {
                 "clientes": clientes_errors[:10],
                 "documentos": documentos_errors[:10],
-                "cobranzas": cobranzas_errors[:10],
             },
         }
 
@@ -85,12 +80,10 @@ def persist_cycle_to_supabase(
             "errors": {
                 "clientes": len(clientes_errors),
                 "documentos": len(documentos_errors),
-                "cobranzas": len(cobranzas_errors),
             },
             "error_samples": {
                 "clientes": clientes_errors[:10],
                 "documentos": documentos_errors[:10],
-                "cobranzas": cobranzas_errors[:10],
             },
         }
 
@@ -105,12 +98,10 @@ def persist_cycle_to_supabase(
             "errors": {
                 "clientes": len(clientes_errors),
                 "documentos": len(documentos_errors),
-                "cobranzas": len(cobranzas_errors),
             },
             "error_samples": {
                 "clientes": clientes_errors[:10],
                 "documentos": documentos_errors[:10],
-                "cobranzas": cobranzas_errors[:10],
             },
         }
 
@@ -141,12 +132,10 @@ def persist_cycle_to_supabase(
                 "errors": {
                     "clientes": len(clientes_errors),
                     "documentos": len(documentos_errors),
-                    "cobranzas": len(cobranzas_errors),
                 },
                 "error_samples": {
                     "clientes": clientes_errors[:10],
                     "documentos": documentos_errors[:10],
-                    "cobranzas": cobranzas_errors[:10],
                 },
             }
 
@@ -158,13 +147,6 @@ def persist_cycle_to_supabase(
             on_conflict="documento_id",
             batch_size=batch_size,
         )
-        count_cobranzas = upsert_records(
-            supabase=supabase,
-            table="cobranzas",
-            rows=cobranzas_rows,
-            on_conflict="id",
-            batch_size=batch_size,
-        )
     except Exception as exc:
         return {
             "ok": False,
@@ -173,12 +155,10 @@ def persist_cycle_to_supabase(
             "errors": {
                 "clientes": len(clientes_errors),
                 "documentos": len(documentos_errors),
-                "cobranzas": len(cobranzas_errors),
             },
             "error_samples": {
                 "clientes": clientes_errors[:10],
                 "documentos": documentos_errors[:10],
-                "cobranzas": cobranzas_errors[:10],
             },
         }
 
@@ -188,16 +168,13 @@ def persist_cycle_to_supabase(
         "counts": {
             "clientes": count_clientes,
             "documentos": count_documentos,
-            "cobranzas": count_cobranzas,
         },
         "errors": {
             "clientes": len(clientes_errors),
             "documentos": len(documentos_errors),
-            "cobranzas": len(cobranzas_errors),
         },
         "error_samples": {
             "clientes": clientes_errors[:10],
             "documentos": documentos_errors[:10],
-            "cobranzas": cobranzas_errors[:10],
         },
     }
