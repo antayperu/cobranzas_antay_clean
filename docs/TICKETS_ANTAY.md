@@ -8,7 +8,7 @@
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
 | **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 043 |
-| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 083 |
+| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 084 |
 | **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 004 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
@@ -26,6 +26,7 @@
 
 | ID | Título | Prioridad | Estado | Asignado | Fecha Inicio | Fecha Cierre |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **RC-BUG-084** | Eliminar persistencia cobranzas en ciclo nuevo — de 70 a 8 llamadas HTTP | **P1** (Alto) | Done ✅ | Claude | 2026-08-15 | 2026-08-15 |
 | **RC-BUG-083** | Performance generacion ciclo nuevo — batch 100, sleep 0.1s, reconcile en background | **P2** (Medio) | Done ✅ | Claude | 2026-08-15 | 2026-08-15 |
 | **RC-BUG-082b** | Reintento 520 + pausa entre lotes + batch 25 en persist_cycle | **P1** (Alto) | Done ✅ | Claude | 2026-04-04 | 2026-04-04 |
 | **RC-BUG-082** | Reconexion SSL fresca antes de persistir ciclo | **P1** (Alto) | Done ✅ | Claude | 2026-04-04 | 2026-04-04 |
