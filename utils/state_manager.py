@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import datetime
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
@@ -9,6 +10,28 @@ from typing import Any, Dict, List, Optional, Tuple
 CACHE_DIR = ".cache"
 SESSION_FILE = os.path.join(CACHE_DIR, "current_session.parquet")
 META_FILE = os.path.join(CACHE_DIR, "session_meta.txt")
+_CLOUD_CACHE_TTL_SECONDS = 60
+_cloud_cache: Dict[Any, Tuple[float, Any]] = {}
+
+
+def _cache_get(key: Any) -> Any:
+    cached = _cloud_cache.get(key)
+    if not cached:
+        return None
+    cached_at, value = cached
+    if time.time() - cached_at > _CLOUD_CACHE_TTL_SECONDS:
+        _cloud_cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: Any, value: Any) -> Any:
+    _cloud_cache[key] = (time.time(), value)
+    return value
+
+
+def clear_cloud_cache() -> None:
+    _cloud_cache.clear()
 
 
 def ensure_cache_dir():
@@ -216,13 +239,16 @@ def save_session_cloud(
         df_cols = list(df.columns)
         rows = [_df_row_to_doc(df.iloc[i], cycle_id, df_cols) for i in range(len(df))]
 
-        CHUNK = 100
-        for i in range(0, len(rows), CHUNK):
+        CHUNK = 10
+        for idx, i in enumerate(range(0, len(rows), CHUNK)):
+            if idx > 0:
+                time.sleep(0.3)
             _safe_execute(
                 client.table("documentos_ciclo")
                 .insert(rows[i:i + CHUNK])
             )
 
+        clear_cloud_cache()
         return True, f"Sesion guardada en cloud ({len(rows)} filas)."
     except Exception as e:
         print(f"save_session_cloud Error: {e}")
@@ -324,6 +350,10 @@ def list_sessions_cloud(limit: int = 20) -> list:
     if not client:
         return []
     try:
+        cache_key = ("list_sessions_cloud", id(client), int(limit))
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
         from utils.db_manager import _safe_execute
         res = _safe_execute(
             client.table("ciclos_procesamiento")
@@ -350,7 +380,7 @@ def list_sessions_cloud(limit: int = 20) -> list:
                 "file_cobranza": meta.get("file_cobranza") or "—",
                 "fecha_corte":   meta.get("fecha_corte") or "—",
             })
-        return sessions
+        return _cache_set(cache_key, sessions)
     except Exception as e:
         print(f"list_sessions_cloud Error: {e}")
         return []
@@ -419,6 +449,7 @@ def clear_session_cloud() -> bool:
             .delete()
             .neq("cycle_id", "__placeholder__")
         )
+        clear_cloud_cache()
         return True
     except Exception as e:
         print(f"clear_session_cloud Error: {e}")

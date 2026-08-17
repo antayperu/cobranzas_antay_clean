@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import time
 import unicodedata
 import uuid
 from datetime import date, datetime
@@ -211,7 +212,9 @@ def get_column(df: pd.DataFrame, aliases: Sequence[str]) -> Optional[str]:
 
 def upsert_records(supabase, table: str, rows: List[Dict[str, Any]], on_conflict: str, batch_size: int) -> int:
     total = 0
-    for batch in chunked(rows, batch_size):
+    for i, batch in enumerate(chunked(rows, batch_size)):
+        if i > 0:
+            time.sleep(0.5)
         supabase.table(table).upsert(list(batch), on_conflict=on_conflict).execute()
         total += len(batch)
     return total

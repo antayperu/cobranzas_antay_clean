@@ -17,6 +17,29 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 _client = None
 _last_error: Optional[str] = None
+_CACHE_TTL_SECONDS = 60
+_io_cache: Dict[Any, Tuple[float, Any]] = {}
+
+
+def _cache_get(key: Any) -> Any:
+    cached = _io_cache.get(key)
+    if not cached:
+        return None
+    cached_at, value = cached
+    if time.time() - cached_at > _CACHE_TTL_SECONDS:
+        _io_cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: Any, value: Any) -> Any:
+    _io_cache[key] = (time.time(), value)
+    return value
+
+
+def clear_io_cache() -> None:
+    """Invalidate short-lived Supabase read caches after writes."""
+    _io_cache.clear()
 
 
 def _set_last_error(message: Optional[str]) -> None:
@@ -37,10 +60,14 @@ def get_system_health() -> dict:
             "clientes_count": 0,
             "error": get_last_error() or "No se pudo inicializar el cliente Supabase",
         }
+    cache_key = ("system_health", id(client))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         res = client.table("clientes").select("cliente_id", count="exact").limit(0).execute()
         count = res.count if res.count is not None else 0
-        return {"supabase_ok": True, "clientes_count": count, "error": None}
+        return _cache_set(cache_key, {"supabase_ok": True, "clientes_count": count, "error": None})
     except Exception as e:
         _set_last_error(str(e))
         return {"supabase_ok": False, "clientes_count": 0, "error": str(e)}
@@ -159,6 +186,7 @@ def log_attempt(recipient, status, run_id, ledger_key, reason=""):
                         }
                     )
                 )
+                clear_io_cache()
                 return True
             except Exception as e:
                 print(f"Supabase Logging Error: {e}")
@@ -178,6 +206,7 @@ def log_attempt(recipient, status, run_id, ledger_key, reason=""):
         conn.commit()
         conn.close()
         _set_last_error(None)
+        clear_io_cache()
         return True
     except Exception as e:
         _set_last_error(str(e))
@@ -193,6 +222,16 @@ def get_status_map(email_list, target_date_str=None, min_timestamp=None):
     if is_cloud_mode():
         client = get_supabase_client()
         if client:
+            cache_key = (
+                "status_map",
+                id(client),
+                tuple(sorted(str(email).lower() for email in email_list)),
+                str(target_date_str),
+                str(min_timestamp),
+            )
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                return cached
             try:
                 query = client.table("send_attempts").select("recipient, status, timestamp").in_(
                     "recipient", email_list
@@ -211,7 +250,7 @@ def get_status_map(email_list, target_date_str=None, min_timestamp=None):
                 res = _safe_execute(query.order("timestamp", desc=False))
                 cloud_rows = res.data or []
                 if cloud_rows or DB_NAME == "email_ledger.db":
-                    return _process_rows_into_map(cloud_rows)
+                    return _cache_set(cache_key, _process_rows_into_map(cloud_rows))
                 # In tests with custom DB file, fallback to local if cloud is empty.
             except Exception as e:
                 print(f"Supabase Query Error: {e}")
@@ -277,6 +316,10 @@ def get_today_stats():
     if is_cloud_mode():
         client = get_supabase_client()
         if client:
+            cache_key = ("today_stats", id(client), datetime.now().strftime("%Y-%m-%d"))
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                return cached
             try:
                 today_start = datetime.now().strftime("%Y-%m-%d 00:00:00")
                 res = _safe_execute(
@@ -284,9 +327,9 @@ def get_today_stats():
                 )
                 df = pd.DataFrame(res.data or [])
                 if df.empty:
-                    return {"SENT": 0, "FAILED": 0, "BLOCKED": 0}
+                    return _cache_set(cache_key, {"SENT": 0, "FAILED": 0, "BLOCKED": 0})
                 counts = df["status"].value_counts().to_dict()
-                return {s: counts.get(s, 0) for s in ["SENT", "FAILED", "BLOCKED"]}
+                return _cache_set(cache_key, {s: counts.get(s, 0) for s in ["SENT", "FAILED", "BLOCKED"]})
             except Exception:
                 return {"SENT": 0, "FAILED": 0, "BLOCKED": 0}
 
@@ -437,6 +480,7 @@ def persist_notification_event(
 
     try:
         _safe_execute(client.table("notificaciones").insert(payload))
+        clear_io_cache()
         return True
     except Exception as e:
         print(f"persist_notification_event Error: {e}")
@@ -450,6 +494,10 @@ def get_notifications_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
     client = get_supabase_client()
     if not client:
         return []
+    cache_key = ("notifications_by_cycle", id(client), str(cycle_id).strip())
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         res = _safe_execute(
             client.table("notificaciones")
@@ -457,7 +505,7 @@ def get_notifications_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
             .eq("cycle_id", str(cycle_id).strip())
             .order("created_at", desc=False)
         )
-        return res.data or []
+        return _cache_set(cache_key, res.data or [])
     except Exception as e:
         print(f"get_notifications_by_cycle Error: {e}")
         return []
@@ -470,6 +518,10 @@ def get_wa_gestiones_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
     client = get_supabase_client()
     if not client:
         return []
+    cache_key = ("wa_gestiones_by_cycle", id(client), str(cycle_id).strip())
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         res = _safe_execute(
             client.table("gestiones")
@@ -478,7 +530,7 @@ def get_wa_gestiones_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
             .eq("cycle_id", str(cycle_id).strip())
             .order("created_at", desc=False)
         )
-        return res.data or []
+        return _cache_set(cache_key, res.data or [])
     except Exception as e:
         print(f"get_wa_gestiones_by_cycle Error: {e}")
         return []
@@ -554,6 +606,7 @@ def update_estados_email_in_cycle(cycle_id: str, match_keys: list, fecha: str) -
             .eq("cycle_id", str(cycle_id))
             .in_("match_key", [str(mk) for mk in match_keys])
         )
+        clear_io_cache()
         return True
     except Exception as e:
         print(f"update_estados_email_in_cycle Error: {e}")
@@ -574,6 +627,7 @@ def update_estado_whatsapp_in_cycle(cycle_id: str, cliente_ids: list, fecha: str
             .eq("cycle_id", str(cycle_id))
             .in_("cliente_id", [str(c) for c in cliente_ids])
         )
+        clear_io_cache()
         return True
     except Exception as e:
         print(f"update_estado_whatsapp_in_cycle Error: {e}")
@@ -866,6 +920,10 @@ def list_clientes_full(search: str = "", estado: str = "", limit: int = 1000) ->
         return []
 
     try:
+        cache_key = ("list_clientes_full", id(client), str(search), str(estado), int(limit))
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
         try:
             res = _safe_execute(
                 client.table("clientes")
@@ -903,7 +961,7 @@ def list_clientes_full(search: str = "", estado: str = "", limit: int = 1000) ->
             if not enviar_source:
                 enviar_source = row["extra_fields"].get("enviar_email")
             row["enviar_email"] = _normalize_cliente_enviar_email(enviar_source)
-        return _filter_client_rows(rows, search=search, estado=estado)
+        return _cache_set(cache_key, _filter_client_rows(rows, search=search, estado=estado))
     except Exception as e:
         print(f"list_clientes_full Error: {e}")
         return []
@@ -921,11 +979,15 @@ def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
 
     _COLS      = "cliente_id, nombre, email, telefono, dni, ruc, direccion, estado, enviar_email, notas, extra_fields"
     _COLS_MIN  = "cliente_id, nombre, email, telefono, ruc, direccion, estado, notas"
-    _PAGE      = 50
+    _PAGE      = 500
     all_rows: List[Dict[str, Any]] = []
     offset     = 0
 
     try:
+        cache_key = ("clientes_master", id(client), int(limit))
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
         while offset < limit:
             end = offset + _PAGE - 1
             try:
@@ -962,7 +1024,7 @@ def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
             if not enviar_source:
                 enviar_source = row["extra_fields"].get("enviar_email")
             row["enviar_email"] = _normalize_cliente_enviar_email(enviar_source)
-        return all_rows
+        return _cache_set(cache_key, all_rows)
     except Exception as e:
         _set_last_error(f"get_clientes_master: {e}")
         print(f"get_clientes_master Error: {e}")
@@ -1030,6 +1092,7 @@ def update_cliente_fields(
 
     try:
         _safe_execute(client.table("clientes").update(payload).eq("cliente_id", cliente_id_norm))
+        clear_io_cache()
         return True, "Cliente actualizado correctamente."
     except Exception as e:
         print(f"update_cliente_fields Error: {e}")
@@ -1064,7 +1127,7 @@ def upsert_clientes_rows(rows: List[Dict[str, Any]], batch_size: int = 200) -> T
     try:
         for _batch_idx, batch in enumerate(_chunk_list(normalized_rows, safe_batch_size)):
             if _batch_idx > 0:
-                time.sleep(0.1)  # pausa mínima entre lotes
+                time.sleep(0.5)
             fallback_batch = [dict(row) for row in batch]
             while True:
                 try:
@@ -1112,6 +1175,7 @@ def upsert_clientes_rows(rows: List[Dict[str, Any]], batch_size: int = 200) -> T
         message = f"Clientes guardados: {len(normalized_rows)}"
         if errors:
             message += f" | filas ignoradas: {len(errors)}"
+        clear_io_cache()
         return True, message
     except Exception as e:
         print(f"upsert_clientes_rows Error: {e}")
@@ -1130,6 +1194,7 @@ def delete_clientes_by_ids(cliente_ids: Iterable[str]) -> Tuple[bool, str]:
 
     try:
         _safe_execute(client.table("clientes").delete().in_("cliente_id", ids_norm))
+        clear_io_cache()
         return True, f"Clientes eliminados: {len(ids_norm)}"
     except Exception as e:
         print(f"delete_clientes_by_ids Error: {e}")
@@ -1297,6 +1362,7 @@ def insert_gestion(
 
     try:
         _safe_execute(client.table("gestiones").insert(payload))
+        clear_io_cache()
         return True, "Gestion registrada correctamente."
     except Exception as e:
         print(f"insert_gestion Error: {e}")
@@ -1554,6 +1620,7 @@ def insert_acuerdo_pago(
             for c in cuotas
         ]
         _safe_execute(client.table("cuotas_acuerdo").insert(cuotas_payload))
+        clear_io_cache()
         return True, acuerdo_id
     except Exception as e:
         print(f"insert_acuerdo_pago Error: {e}")
@@ -2267,6 +2334,10 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
     client = get_supabase_client()
     if not client:
         return {}
+    cache_key = ("funnel_cobranza", id(client), str(cycle_id or ""))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         # Cartera = clientes ÚNICOS en el ciclo.
         # REGLA: los registros DSP y PAV se excluyen del cálculo de SALDOS y de la cartera
@@ -2441,7 +2512,7 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
         resp_rec = _safe_execute(q_rec.limit(5000))
         recuperados = len({str(r["cliente_id"]).strip() for r in (resp_rec.data or []) if r.get("cliente_id")})
 
-        return {
+        result = {
             "cartera":           cartera,          # cartera notificable — base de KPIs operativos
             "cartera_total":     cartera_total,    # exposición financiera total (incluye especiales)
             "notificados_wa":    notificados_wa,
@@ -2470,6 +2541,7 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
             "notas_total":              notas_total,               # filas NOTA
             "otros_total":              otros_total,               # filas OTRO
         }
+        return _cache_set(cache_key, result)
     except Exception as e:
         print(f"get_funnel_cobranza Error: {e}")
         return {}
@@ -2484,6 +2556,10 @@ def get_efectividad_por_plantilla(cycle_id: Optional[str] = None) -> List[Dict[s
     client = get_supabase_client()
     if not client:
         return []
+    cache_key = ("efectividad_por_plantilla", id(client), str(cycle_id or ""))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         # Los WA masivos se graban en gestiones (tipo_gestion='WHATSAPP', tipo_registro='ENVIO').
         # La plantilla usada queda en metadata->>'template_label'.
@@ -2517,7 +2593,7 @@ def get_efectividad_por_plantilla(cycle_id: Optional[str] = None) -> List[Dict[s
                 plantilla_clientes[plantilla].add(cli)
 
         if not plantilla_totales:
-            return []
+            return _cache_set(cache_key, [])
 
         # Exitosos = gestiones manuales (tipo_registro='GESTION') con resultado EXITOSO en el ciclo.
         # Se cruzan por cliente para determinar cuántos de los enviados con cada plantilla respondieron.
@@ -2539,7 +2615,7 @@ def get_efectividad_por_plantilla(cycle_id: Optional[str] = None) -> List[Dict[s
                 "exitosos": exitosos,
                 "tasa_pct": tasa,
             })
-        return result
+        return _cache_set(cache_key, result)
     except Exception as e:
         print(f"get_efectividad_por_plantilla Error: {e}")
         return []
@@ -2558,6 +2634,10 @@ def get_top_clientes_criticos(n: int = 10, cycle_id: Optional[str] = None, solo_
     client = get_supabase_client()
     if not client:
         return []
+    cache_key = ("top_clientes_criticos", id(client), int(n), str(cycle_id or ""), bool(solo_notificable))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     # Tipos de pedido que son datos basura — excluidos del análisis
     _TIPOS_EXCLUIDOS = {"DSP", "PAV"}
 
@@ -2619,7 +2699,7 @@ def get_top_clientes_criticos(n: int = 10, cycle_id: Optional[str] = None, solo_
             data["docs_count"]  = data["docs_sol"] + data["docs_usd"]
 
         if not cliente_data:
-            return []
+            return _cache_set(cache_key, [])
 
         # Solo gestiones MANUALES del gestor (tipo_registro='GESTION').
         # Los envíos automáticos (tipo_registro='ENVIO') no cuentan como gestión.
@@ -2651,7 +2731,7 @@ def get_top_clientes_criticos(n: int = 10, cycle_id: Optional[str] = None, solo_
         # Ordenar por saldo_sol DESC (referencia principal), igual que PASO 5 ⑫ del SQL.
         # Clientes con saldo solo en USD quedan al final (saldo_sol = 0).
         sorted_clientes = sorted(cliente_data.values(), key=lambda x: -x["saldo_sol"])
-        return sorted_clientes[:n]
+        return _cache_set(cache_key, sorted_clientes[:n])
     except Exception as e:
         print(f"get_top_clientes_criticos Error: {e}")
         return []
@@ -2667,6 +2747,10 @@ def get_kpis_periodo(date_from: str, date_to: str) -> Dict[str, Any]:
     client = get_supabase_client()
     if not client:
         return {}
+    cache_key = ("kpis_periodo", id(client), str(date_from), str(date_to))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         # Gestiones del período — solo gestiones manuales del gestor (tipo_registro='GESTION').
         # Los envíos automáticos del sistema (tipo_registro='ENVIO') se cuentan
@@ -2726,7 +2810,7 @@ def get_kpis_periodo(date_from: str, date_to: str) -> Dict[str, Any]:
         )
         acuerdos_activos = resp_a.count if resp_a else 0
 
-        return {
+        result = {
             "gestiones_total": total_g,
             "exitosos": exitosos,
             "promesas": promesas,
@@ -2738,6 +2822,7 @@ def get_kpis_periodo(date_from: str, date_to: str) -> Dict[str, Any]:
             "tasa_notif_exitosa_pct": tasa_notif,
             "acuerdos_activos": acuerdos_activos,
         }
+        return _cache_set(cache_key, result)
     except Exception as e:
         print(f"get_kpis_periodo Error: {e}")
         return {}

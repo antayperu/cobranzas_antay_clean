@@ -22,7 +22,7 @@ def persist_cycle_to_supabase(
     df_ctas: pd.DataFrame,
     df_cartera: pd.DataFrame,
     df_cobranza: pd.DataFrame,
-    batch_size: int = 100,
+    batch_size: int = 10,
 ) -> Dict[str, Any]:
     """
     Persiste el ciclo completo en Supabase.
