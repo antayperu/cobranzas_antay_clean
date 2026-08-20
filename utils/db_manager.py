@@ -17,7 +17,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 _client = None
 _last_error: Optional[str] = None
-_CACHE_TTL_SECONDS = 60
+_CACHE_TTL_SECONDS = 300
 _io_cache: Dict[Any, Tuple[float, Any]] = {}
 
 
@@ -699,6 +699,11 @@ def get_notifications_report(
         _set_last_error("Supabase no disponible para reporte de notificaciones.")
         return []
 
+    cache_key = ("notifications_report", id(client), str(date_from), str(date_to), str(estado), str(canal), int(limit))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         res = _safe_execute(
             client.table("notificaciones")
@@ -734,7 +739,7 @@ def get_notifications_report(
 
         filtered.append(row)
 
-    return filtered[:limit]
+    return _cache_set(cache_key, filtered[:limit])
 
 
 CLIENTE_ESTADOS_VALIDOS = {"ACTIVO", "INACTIVO", "MOROSO"}
@@ -1383,6 +1388,11 @@ def get_gestiones_list(
         _set_last_error("Supabase no disponible para consultar gestiones.")
         return []
 
+    cache_key = ("gestiones_list", id(client), str(date_from), str(date_to), str(tipo), str(cliente_id), int(limit))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         query = (
             client.table("gestiones")
@@ -1410,7 +1420,7 @@ def get_gestiones_list(
                 filtered.append(row)
             rows = filtered
 
-        return rows
+        return _cache_set(cache_key, rows)
     except Exception as e:
         print(f"get_gestiones_list Error: {e}")
         return []
@@ -1426,6 +1436,10 @@ def get_clientes_nombres_map() -> Dict[str, str]:
     client = get_supabase_client()
     if not client:
         return {}
+    cache_key = ("clientes_nombres_map", id(client))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         res = _safe_execute(
             client.table("clientes")
@@ -1433,11 +1447,11 @@ def get_clientes_nombres_map() -> Dict[str, str]:
             .order("cliente_id")
             .limit(50000)
         )
-        return {
+        return _cache_set(cache_key, {
             str(r["cliente_id"]).strip(): str(r["nombre"]).strip()
             for r in (res.data or [])
             if r.get("cliente_id") and r.get("nombre")
-        }
+        })
     except Exception:
         return {}
 
@@ -1447,6 +1461,11 @@ def get_gestiones_stats() -> Dict[str, Any]:
     client = get_supabase_client()
     if not client:
         return {}
+
+    cache_key = ("gestiones_stats", id(client))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
 
     try:
         res = _safe_execute(
@@ -1470,12 +1489,12 @@ def get_gestiones_stats() -> Dict[str, Any]:
             if str(row.get("fecha", ""))[:10] == today_str:
                 today_count += 1
 
-        return {
+        return _cache_set(cache_key, {
             "total": len(rows),
             "today": today_count,
             "by_tipo": by_tipo,
             "by_resultado": by_resultado,
-        }
+        })
     except Exception as e:
         print(f"get_gestiones_stats Error: {e}")
         return {}
@@ -1486,6 +1505,11 @@ def get_crm_dashboard_stats() -> Dict[str, Any]:
     client = get_supabase_client()
     if not client:
         return {}
+
+    cache_key = ("crm_dashboard_stats", id(client))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
 
     stats: Dict[str, Any] = {
         "last_mass_notification": None,
@@ -1546,7 +1570,7 @@ def get_crm_dashboard_stats() -> Dict[str, Any]:
     except Exception as e:
         print(f"get_crm_dashboard_stats Error: {e}")
 
-    return stats
+    return _cache_set(cache_key, stats)
 
 
 # ---------------------------------------------------------------------------
@@ -3321,6 +3345,10 @@ def get_aging_distribution(cycle_id: str, solo_notificable: bool = False) -> Lis
     client = get_supabase_client()
     if not client:
         return []
+    cache_key = ("aging_distribution", id(client), str(cycle_id), bool(solo_notificable))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         q = (client.table("documentos_ciclo")
              .select("cod_cliente, saldo_real, moneda, dias_mora")
@@ -3383,7 +3411,7 @@ def get_aging_distribution(cycle_id: str, solo_notificable: bool = False) -> Lis
                 "saldo_usd":  round(b["saldo_usd"], 2),
                 "pct_sol":    pct,
             })
-        return result
+        return _cache_set(cache_key, result)
     except Exception as e:
         print(f"get_aging_distribution Error: {e}")
         return []
@@ -3402,6 +3430,10 @@ def get_resumen_gestiones_ciclo(cycle_id: str, solo_notificable: bool = False) -
     client = get_supabase_client()
     if not client:
         return {}
+    cache_key = ("resumen_gestiones_ciclo", id(client), str(cycle_id), bool(solo_notificable))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     try:
         # Obtener set de clientes notificables si aplica el filtro de scope
         clientes_scope: Optional[set] = None
@@ -3470,7 +3502,7 @@ def get_resumen_gestiones_ciclo(cycle_id: str, solo_notificable: bool = False) -
                 float(c.get("monto_cuota") or 0) for c in (resp_c.data or [])
             )
 
-        return {
+        return _cache_set(cache_key, {
             "wa_envios":            wa_envios,
             "email_envios":         email_envios,
             "llamadas":             llamadas,
@@ -3483,7 +3515,7 @@ def get_resumen_gestiones_ciclo(cycle_id: str, solo_notificable: bool = False) -
             "acuerdos_activos":     acuerdos_activos,
             "acuerdos_monto":       round(acuerdos_monto, 2),
             "cuotas_pagadas_monto": round(cuotas_pagadas_monto, 2),
-        }
+        })
     except Exception as e:
         print(f"get_resumen_gestiones_ciclo Error: {e}")
         return {}
