@@ -16,7 +16,21 @@
       "Bash(python -m py_compile app.py utils/session.py utils/state_manager.py)",
       "Bash(python -m py_compile utils/ui/sidebar.py utils/ui/styles.py app.py)",
       "Bash(python -m pytest tests/ -q)",
-      "Bash(python -m py_compile c:/dev/ReporteCobranzas/utils/db_manager.py)"
+      "Bash(python -m py_compile c:/dev/ReporteCobranzas/utils/db_manager.py)",
+      "Bash(powershell.exe -Command \"Get-ChildItem ''c:\\\\dev\\\\ReporteCobranzas'' -Filter ''.env*'' -Force | Select-Object Name\")",
+      "Bash(powershell.exe -Command \"Get-Content ''c:\\\\dev\\\\ReporteCobranzas\\\\.env'' | Select-String ''SUPABASE_URL''\")",
+      "Bash(powershell.exe -Command \"Get-Content ''c:\\\\dev\\\\ReporteCobranzas\\\\.env'' | Select-String ''SERVICE_ROLE''\")",
+      "Bash(py migrate_historical.py --dry-run)",
+      "Bash(py migrate_historical.py)",
+      "Read(///QA/antay-cobranza//**)",
+      "Bash(cp \"c:/dev/ReporteCobranzas/utils/db_manager.py\" \"//QA/antay-cobranza/utils/db_manager.py\")",
+      "Bash(cp \"c:/dev/ReporteCobranzas/utils/pdf_report.py\" \"//QA/antay-cobranza/utils/pdf_report.py\")",
+      "Bash(cp \"c:/dev/ReporteCobranzas/utils/ui/tabs/report_generator.py\" \"//QA/antay-cobranza/utils/ui/tabs/report_generator.py\")",
+      "Bash(cp \"c:/dev/ReporteCobranzas/sql/106_create_kardex_cartera.sql\" \"//QA/antay-cobranza/sql/106_create_kardex_cartera.sql\")",
+      "Bash(cp \"c:/dev/ReporteCobranzas/sql/107_auditoria_kardex.sql\" \"//QA/antay-cobranza/sql/107_auditoria_kardex.sql\")",
+      "Bash(\"//QA/antay-cobranza/venv_prod/Scripts/pip.exe\" install:*)",
+      "Read(///QA/antay-cobranza/venv_prod/**)",
+      "Bash(\"//QA/antay-cobranza/venv_prod/Scripts/python.exe\" -m pip install matplotlib)"
     ]
   }
 }

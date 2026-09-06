@@ -32,7 +32,9 @@
       "Bash(ls *.xlsx)",
       "Bash(ls *.log *.db)",
       "Bash(ls docs/FRD_*.md docs/FRD_*.pdf)",
-      "Bash(ls docs/EVIDENCIA_*.md)"
+      "Bash(ls docs/EVIDENCIA_*.md)",
+      "Bash(start c:/dev/ReporteCobranzas/reports/test_mejoras_v5.pdf)",
+      "Bash(start c:/dev/ReporteCobranzas/reports/test_formato_v6.pdf)"
     ],
     "additionalDirectories": [
       "C:\\Users\\corte\\.claude\\plugins\\cache\\anthropic-agent-skills\\document-skills\\887114fd09f8\\skills\\cobranza-expert",

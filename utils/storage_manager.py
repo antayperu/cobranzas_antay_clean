@@ -13,7 +13,7 @@ import mimetypes
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 import utils.helpers as helpers
 from utils.supabase_client import SupabaseClient
@@ -28,6 +28,7 @@ DEFAULT_BUCKETS = (
     (EXPORTS_BUCKET, False),
     (WHATSAPP_IMAGES_BUCKET, False),
 )
+_bucket_cache: Dict[int, Set[str]] = {}
 
 
 class StorageUnavailableError(RuntimeError):
@@ -59,15 +60,20 @@ def _get_storage_client(required: bool = True):
 
 def ensure_bucket(bucket_name: str, public: bool = False) -> Dict[str, Any]:
     storage = _get_storage_client(required=True)
-    existing = {
-        getattr(bucket, "id", None) or str(bucket.get("id"))
-        for bucket in storage.list_buckets()
-    }
+    cache_key = id(storage)
+    existing = _bucket_cache.get(cache_key)
+    if existing is None:
+        existing = {
+            getattr(bucket, "id", None) or str(bucket.get("id"))
+            for bucket in storage.list_buckets()
+        }
+        _bucket_cache[cache_key] = existing
 
     if bucket_name in existing:
         return {"ok": True, "created": False, "bucket": bucket_name}
 
     storage.create_bucket(bucket_name, options={"public": public})
+    existing.add(bucket_name)
     return {"ok": True, "created": True, "bucket": bucket_name}
 
 
@@ -186,6 +192,8 @@ def resolve_logo_path(config: Dict[str, Any], target_local_path: Optional[str] =
     output_path = Path(
         target_local_path or os.path.join(os.getcwd(), "assets", "logo_dacta_processed.png")
     )
+    if output_path.exists():
+        return str(output_path)
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         file_bytes = storage.from_(bucket).download(_normalize_storage_path(storage_path))
