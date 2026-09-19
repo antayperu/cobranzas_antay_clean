@@ -80,7 +80,7 @@ def get_supabase_client():
         try:
             from supabase import create_client, ClientOptions
 
-            options = ClientOptions(postgrest_client_timeout=10)
+            options = ClientOptions(postgrest_client_timeout=60)
             _client = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
             _set_last_error(None)
         except Exception as e:
@@ -996,14 +996,9 @@ def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
             return cached
         while offset < limit:
             end = offset + _PAGE - 1
-            try:
-                res = _safe_execute(
-                    client.table("clientes").select(_COLS).order("cliente_id").range(offset, end)
-                )
-            except Exception:
-                res = _safe_execute(
-                    client.table("clientes").select(_COLS_MIN).order("cliente_id").range(offset, end)
-                )
+            res = _safe_execute(
+                client.table("clientes").select(_COLS).order("cliente_id").range(offset, end)
+            )
             batch = list(res.data or [])
             all_rows.extend(batch)
             if len(batch) < _PAGE:

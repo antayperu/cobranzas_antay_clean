@@ -49,7 +49,7 @@ class SupabaseClient:
             try:
                 from supabase import create_client, ClientOptions
 
-                options = ClientOptions(postgrest_client_timeout=10)
+                options = ClientOptions(postgrest_client_timeout=60)
                 self._client = create_client(supabase_url, supabase_key, options=options)
                 self._last_error = None
                 print("SUCCESS: Supabase client initialized successfully.")
