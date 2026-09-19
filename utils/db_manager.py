@@ -78,9 +78,10 @@ def get_supabase_client():
     global _client
     if _client is None and SUPABASE_URL and SUPABASE_KEY:
         try:
-            from supabase import create_client
+            from supabase import create_client, ClientOptions
 
-            _client = create_client(SUPABASE_URL, SUPABASE_KEY)
+            options = ClientOptions(postgrest_client_timeout=10)
+            _client = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
             _set_last_error(None)
         except Exception as e:
             _set_last_error(f"Supabase Init Error: {e}")

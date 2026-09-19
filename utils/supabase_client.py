@@ -47,9 +47,10 @@ class SupabaseClient:
                 return
 
             try:
-                from supabase import create_client
+                from supabase import create_client, ClientOptions
 
-                self._client = create_client(supabase_url, supabase_key)
+                options = ClientOptions(postgrest_client_timeout=10)
+                self._client = create_client(supabase_url, supabase_key, options=options)
                 self._last_error = None
                 print("SUCCESS: Supabase client initialized successfully.")
             except ImportError:
