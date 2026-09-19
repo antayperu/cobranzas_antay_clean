@@ -12,6 +12,8 @@ load_dotenv()
 
 
 DB_NAME = "email_ledger.db"
+NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL")
+# Mantenemos estas vars para compatibilidad con código que las lee directamente
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -52,13 +54,13 @@ def get_last_error() -> Optional[str]:
 
 
 def get_system_health() -> dict:
-    """Lightweight check: Supabase connectivity + client count."""
+    """Lightweight check: Neon connectivity + client count."""
     client = get_supabase_client()
     if not client:
         return {
             "supabase_ok": False,
             "clientes_count": 0,
-            "error": get_last_error() or "No se pudo inicializar el cliente Supabase",
+            "error": get_last_error() or "No se pudo inicializar el cliente de base de datos",
         }
     cache_key = ("system_health", id(client))
     cached = _cache_get(cache_key)
@@ -74,23 +76,44 @@ def get_system_health() -> dict:
 
 
 def get_supabase_client():
-    """Initialize Supabase client lazily."""
+    """Retorna cliente de BD (Neon via NeonClient, compatible con API supabase-py)."""
     global _client
-    if _client is None and SUPABASE_URL and SUPABASE_KEY:
-        try:
-            from supabase import create_client, ClientOptions
-
-            options = ClientOptions(postgrest_client_timeout=60)
-            _client = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
-            _set_last_error(None)
-        except Exception as e:
-            _set_last_error(f"Supabase Init Error: {e}")
-            print(f"Supabase Init Error: {e}")
+    if _client is None:
+        if NEON_DATABASE_URL:
+            try:
+                from utils.neon_client import NeonClient
+                neon = NeonClient.get_instance()
+                if neon and neon.is_available():
+                    _client = neon
+                    _set_last_error(None)
+                    print("SUCCESS: Neon client initialized successfully.")
+                else:
+                    err = neon.get_last_error() if neon else "No NEON_DATABASE_URL"
+                    _set_last_error(f"Neon Init Error: {err}")
+                    print(f"Neon Init Error: {err}")
+            except Exception as e:
+                _set_last_error(f"Neon Init Error: {e}")
+                print(f"Neon Init Error: {e}")
+        elif SUPABASE_URL and SUPABASE_KEY:
+            # Fallback a Supabase si no hay URL de Neon (compatibilidad)
+            try:
+                from supabase import create_client, ClientOptions
+                options = ClientOptions(postgrest_client_timeout=60)
+                _client = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
+                _set_last_error(None)
+            except Exception as e:
+                try:
+                    from supabase import create_client
+                    _client = create_client(SUPABASE_URL, SUPABASE_KEY)
+                    _set_last_error(None)
+                except Exception as e2:
+                    _set_last_error(f"Supabase Init Error: {e2}")
+                    print(f"Supabase Init Error: {e2}")
     return _client
 
 
 def is_cloud_mode() -> bool:
-    return bool(SUPABASE_URL and SUPABASE_KEY)
+    return bool(NEON_DATABASE_URL or (SUPABASE_URL and SUPABASE_KEY))
 
 
 def initialize_db() -> bool:
