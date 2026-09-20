@@ -1,20 +1,21 @@
 -- Setup completo de base de datos Supabase
 -- Sistema de Cobranzas Antay
--- Fecha: 2026-02-05
+-- Fecha: 2026-02-15
 --
 -- INSTRUCCIONES:
 -- 1. Conectarse a Supabase Dashboard
 -- 2. Ir a SQL Editor
 -- 3. Ejecutar este script completo
--- 4. Verificar que las 4 tablas se crearon correctamente
+-- 4. Verificar que las 6 tablas se crearon correctamente
 --
--- ORDEN DE EJECUCIÓN:
--- - Función helper (update_updated_at_column)
--- - Tablas en orden: clientes -> documentos -> cobranzas -> notificaciones
--- - Índices y triggers para cada tabla
+-- ORDEN DE EJECUCION:
+-- - Funcion helper (update_updated_at_column)
+-- - Tablas dominio: clientes -> documentos -> cobranzas -> notificaciones
+-- - Tablas tracking: ledger_last_send -> send_attempts
+-- - Indices y triggers para cada tabla
 
 -- =====================================================
--- PASO 1: Crear función helper para triggers
+-- PASO 1: Crear funcion helper para triggers
 -- =====================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -45,21 +46,42 @@ $$ LANGUAGE plpgsql;
 \i 04_create_notificaciones.sql
 
 -- =====================================================
--- VERIFICACIÓN FINAL
+-- PASO 6: Crear tablas TRACKING (ledger/send_attempts)
+-- =====================================================
+\i 05_create_tracking_tables.sql
+
+-- =====================================================
+-- PASO 7: Seguridad operacional (RLS + politicas)
+-- =====================================================
+\i 06_enable_rls_policies.sql
+
+-- =====================================================
+-- VERIFICACION FINAL
 -- =====================================================
 -- Ejecutar para verificar que todas las tablas existen:
 SELECT table_name
 FROM information_schema.tables
 WHERE table_schema = 'public'
-  AND table_name IN ('clientes', 'documentos', 'cobranzas', 'notificaciones')
+  AND table_name IN (
+      'clientes',
+      'documentos',
+      'cobranzas',
+      'notificaciones',
+      'ledger_last_send',
+      'send_attempts'
+  )
 ORDER BY table_name;
 
--- Mostrar resumen de registros (debería estar todo en 0 inicialmente)
+-- Mostrar resumen de registros (deberia estar todo en 0 inicialmente)
 SELECT
-    'clientes' as tabla, COUNT(*) as registros FROM clientes
+    'clientes' AS tabla, COUNT(*) AS registros FROM clientes
 UNION ALL
 SELECT 'documentos', COUNT(*) FROM documentos
 UNION ALL
 SELECT 'cobranzas', COUNT(*) FROM cobranzas
 UNION ALL
-SELECT 'notificaciones', COUNT(*) FROM notificaciones;
+SELECT 'notificaciones', COUNT(*) FROM notificaciones
+UNION ALL
+SELECT 'ledger_last_send', COUNT(*) FROM ledger_last_send
+UNION ALL
+SELECT 'send_attempts', COUNT(*) FROM send_attempts;

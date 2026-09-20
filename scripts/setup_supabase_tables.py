@@ -71,7 +71,9 @@ def main():
         'sql/01_create_clientes.sql',
         'sql/02_create_documentos.sql',
         'sql/03_create_cobranzas.sql',
-        'sql/04_create_notificaciones.sql'
+        'sql/04_create_notificaciones.sql',
+        'sql/05_create_tracking_tables.sql',
+        'sql/06_enable_rls_policies.sql'
     ]
 
     # Ejecutar cada archivo
@@ -94,7 +96,7 @@ def main():
         print("1. Ir a https://gnsetbdjxbtaqchdhgpi.supabase.co")
         print("2. SQL Editor > New Query")
         print("3. Copiar contenido de cada archivo .sql")
-        print("4. Ejecutar en orden: 01, 02, 03, 04")
+        print("4. Ejecutar en orden: 01, 02, 03, 04, 05")
         print("="*60)
         return 1
 

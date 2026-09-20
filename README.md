@@ -42,7 +42,7 @@ Cuando el usuario diga "Conéctate a la metodología Antay", debes:
 ## 📚 Documentación
 
 - Ver carpeta `docs/` para documentación detallada
-- Metodología completa en [Notion](https://www.notion.so/Antay-F-brica-de-Software-2377544a512b80048f40e7cd8568c09c)
+- Metodología completa en [Notion](https://www.notion.so/Antay-F-brica-de-Software-2377544a512b804db020d8e8b62fd00d)
 
 ---
 

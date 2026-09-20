@@ -74,7 +74,9 @@ def main():
         'sql/01_create_clientes.sql',
         'sql/02_create_documentos.sql',
         'sql/03_create_cobranzas.sql',
-        'sql/04_create_notificaciones.sql'
+        'sql/04_create_notificaciones.sql',
+        'sql/05_create_tracking_tables.sql',
+        'sql/06_enable_rls_policies.sql'
     ]
 
     for sql_file in sql_files:
