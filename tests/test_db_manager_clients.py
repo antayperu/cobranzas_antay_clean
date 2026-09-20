@@ -26,6 +26,10 @@ class _FakeTableClientes:
         self.query["limit"] = value
         return self
 
+    def range(self, start, end):
+        self.query["range"] = (start, end)
+        return self
+
     def update(self, payload):
         self.payload = payload
         return self

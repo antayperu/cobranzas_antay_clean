@@ -173,9 +173,12 @@ if wizard_action == "PROCESS_TRIGGERED":
             else:
                 # ── VALIDACIÓN DE INTEGRIDAD: todos los COD CLIENTE del CxC deben existir en clientes ──
                 if 'codcli' in df_ctas_raw.columns:
-                    _cxc_codes = set(
-                        df_ctas_raw['codcli'].astype(str).str.strip().str.zfill(6)
-                    )
+                    def _fmt_codcli(v):
+                        try:
+                            return str(int(float(str(v).strip()))).zfill(6)
+                        except (ValueError, TypeError):
+                            return None
+                    _cxc_codes = set(filter(None, df_ctas_raw['codcli'].apply(_fmt_codcli)))
                     _clientes_codes = set(
                         str(r['cliente_id']).strip()
                         for r in cartera_rows
@@ -188,7 +191,8 @@ if wizard_action == "PROCESS_TRIGGERED":
                         if 'nomcli' in df_ctas_raw.columns:
                             _names_map = (
                                 df_ctas_raw
-                                .assign(_cod=df_ctas_raw['codcli'].astype(str).str.strip().str.zfill(6))
+                                .assign(_cod=df_ctas_raw['codcli'].apply(_fmt_codcli))
+                                .dropna(subset=['_cod'])
                                 .groupby('_cod')['nomcli'].first()
                                 .to_dict()
                             )
@@ -199,7 +203,7 @@ if wizard_action == "PROCESS_TRIGGERED":
                         _cycle_status.update(label="⛔ Error de integridad — clientes faltantes", state="error")
                         st.error(
                             f"⛔ Error de Integridad: {len(_missing_codes)} cliente(s) del archivo CxC "
-                            "no están registrados en la tabla maestra de clientes (Supabase)."
+                            "no están registrados en la tabla maestra de clientes."
                         )
                         st.warning(
                             "El proceso ha sido **cancelado**. Ve a la pestaña **Clientes Premium → Importar** "
