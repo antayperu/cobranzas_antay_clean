@@ -151,8 +151,8 @@ def render_help_center():
     st.caption("💡 Puedes consultar: inicio, conexión, clientes, configuración o cómo cargar un ciclo.")
 
 
-# --- VISTA NORMAL ---
-if st.session_state.get("help_panel_visible", True):
+# --- PANTALLA DE INICIO: solo cuando no hay ciclo activo ---
+if st.session_state.get("help_panel_visible", True) and not st.session_state.get("data_ready", False):
     render_help_center()
 
 # --- CLOUD-ONLY: remove stale local cache/session artifacts ---

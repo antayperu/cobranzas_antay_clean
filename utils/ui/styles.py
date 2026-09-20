@@ -17,6 +17,79 @@ COLORS = {
 }
 
 
+HELP_PANEL_CSS = """
+    .antay-help-shell {
+        background: linear-gradient(180deg, rgba(11,114,133,0.06), rgba(13,59,102,0.02));
+        border: 1px solid rgba(13,59,102,0.12);
+        border-radius: 18px;
+        padding: 1rem 1.1rem;
+        box-shadow: 0 10px 26px rgba(16,42,67,0.06);
+        margin-bottom: 1.1rem;
+    }
+
+    .antay-help-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.8rem;
+    }
+
+    .antay-help-title {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: var(--antay-primary);
+        margin: 0;
+    }
+
+    .antay-help-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.22rem 0.6rem;
+        border-radius: 999px;
+        background: rgba(11,114,133,0.10);
+        color: var(--antay-accent);
+        border: 1px solid rgba(11,114,133,0.18);
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
+    .antay-help-quick {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.9rem;
+    }
+
+    .antay-help-qbtn {
+        border-radius: 999px !important;
+        background: #eef6ff !important;
+        color: var(--antay-primary) !important;
+        border: 1px solid rgba(13,59,102,0.18) !important;
+        font-weight: 700 !important;
+        padding: 0.40rem 0.85rem !important;
+    }
+
+    .antay-help-answer {
+        background: rgba(255,255,255,0.78);
+        border: 1px solid rgba(13,59,102,0.10);
+        border-radius: 14px;
+        padding: 0.85rem 0.95rem;
+        color: var(--antay-text);
+    }
+
+    .antay-help-answer strong {
+        color: var(--antay-primary);
+    }
+
+    .antay-help-cta {
+        color: var(--antay-muted);
+        font-size: 0.8rem;
+        margin-top: 0.45rem;
+    }
+    """
+
+
 def load_css():
     """Inject enterprise CSS for app, sidebar and premium cards."""
     css = f"""
@@ -67,6 +140,31 @@ def load_css():
 
         [data-testid="stSidebarContent"] {{
             padding-top: 1.2rem;
+        }}
+
+        /* Botón de contraer/expandir sidebar — visible sobre fondo oscuro */
+        [data-testid="stSidebarCollapseButton"] button {{
+            background: rgba(255, 255, 255, 0.14) !important;
+            border-radius: 8px !important;
+            color: #e5efff !important;
+            border: 1px solid rgba(255,255,255,0.18) !important;
+        }}
+        [data-testid="stSidebarCollapseButton"] button:hover {{
+            background: rgba(255, 255, 255, 0.26) !important;
+        }}
+        [data-testid="stSidebarCollapseButton"] button svg {{
+            fill: #e5efff !important;
+            stroke: #e5efff !important;
+        }}
+        /* Botón para re-expandir cuando sidebar está colapsado */
+        [data-testid="collapsedControl"] {{
+            background: var(--antay-primary) !important;
+            border-radius: 0 8px 8px 0 !important;
+            box-shadow: 2px 0 8px rgba(13,59,102,0.25) !important;
+        }}
+        [data-testid="collapsedControl"] svg {{
+            fill: #ffffff !important;
+            stroke: #ffffff !important;
         }}
 
         [data-testid="stSidebar"] .stMarkdown h1,
@@ -172,6 +270,9 @@ def load_css():
         [data-testid="stFileUploaderDeleteBtn"] svg {{
             fill: rgba(255, 255, 255, 0.7) !important;
         }}
+
+        /* ── Asistente de ayuda ─────────────────────────────────────────── */
+        {HELP_PANEL_CSS}
 
         /* ── Sidebar progressive disclosure components ─────────────────── */
 
