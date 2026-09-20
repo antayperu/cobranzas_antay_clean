@@ -434,7 +434,7 @@ else:
             _cls, _icon = "ok", "🟢"
             _title = "Sistema listo para operar"
             _rows  = [
-                "Supabase conectado correctamente",
+                "Base de datos conectada correctamente",
                 f"{_count} clientes disponibles en cartera maestra",
                 "Sube los archivos desde el panel lateral para generar un nuevo ciclo",
             ]
@@ -442,7 +442,7 @@ else:
             _note  = None
         elif _supa_ok and _count == 0:
             _cls, _icon = "warn", "🟡"
-            _title = "Supabase conectado — sin clientes registrados"
+            _title = "Base de datos conectada — sin clientes registrados"
             _rows  = [
                 "Conexión a la base de datos: OK",
                 "La cartera maestra de clientes está vacía",
@@ -454,7 +454,7 @@ else:
             _cls, _icon = "error", "🔴"
             _title = "Base de datos no disponible"
             _rows  = [
-                "No se pudo acceder a Supabase correctamente",
+                "No se pudo acceder a la base de datos",
                 "Verifica tu conexión a internet y vuelve a intentarlo",
             ]
             _icons = ["❌", "⚠️"]
