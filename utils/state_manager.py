@@ -202,13 +202,13 @@ def save_session_cloud(
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Tuple[bool, str]:
     """
-    Guarda un ciclo en Supabase usando modelo cabecera/detalle:
+    Guarda un ciclo en BD local usando modelo cabecera/detalle:
     - UPSERT en ciclos_procesamiento (solo metadatos)
     - DELETE + INSERT en documentos_ciclo (una fila por documento del Excel)
     """
     client = _get_supabase()
     if not client:
-        return False, "Supabase no disponible para guardar sesion."
+        return False, "Base de datos no disponible para guardar sesion."
 
     try:
         from utils.db_manager import _safe_execute
@@ -223,17 +223,21 @@ def save_session_cloud(
                 datetime.datetime.now() + datetime.timedelta(days=30)
             ).isoformat(),
         }
-        _safe_execute(
+        res_header = _safe_execute(
             client.table("ciclos_procesamiento")
             .upsert(header, on_conflict="cycle_id")
         )
+        if res_header.error:
+            return False, f"Error al guardar cabecera del ciclo: {res_header.error}"
 
         # 2. Borrar documentos previos del ciclo (permite re-guardar limpio)
-        _safe_execute(
+        res_del = _safe_execute(
             client.table("documentos_ciclo")
             .delete()
             .eq("cycle_id", cycle_id)
         )
+        if res_del.error:
+            return False, f"Error al limpiar documentos previos: {res_del.error}"
 
         # 3. Insertar documentos en lotes
         df_cols = list(df.columns)
@@ -243,20 +247,22 @@ def save_session_cloud(
         for idx, i in enumerate(range(0, len(rows), CHUNK)):
             if idx > 0:
                 time.sleep(0.3)
-            _safe_execute(
+            res_ins = _safe_execute(
                 client.table("documentos_ciclo")
                 .insert(rows[i:i + CHUNK])
             )
+            if res_ins.error:
+                return False, f"Error al insertar documentos (lote {idx + 1}): {res_ins.error}"
 
         clear_cloud_cache()
-        return True, f"Sesion guardada en cloud ({len(rows)} filas)."
+        return True, f"Sesion guardada en base de datos ({len(rows)} filas)."
     except Exception as e:
         print(f"save_session_cloud Error: {e}")
-        return False, f"Error guardando sesion cloud: {e}"
+        return False, f"Error guardando sesion: {e}"
 
 
 def load_session_cloud() -> Tuple[Optional[pd.DataFrame], Optional[Dict], Optional[datetime.datetime]]:
-    """Carga el ciclo más reciente desde Supabase usando documentos_ciclo."""
+    """Carga el ciclo más reciente desde la BD local usando documentos_ciclo."""
     client = _get_supabase()
     if not client:
         return None, None, None
@@ -271,6 +277,9 @@ def load_session_cloud() -> Tuple[Optional[pd.DataFrame], Optional[Dict], Option
             .order("created_at", desc=True)
             .limit(1)
         )
+        if res.error:
+            print(f"load_session_cloud Error (cabecera): {res.error}")
+            return None, None, None
         rows = res.data or []
         if not rows:
             return None, None, None
@@ -294,6 +303,9 @@ def load_session_cloud() -> Tuple[Optional[pd.DataFrame], Optional[Dict], Option
             .eq("cycle_id", cycle_id)
             .order("created_at", desc=False)
         )
+        if doc_res.error:
+            print(f"load_session_cloud Error (documentos): {doc_res.error}")
+            return None, None, None
         doc_rows = doc_res.data or []
         if not doc_rows:
             return None, None, None

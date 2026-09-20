@@ -147,7 +147,7 @@ def render(df_final, config):
             try:
                 status_map = dbm.get_status_map(unique_emails)
             except Exception as e:
-                st.error("No se pudo sincronizar tracking de envio desde Supabase.")
+                st.error("No se pudo sincronizar tracking de envio desde la base de datos.")
                 st.caption(str(e))
                 status_map = {}
             
@@ -222,7 +222,7 @@ def render(df_final, config):
                     f"Backup Storage: {upload_info['bucket']}/{upload_info['path']}"
                 )
             except Exception as e_storage:
-                st.warning("No se pudo guardar copia del export en Supabase Storage.")
+                st.warning("No se pudo guardar copia del export en la base de datos.")
                 st.caption(str(e_storage))
     
     return df_filtered

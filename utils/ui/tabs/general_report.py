@@ -1,13 +1,10 @@
 import streamlit as st
 import pandas as pd
-import hashlib
 import utils.db_manager as dbm
 import utils.ui.styles as styles
 import utils.ui.report_view as ui_report
 import utils.helpers as helpers
-import utils.storage_manager as storage_mgr
 from utils.excel_export import build_export_dataframe, generate_excel
-from datetime import datetime
 
 
 def _normalize_enviar_email(value) -> str:
@@ -94,7 +91,7 @@ def render_tab(df_final, config):
         c_adv1, c_adv2, c_adv3 = st.columns([2, 1, 1])
         
         with c_adv1:
-            tipos_pedido = sorted(df_final['TIPO PEDIDO'].astype(str).unique().tolist())
+            tipos_pedido = sorted(str(x) for x in df_final['TIPO PEDIDO'].unique() if pd.notna(x))
             default_tipos = [t for t in tipos_pedido if t not in ['PAV', 'DSP']]
             sel_tipo_pedido = st.multiselect("Tipo Pedido", tipos_pedido, default=default_tipos)
         
@@ -197,7 +194,7 @@ def render_tab(df_final, config):
             try:
                 status_map = dbm.get_status_map(unique_emails)
             except Exception as e:
-                st.error("No se pudo sincronizar tracking de envio desde Supabase.")
+                st.error("No se pudo sincronizar tracking de envío desde la base de datos.")
                 st.caption(str(e))
                 status_map = {}
         
@@ -264,21 +261,4 @@ def render_tab(df_final, config):
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    if download_clicked:
-        export_digest = hashlib.sha1(excel_data).hexdigest()
-        if st.session_state.get("last_export_storage_digest") != export_digest:
-            try:
-                upload_info = storage_mgr.upload_export_excel(
-                    excel_bytes=excel_data,
-                    filename=export_fname,
-                    company_name=company,
-                )
-                st.session_state["last_export_storage_digest"] = export_digest
-                st.caption(
-                    f"Backup Storage: {upload_info['bucket']}/{upload_info['path']}"
-                )
-            except Exception as e_storage:
-                st.warning("No se pudo guardar copia del export en Supabase Storage.")
-                st.caption(str(e_storage))
-    
     return df_filtered

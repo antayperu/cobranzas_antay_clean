@@ -1030,7 +1030,7 @@ def render_tab(config):
                         st.success("✅ Configuración guardada. Aplica al próximo inicio del servidor.")
                         st.rerun()
                     else:
-                        st.error("❌ No se pudo guardar. Verifica la conexión a Supabase.")
+                        st.error("❌ No se pudo guardar. Verifica la conexión a la base de datos.")
 
         st.divider()
         st.markdown("##### Gestión Avanzada de Ciclos")

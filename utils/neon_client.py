@@ -167,7 +167,8 @@ class NeonQueryBuilder:
     @staticmethod
     def _serialize(v: Any) -> Any:
         if isinstance(v, (dict, list)):
-            return json.dumps(v, ensure_ascii=False)
+            from psycopg2.extras import Json
+            return Json(v)
         return v
 
     # ── execute ──────────────────────────────────────────────────────────────

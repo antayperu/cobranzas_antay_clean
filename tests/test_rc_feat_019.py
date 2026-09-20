@@ -136,7 +136,7 @@ class TestRC019ResultadoPostEnvio(unittest.TestCase):
             resultado='EXITOSO',
         )
         self.assertFalse(ok)
-        self.assertIn("Supabase", msg)
+        self.assertIn("Base de datos", msg)
 
     # ------------------------------------------------------------------
     # 5. last_wa_send_results contiene los campos requeridos post-envío

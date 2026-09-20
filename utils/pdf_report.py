@@ -1241,7 +1241,7 @@ class InformeGerencial:
         if not docs:
             story.append(Paragraph(
                 "Sin documentos recuperados para mostrar. "
-                "Verifique que exista un ciclo anterior y que la migración 104 esté ejecutada en Supabase.",
+                "Verifique que exista un ciclo anterior en la base de datos.",
                 ST_BODY,
             ))
             return story

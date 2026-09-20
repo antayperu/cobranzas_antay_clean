@@ -34,7 +34,7 @@ class TestReconcileCicloRecovery:
         with patch.object(dbm, "get_supabase_client", return_value=None):
             result = dbm.reconcile_ciclo_recovery("CICLO-001", "CICLO-002")
         assert result["ok"] is False
-        assert "Supabase" in result["mensaje"]
+        assert "Base de datos" in result["mensaje"]
 
     def test_resultado_tiene_claves_ok_mensaje_stats(self):
         dbm = _import_dbm()

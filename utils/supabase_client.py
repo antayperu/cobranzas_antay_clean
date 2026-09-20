@@ -1,9 +1,9 @@
 """
-Database Client - Singleton Pattern (Neon PostgreSQL / Cloud-Only)
+Database Client - Singleton Pattern (PostgreSQL local / Cloud-Only)
 Sistema de Cobranzas Antay
 
-Migrado de Supabase a Neon PostgreSQL (RC-BUG-088).
-Mantiene la misma interfaz publica para compatibilidad con el resto del codigo.
+Cliente unificado de base de datos. Usa psycopg2 via NeonClient para conectar
+al PostgreSQL local en la PC QA.
 """
 
 import os
@@ -43,43 +43,25 @@ class SupabaseClient:
     def _initialize_client(self):
         try:
             neon_url = os.getenv("NEON_DATABASE_URL")
-            if neon_url:
-                try:
-                    from utils.neon_client import NeonClient
-                    neon = NeonClient.get_instance()
-                    if neon and neon.is_available():
-                        self._client = neon
-                        self._last_error = None
-                        print("SUCCESS: Neon client initialized successfully.")
-                    else:
-                        err = neon.get_last_error() if neon else "unknown"
-                        self._last_error = f"Neon init error: {err}"
-                        self._client = None
-                except Exception as e:
-                    self._last_error = f"Neon init error: {e}"
-                    self._client = None
-                return
-
-            # Fallback a Supabase si no hay URL de Neon
-            supabase_url = os.getenv("SUPABASE_URL")
-            supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-            if not supabase_url or not supabase_key:
-                self._last_error = "Missing NEON_DATABASE_URL (or SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)."
+            if not neon_url:
+                self._last_error = "NEON_DATABASE_URL no configurado."
                 self._client = None
                 return
-
             try:
-                from supabase import create_client, ClientOptions
-                options = ClientOptions(postgrest_client_timeout=60)
-                self._client = create_client(supabase_url, supabase_key, options=options)
-                self._last_error = None
-                print("SUCCESS: Supabase client initialized successfully.")
+                from utils.neon_client import NeonClient
+                neon = NeonClient.get_instance()
+                if neon and neon.is_available():
+                    self._client = neon
+                    self._last_error = None
+                else:
+                    err = neon.get_last_error() if neon else "No se pudo conectar a la BD"
+                    self._last_error = f"Error BD: {err}"
+                    self._client = None
             except Exception as e:
-                self._last_error = f"Error initializing client: {e}"
+                self._last_error = f"Error BD: {e}"
                 self._client = None
-
         except Exception as e:
-            self._last_error = f"Unexpected error during initialization: {e}"
+            self._last_error = f"Error inesperado al inicializar BD: {e}"
             self._client = None
 
     @classmethod
@@ -90,9 +72,7 @@ class SupabaseClient:
 
     @classmethod
     def reset(cls) -> "SupabaseClient":
-        """Fuerza una reconexion fresca."""
-        from utils.neon_client import NeonClient
-        NeonClient.reset()
+        """Reinicializa el cliente de BD sin cerrar el pool compartido."""
         cls._instance = None
         cls._initialized = False
         cls._client = None
@@ -118,8 +98,7 @@ class SupabaseClient:
 
     @staticmethod
     def is_cloud_mode() -> bool:
-        instance = SupabaseClient.get_instance()
-        return instance.is_available()
+        return bool(os.getenv("NEON_DATABASE_URL"))
 
 
 def get_supabase_client():

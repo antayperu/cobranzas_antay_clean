@@ -1,10 +1,9 @@
 """
-Servicios de persistencia de ciclo (3 Excel -> Supabase) para ejecución desde UI.
+Servicios de persistencia de ciclo (Excel -> BD local) para ejecución desde UI.
 """
 
 from __future__ import annotations
 
-import time
 from typing import Any, Dict
 
 import pandas as pd
@@ -15,7 +14,6 @@ from scripts.migrate_excel_to_supabase import (
     upsert_records,
 )
 import utils.db_manager as dbm
-from utils.supabase_client import SupabaseClient
 
 
 def persist_cycle_to_supabase(
@@ -87,13 +85,12 @@ def persist_cycle_to_supabase(
             },
         }
 
-    # Forzar reconexión fresca antes de escribir: la conexión SSL puede haberse
-    # cerrado por inactividad durante el procesamiento local de los archivos Excel.
-    wrapper = SupabaseClient.reset()
-    if not wrapper.is_available():
+    # Verificar disponibilidad de la base de datos local
+    client = dbm.get_supabase_client()
+    if not client:
         return {
             "ok": False,
-            "message": "Supabase no disponible. Verifica credenciales y conectividad.",
+            "message": "Base de datos no disponible. Verifica la conexión.",
             "counts": {},
             "errors": {
                 "clientes": len(clientes_errors),
@@ -105,29 +102,13 @@ def persist_cycle_to_supabase(
             },
         }
 
-    supabase = wrapper.get_client()
-
-    # Palabras clave que indican error transitorio de red/Supabase (reintentable)
-    _TRANSIENT_KEYS = ("520", "eof", "ssl", "json could not", "connection", "timeout")
-
     try:
-        # Reintentar upsert de clientes hasta 3 veces ante errores transitorios (520/SSL/EOF)
-        ok_clientes, msg_clientes = False, ""
-        for _attempt in range(3):
-            if _attempt > 0:
-                time.sleep(4 * _attempt)          # 4s · 8s entre reintentos
-                wrapper = SupabaseClient.reset()  # conexión SSL fresca en cada reintento
-                supabase = wrapper.get_client()
-            ok_clientes, msg_clientes = dbm.upsert_clientes_rows(clientes_rows, batch_size=batch_size)
-            if ok_clientes:
-                break
-            if not any(kw in msg_clientes.lower() for kw in _TRANSIENT_KEYS):
-                break  # error permanente — no reintentar
+        ok_clientes, msg_clientes = dbm.upsert_clientes_rows(clientes_rows, batch_size=batch_size)
 
         if not ok_clientes:
             return {
                 "ok": False,
-                "message": f"Error durante persistencia en Supabase: {msg_clientes}",
+                "message": f"Error al guardar clientes: {msg_clientes}",
                 "counts": {},
                 "errors": {
                     "clientes": len(clientes_errors),
@@ -140,17 +121,22 @@ def persist_cycle_to_supabase(
             }
 
         count_clientes = len(clientes_rows)
-        count_documentos = upsert_records(
-            supabase=supabase,
-            table="documentos",
-            rows=documentos_rows,
-            on_conflict="documento_id",
-            batch_size=batch_size,
-        )
+        # Intento best-effort de guardar en tabla legacy documentos
+        # (la tabla documentos_ciclo es el almacén principal — este es secundario)
+        try:
+            count_documentos = upsert_records(
+                supabase=client,
+                table="documentos",
+                rows=documentos_rows,
+                on_conflict="documento_id",
+                batch_size=batch_size,
+            )
+        except Exception:
+            count_documentos = 0
     except Exception as exc:
         return {
             "ok": False,
-            "message": f"Error durante persistencia en Supabase: {exc}",
+            "message": f"Error durante persistencia: {exc}",
             "counts": {},
             "errors": {
                 "clientes": len(clientes_errors),

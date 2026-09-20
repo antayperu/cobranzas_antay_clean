@@ -279,7 +279,7 @@ def save_settings(settings: Dict[str, Any]) -> bool:
     """
     client = _get_supabase()
     if not client:
-        print("Error saving config: Supabase no disponible.")
+        print("Error saving config: base de datos no disponible.")
         return False
 
     payload = _strip_credentials(_deep_merge(_defaults_copy(), settings or {}))

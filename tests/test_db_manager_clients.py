@@ -54,14 +54,14 @@ class _FakeTableClientes:
     def execute(self):
         if self.payload is not None:
             self.sinks["updates"].append({"payload": self.payload, "query": dict(self.query)})
-            return SimpleNamespace(data=[{"ok": True}])
+            return SimpleNamespace(data=[{"ok": True}], error=None)
         if self.upsert_payload is not None:
             self.sinks["upserts"].append({"payload": self.upsert_payload, "query": dict(self.query)})
-            return SimpleNamespace(data=list(self.upsert_payload))
+            return SimpleNamespace(data=list(self.upsert_payload), error=None)
         if self.delete_flag:
             self.sinks["deletes"].append({"query": dict(self.query)})
-            return SimpleNamespace(data=[{"deleted": True}])
-        return SimpleNamespace(data=self.rows)
+            return SimpleNamespace(data=[{"deleted": True}], error=None)
+        return SimpleNamespace(data=self.rows, error=None)
 
 
 class _FakeClient:
@@ -85,7 +85,7 @@ class _FakeLegacyMissingColumnsTable(_FakeTableClientes):
                 raise Exception("Could not find the 'enviar_email' column of 'clientes' in the schema cache")
             if "extra_fields" in keys:
                 raise Exception("Could not find the 'extra_fields' column of 'clientes' in the schema cache")
-            return SimpleNamespace(data=list(self.upsert_payload))
+            return SimpleNamespace(data=list(self.upsert_payload), error=None)
         return super().execute()
 
 

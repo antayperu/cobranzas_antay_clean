@@ -5,25 +5,6 @@ import pandas as pd
 import utils.supabase_cycle_service as cycle_service
 
 
-class DummySupabaseWrapperUnavailable:
-    def is_available(self):
-        return False
-
-    def get_client(self):
-        return None
-
-
-class DummySupabaseWrapperAvailable:
-    def __init__(self, client):
-        self._client = client
-
-    def is_available(self):
-        return True
-
-    def get_client(self):
-        return self._client
-
-
 def _dummy_rows():
     clientes = [{"cliente_id": "000001", "nombre": "Cliente 1"}]
     documentos = [{"documento_id": "D-1", "cliente_id": "000001"}]
@@ -31,19 +12,19 @@ def _dummy_rows():
     return clientes, documentos, doc_lookup
 
 
-def test_persist_cycle_fails_when_supabase_unavailable():
+def test_persist_cycle_fails_when_db_unavailable():
     df = pd.DataFrame([{"x": 1}])
     clientes, documentos, doc_lookup = _dummy_rows()
 
     with (
         patch.object(cycle_service, "build_clientes", return_value=(clientes, [])),
         patch.object(cycle_service, "build_documentos", return_value=(documentos, [], doc_lookup)),
-        patch.object(cycle_service.SupabaseClient, "get_instance", return_value=DummySupabaseWrapperUnavailable()),
+        patch.object(cycle_service.dbm, "get_supabase_client", return_value=None),
     ):
         result = cycle_service.persist_cycle_to_supabase(df, df, df)
 
     assert result["ok"] is False
-    assert "Supabase no disponible" in result["message"]
+    assert "Base de datos no disponible" in result["message"]
 
 
 def test_persist_cycle_success_writes_all_tables():
@@ -54,7 +35,7 @@ def test_persist_cycle_success_writes_all_tables():
     with (
         patch.object(cycle_service, "build_clientes", return_value=(clientes, [])),
         patch.object(cycle_service, "build_documentos", return_value=(documentos, [], doc_lookup)),
-        patch.object(cycle_service.SupabaseClient, "get_instance", return_value=DummySupabaseWrapperAvailable(client)),
+        patch.object(cycle_service.dbm, "get_supabase_client", return_value=client),
         patch.object(cycle_service.dbm, "upsert_clientes_rows", return_value=(True, "ok")) as upsert_clientes_mock,
         patch.object(cycle_service, "upsert_records", side_effect=[1]) as upsert_mock,
     ):
@@ -88,7 +69,7 @@ def test_persist_cycle_accepts_legacy_document_builder_shape():
     with (
         patch.object(cycle_service, "build_clientes", return_value=(clientes, [])),
         patch.object(cycle_service, "build_documentos", return_value=(documentos, [])),
-        patch.object(cycle_service.SupabaseClient, "get_instance", return_value=DummySupabaseWrapperAvailable(client)),
+        patch.object(cycle_service.dbm, "get_supabase_client", return_value=client),
         patch.object(cycle_service.dbm, "upsert_clientes_rows", return_value=(True, "ok")) as upsert_clientes_mock,
         patch.object(cycle_service, "upsert_records", side_effect=[1]) as upsert_mock,
     ):
@@ -110,10 +91,10 @@ def test_persist_cycle_returns_error_when_clientes_upsert_fails():
     with (
         patch.object(cycle_service, "build_clientes", return_value=(clientes, [])),
         patch.object(cycle_service, "build_documentos", return_value=(documentos, [], doc_lookup)),
-        patch.object(cycle_service.SupabaseClient, "get_instance", return_value=DummySupabaseWrapperAvailable(client)),
+        patch.object(cycle_service.dbm, "get_supabase_client", return_value=client),
         patch.object(cycle_service.dbm, "upsert_clientes_rows", return_value=(False, "No se pudo guardar clientes: PGRST204")),
     ):
         result = cycle_service.persist_cycle_to_supabase(df, df, df)
 
     assert result["ok"] is False
-    assert "Error durante persistencia en Supabase" in result["message"]
+    assert "Error al guardar clientes" in result["message"]

@@ -79,44 +79,35 @@ def get_system_health() -> dict:
 
 
 def get_supabase_client():
-    """Retorna cliente de BD (Neon via NeonClient, compatible con API supabase-py)."""
+    """Retorna cliente de BD (PostgreSQL local via NeonClient).
+
+    Siempre sincroniza con el singleton actual de NeonClient para evitar
+    devolver un cliente con pool cerrado tras un reset.
+    """
     global _client
-    if _client is None:
-        if NEON_DATABASE_URL:
-            try:
-                from utils.neon_client import NeonClient
-                neon = NeonClient.get_instance()
-                if neon and neon.is_available():
-                    _client = neon
-                    _set_last_error(None)
-                    print("SUCCESS: Neon client initialized successfully.")
-                else:
-                    err = neon.get_last_error() if neon else "No NEON_DATABASE_URL"
-                    _set_last_error(f"Neon Init Error: {err}")
-                    print(f"Neon Init Error: {err}")
-            except Exception as e:
-                _set_last_error(f"Neon Init Error: {e}")
-                print(f"Neon Init Error: {e}")
-        elif SUPABASE_URL and SUPABASE_KEY:
-            # Fallback a Supabase si no hay URL de Neon (compatibilidad)
-            try:
-                from supabase import create_client, ClientOptions
-                options = ClientOptions(postgrest_client_timeout=60)
-                _client = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
-                _set_last_error(None)
-            except Exception as e:
-                try:
-                    from supabase import create_client
-                    _client = create_client(SUPABASE_URL, SUPABASE_KEY)
-                    _set_last_error(None)
-                except Exception as e2:
-                    _set_last_error(f"Supabase Init Error: {e2}")
-                    print(f"Supabase Init Error: {e2}")
-    return _client
+    if not NEON_DATABASE_URL:
+        _set_last_error("Base de datos no configurada (NEON_DATABASE_URL faltante)")
+        return None
+    try:
+        from utils.neon_client import NeonClient
+        neon = NeonClient.get_instance()
+        if neon and neon.is_available():
+            _client = neon  # Siempre sincronizar con el singleton actual
+            _set_last_error(None)
+            return _client
+        err = neon.get_last_error() if neon else "No se pudo inicializar cliente de BD"
+        _set_last_error(f"Error BD: {err}")
+        _client = None
+        print(f"Error BD: {err}")
+    except Exception as e:
+        _set_last_error(f"Error BD: {e}")
+        _client = None
+        print(f"Error BD: {e}")
+    return None
 
 
 def is_cloud_mode() -> bool:
-    return bool(NEON_DATABASE_URL or (SUPABASE_URL and SUPABASE_KEY))
+    return bool(NEON_DATABASE_URL)
 
 
 def initialize_db() -> bool:
@@ -216,7 +207,7 @@ def log_attempt(recipient, status, run_id, ledger_key, reason=""):
                 clear_io_cache()
                 return True
             except Exception as e:
-                print(f"Supabase Logging Error: {e}")
+                print(f"Error de BD (log): {e}")
                 return False
 
     try:
@@ -280,7 +271,7 @@ def get_status_map(email_list, target_date_str=None, min_timestamp=None):
                     return _cache_set(cache_key, _process_rows_into_map(cloud_rows))
                 # In tests with custom DB file, fallback to local if cloud is empty.
             except Exception as e:
-                print(f"Supabase Query Error: {e}")
+                print(f"Error de BD (query): {e}")
                 if DB_NAME == "email_ledger.db":
                     return {}
 
@@ -475,7 +466,7 @@ def persist_notification_event(
 ) -> bool:
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para persistir notificaciones.")
+        _set_last_error("Base de datos no disponible para persistir notificaciones.")
         return False
 
     code = _normalize_status_code(status_code)
@@ -664,7 +655,7 @@ def update_estado_whatsapp_in_cycle(cycle_id: str, cliente_ids: list, fecha: str
 def get_documento_id_by_numero(cliente_id: str, numero_documento: str) -> Optional[str]:
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para consultar documentos.")
+        _set_last_error("Base de datos no disponible para consultar documentos.")
         return None
     try:
         res = _safe_execute(
@@ -688,7 +679,7 @@ def get_notifications_history(cliente_ids: List[str], limit: int = 200) -> List[
         return []
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para consultar historial.")
+        _set_last_error("Base de datos no disponible para consultar historial.")
         return []
     try:
         res = _safe_execute(
@@ -723,7 +714,7 @@ def get_notifications_report(
 ) -> List[Dict[str, Any]]:
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para reporte de notificaciones.")
+        _set_last_error("Base de datos no disponible para reporte de notificaciones.")
         return []
 
     cache_key = ("notifications_report", id(client), str(date_from), str(date_to), str(estado), str(canal), int(limit))
@@ -948,7 +939,7 @@ def list_clientes_for_admin(search: str = "", limit: int = 200) -> List[Dict[str
 def list_clientes_full(search: str = "", estado: str = "", limit: int = 1000) -> List[Dict[str, Any]]:
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para listar clientes.")
+        _set_last_error("Base de datos no disponible para listar clientes.")
         return []
 
     try:
@@ -1001,12 +992,12 @@ def list_clientes_full(search: str = "", estado: str = "", limit: int = 1000) ->
 
 def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
     """
-    Retorna cartera maestra de clientes desde Supabase.
+    Retorna cartera maestra de clientes desde la base de datos.
     Usa paginación de 200 filas por request para evitar statement_timeout en producción.
     """
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para obtener cartera maestra.")
+        _set_last_error("Base de datos no disponible para obtener cartera maestra.")
         return []
 
     _COLS      = "cliente_id, nombre, email, telefono, dni, ruc, direccion, estado, enviar_email, notas, extra_fields"
@@ -1116,8 +1107,8 @@ def update_cliente_fields(
 
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para actualizar cliente.")
-        return False, _last_error or "Supabase no disponible"
+        _set_last_error("Base de datos no disponible para actualizar cliente.")
+        return False, _last_error or "Base de datos no disponible"
 
     try:
         _safe_execute(client.table("clientes").update(payload).eq("cliente_id", cliente_id_norm))
@@ -1134,8 +1125,8 @@ def upsert_clientes_rows(rows: List[Dict[str, Any]], batch_size: int = 200) -> T
 
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para guardar clientes.")
-        return False, _last_error or "Supabase no disponible"
+        _set_last_error("Base de datos no disponible para guardar clientes.")
+        return False, _last_error or "Base de datos no disponible"
 
     normalized_rows: List[Dict[str, Any]] = []
     errors: List[str] = []
@@ -1218,8 +1209,8 @@ def delete_clientes_by_ids(cliente_ids: Iterable[str]) -> Tuple[bool, str]:
 
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para eliminar clientes.")
-        return False, _last_error or "Supabase no disponible"
+        _set_last_error("Base de datos no disponible para eliminar clientes.")
+        return False, _last_error or "Base de datos no disponible"
 
     try:
         _safe_execute(client.table("clientes").delete().in_("cliente_id", ids_norm))
@@ -1361,8 +1352,8 @@ def insert_gestion(
     """
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para registrar gestion.")
-        return False, _last_error or "Supabase no disponible"
+        _set_last_error("Base de datos no disponible para registrar gestion.")
+        return False, _last_error or "Base de datos no disponible"
 
     tipo_norm = str(tipo_gestion or "").strip().upper()
     if tipo_norm not in GESTION_TIPOS_VALIDOS:
@@ -1409,7 +1400,7 @@ def get_gestiones_list(
     """Fetch gestiones with optional filters."""
     client = get_supabase_client()
     if not client:
-        _set_last_error("Supabase no disponible para consultar gestiones.")
+        _set_last_error("Base de datos no disponible para consultar gestiones.")
         return []
 
     cache_key = ("gestiones_list", id(client), str(date_from), str(date_to), str(tipo), str(cliente_id), int(limit))
@@ -1624,7 +1615,7 @@ def insert_acuerdo_pago(
     """
     client = get_supabase_client()
     if not client:
-        return False, "Supabase no disponible."
+        return False, "Base de datos no disponible."
 
     if not cliente_id or monto_total <= 0 or numero_cuotas < 1:
         return False, "Parámetros inválidos: cliente_id, monto_total o numero_cuotas."
@@ -1713,7 +1704,7 @@ def update_cuota_estado(
     """Update the estado of a cuota_acuerdo row."""
     client = get_supabase_client()
     if not client:
-        return False, "Supabase no disponible."
+        return False, "Base de datos no disponible."
 
     estado_norm = str(nuevo_estado).strip().upper()
     if estado_norm not in CUOTA_ESTADOS_VALIDOS:
@@ -1779,7 +1770,7 @@ def reconcile_ciclo_recovery(
 
     client = get_supabase_client()
     if not client:
-        return {"ok": False, "mensaje": "Supabase no disponible.", "stats": {}}
+        return {"ok": False, "mensaje": "Base de datos no disponible.", "stats": {}}
 
     try:
         docs_ant = _get_docs_simple_by_cycle(cycle_id_anterior)
@@ -2882,7 +2873,7 @@ def get_kpis_periodo(date_from: str, date_to: str) -> Dict[str, Any]:
 
 def get_prev_cycle_id(cycle_id_actual: str) -> Optional[str]:
     """Devuelve el cycle_id más reciente anterior al ciclo dado, leyendo
-    ciclos_procesamiento en Supabase.  Retorna None si no existe ciclo previo.
+    ciclos_procesamiento en la base de datos.  Retorna None si no existe ciclo previo.
 
     Reemplaza el patrón session_state["prev_cycle_id"] que fallaba cuando
     la app se reiniciaba entre cargas de ciclos consecutivos.

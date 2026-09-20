@@ -65,19 +65,108 @@ st.set_page_config(
 # --- INYECTAR ENTERPRISE CSS ---
 styles.load_css()
 
+HELP_FAQ = [
+    "¿Cómo empiezo?",
+    "¿Qué significa base de datos no disponible?",
+    "¿Dónde cargo un nuevo ciclo?",
+    "¿Qué hace cada tab?",
+    "¿Cómo registro clientes premium?",
+]
+
+
+def answer_help_question(question: str) -> str:
+    q = (question or "").lower()
+
+    if any(k in q for k in ["empiezo", "comenzar", "nuevo ciclo", "cargar archivos", "ciclo"]):
+        return (
+            "Para empezar, usa el panel lateral y carga los dos archivos requeridos: "
+            "CxC y Cobranza. Luego presiona 'Nuevo ciclo'. La app valida integridad y genera el ciclo operativo."
+        )
+
+    if any(k in q for k in ["base de datos", "sin conexión", "no disponible", "conexión"]):
+        return (
+            "Si aparece 'Base de datos no disponible', revisa tu internet y vuelve a intentarlo. "
+            "Si el problema sigue, la app no puede operar hasta que la conexión a la base de datos esté disponible."
+        )
+
+    if any(k in q for k in ["clientes premium", "premium", "registrar cliente", "cliente"]):
+        return (
+            "La pestaña Clientes Premium sirve para mantener la cartera maestra, importar clientes y revisar su estado. "
+            "Si falta un cliente, se debe registrar antes de generar un ciclo nuevo."
+        )
+
+    if any(k in q for k in ["tab", "pestaña", "qué hace", "configuración", "gestiones", "whatsapp", "email"]):
+        return (
+            "La app está organizada por tabs: Inicio, Clientes Premium, Centro de Gestiones, Configuración, y los módulos operativos. "
+            "Cada tab concentra una parte del flujo de cobranza y seguimiento."
+        )
+
+    if any(k in q for k in ["ayuda", "pregunta", "soporte"]):
+        return (
+            "Puedes preguntarme por: cómo iniciar, errores de conexión, clientes premium, configuración o pasos del flujo de cobranza."
+        )
+
+    return (
+        "Puedo ayudarte con el flujo de la app: inicio, carga de ciclo, clientes, gestiones, configuración y errores comunes. "
+        "Prueba una de las preguntas rápidas o escribe tu duda en el chat."
+    )
+
+
+def render_help_center():
+    st.markdown(
+        """
+        <div class="antay-help-shell">
+            <div class="antay-help-header">
+                <h3 class="antay-help-title">❔ Asistente de ayuda</h3>
+                <span class="antay-help-pill">Contextual</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    quick_cols = st.columns(min(len(HELP_FAQ), 3))
+    for idx, item in enumerate(HELP_FAQ):
+        button = quick_cols[idx % len(quick_cols)]
+        if button.button(item, key=f"help_quick_{idx}", use_container_width=True):
+            st.session_state["help_prompt"] = item
+            st.session_state["help_answer"] = answer_help_question(item)
+
+    prompt = st.chat_input("Escribe tu duda sobre la app…", key="app_help_chat")
+    if prompt:
+        st.session_state["help_prompt"] = prompt
+        st.session_state["help_answer"] = answer_help_question(prompt)
+
+    if st.session_state.get("help_answer"):
+        st.markdown(
+            f"""
+            <div class="antay-help-answer">
+                <strong>Pregunta:</strong> {st.session_state.get('help_prompt', 'Consulta') }<br><br>
+                <strong>Respuesta:</strong> {st.session_state.get('help_answer')}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.caption("💡 Puedes consultar: inicio, conexión, clientes, configuración o cómo cargar un ciclo.")
+
+
 # --- VISTA NORMAL ---
-
-# --- RC-UX-PREMIUM: Enterprise CSS System ---
-# Typography: System UI for speed + clear hierarchy
-# Spacing: More padding for "breathing room"
-# Cards: Subtle shadows (Glassmorphism lite)
-
+if st.session_state.get("help_panel_visible", True):
+    render_help_center()
 
 # --- CLOUD-ONLY: remove stale local cache/session artifacts ---
 session_lib.enforce_cloud_only_policy()
 
+if "help_panel_visible" not in st.session_state:
+    st.session_state["help_panel_visible"] = True
+
 # Sidebar - Logo y Carga
 with st.sidebar:
+    if st.button("❔ Ayuda", use_container_width=True, key="toggle_help_panel"):
+        st.session_state["help_panel_visible"] = not st.session_state.get("help_panel_visible", True)
+        st.rerun()
+
     # Logo
     logo_path = storage_mgr.resolve_logo_path(CONFIG)
     if not logo_path:
@@ -106,7 +195,7 @@ session_lib.init_session_state()
 
 # --- CLOUD-ONLY HEALTH CHECK ---
 if not dbm.initialize_db():
-    st.error("Supabase no esta disponible. Operacion bloqueada hasta restablecer conexion.")
+    st.error("La base de datos no está disponible. Operacion bloqueada hasta restablecer conexion.")
     st.caption(dbm.get_last_error() or "Sin detalle tecnico de conexion.")
     st.stop()
 
@@ -115,11 +204,11 @@ if '_system_health' not in st.session_state:
     st.session_state['_system_health'] = dbm.get_system_health()
 
 # --- CRM: AUTO-RESTORE del último ciclo al abrir la app ---
-# Si Supabase tiene ciclos guardados, el más reciente se carga automáticamente.
+# Si la BD tiene ciclos guardados, el más reciente se carga automáticamente.
 # El gestor llega directamente a los tabs (WA, Email, CRM) sin interacción previa.
 # Si no hay ciclos, se muestra el selector/upload en la barra lateral como siempre.
 if not st.session_state.get("data_ready", False) and not st.session_state.get("loading_new_files", False) and not st.session_state.get("skip_auto_restore", False):
-    with st.spinner("Conectando con Supabase y restaurando sesión..."):
+    with st.spinner("Restaurando sesión anterior..."):
         session_lib.attempt_auto_restore()
 
 # Render Sidebar Wizard
@@ -133,7 +222,7 @@ if wizard_action == "PROCESS_TRIGGERED":
     
     if file_ctas and file_cobranza:
         with st.status("🚀 Generando ciclo nuevo...", expanded=True) as _cycle_status:
-            # Flujo oficial: 2 archivos + cartera maestra en Supabase.
+            # Flujo oficial: 2 archivos + cartera maestra en la base de datos.
             try:
                 st.write("📂 Leyendo archivos Excel...")
                 df_ctas_raw = pd.read_excel(file_ctas)
@@ -237,16 +326,16 @@ if wizard_action == "PROCESS_TRIGGERED":
                     st.session_state['cycle_id'] = cycle_id
 
                     # --- LIMPIEZA TTL: Purgar bloqueos del ciclo anterior ---
-                    st.write("🧹 Preparando ciclo en Supabase...")
+                    st.write("🧹 Limpiando registros del ciclo anterior...")
                     if not dbm.clear_all_ledger():
                         st.session_state['data_ready'] = False
-                        _cycle_status.update(label="❌ Error al preparar ciclo en Supabase", state="error")
-                        st.error("No se pudo preparar el ciclo en Supabase. Operacion bloqueada.")
+                        _cycle_status.update(label="❌ Error al preparar el ciclo", state="error")
+                        st.error("No se pudo preparar el ciclo. Operacion bloqueada.")
                         st.caption(dbm.get_last_error() or "Fallo al limpiar control TTL en ledger_last_send.")
                         st.stop()
 
-                    # --- PERSISTENCIA DEL CICLO EN SUPABASE (UI -> DB) ---
-                    st.write("💾 Guardando clientes, documentos y cobranzas en Supabase...")
+                    # --- PERSISTENCIA DEL CICLO EN BD LOCAL (UI -> DB) ---
+                    st.write("💾 Guardando clientes, documentos y cobranzas...")
                     persist_result = supabase_cycle_service.persist_cycle_to_supabase(
                         df_ctas=df_ctas_raw,
                         df_cartera=df_cartera_raw,
@@ -254,14 +343,14 @@ if wizard_action == "PROCESS_TRIGGERED":
                     )
                     if not persist_result.get("ok", False):
                         st.session_state['data_ready'] = False
-                        _cycle_status.update(label="❌ Error al guardar ciclo en Supabase", state="error")
-                        st.error("No se pudo persistir el ciclo en Supabase. Operacion bloqueada.")
+                        _cycle_status.update(label="❌ Error al guardar ciclo", state="error")
+                        st.error("No se pudo guardar el ciclo. Operacion bloqueada.")
                         st.caption(persist_result.get("message", "Error no especificado en persistencia."))
                         st.stop()
 
                     counts = persist_result.get("counts", {})
                     st.toast(
-                        f"Supabase OK: clientes={counts.get('clientes', 0)}, "
+                        f"BD OK: clientes={counts.get('clientes', 0)}, "
                         f"documentos={counts.get('documentos', 0)}, "
                         f"cobranzas={counts.get('cobranzas', 0)}",
                         icon="✅",
@@ -317,7 +406,7 @@ if wizard_action == "PROCESS_TRIGGERED":
                         st.session_state['data_ready'] = False
                         st.session_state['df_final'] = pd.DataFrame()
                         _cycle_status.update(label="❌ Error al guardar sesión en la nube", state="error")
-                        st.error("No se pudo guardar el ciclo en Supabase. Operacion bloqueada.")
+                        st.error("No se pudo guardar la sesion del ciclo. Operacion bloqueada.")
                         st.caption(msg_cloud or "Persistencia de ciclo fallida en cloud.")
                         st.stop()
 

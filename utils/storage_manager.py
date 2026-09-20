@@ -1,10 +1,6 @@
 """
-Supabase Storage manager for files and images.
-
-Scope:
-- logos bucket
-- exports bucket
-- whatsapp-images bucket
+Storage manager para archivos de la aplicación (logos, exports).
+Operación local — el almacenamiento en la nube no está disponible en esta instalación.
 """
 
 from __future__ import annotations
@@ -16,7 +12,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
 import utils.helpers as helpers
-from utils.supabase_client import SupabaseClient
 
 
 LOGOS_BUCKET = os.getenv("SUPABASE_STORAGE_LOGOS_BUCKET", "logos")
@@ -32,7 +27,7 @@ _bucket_cache: Dict[int, Set[str]] = {}
 
 
 class StorageUnavailableError(RuntimeError):
-    """Supabase Storage is not available."""
+    """Almacenamiento en la nube no disponible en esta instalación."""
 
 
 def _normalize_storage_path(storage_path: str) -> str:
@@ -48,14 +43,11 @@ def _guess_content_type(path: str, fallback: str = "application/octet-stream") -
 
 
 def _get_storage_client(required: bool = True):
-    wrapper = SupabaseClient.get_instance()
-    if not wrapper.is_available():
-        if required:
-            raise StorageUnavailableError(
-                "Supabase no disponible. Verifica SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY."
-            )
-        return None
-    return wrapper.get_client().storage
+    if required:
+        raise StorageUnavailableError(
+            "Almacenamiento en la nube no disponible en esta instalación."
+        )
+    return None
 
 
 def ensure_bucket(bucket_name: str, public: bool = False) -> Dict[str, Any]:

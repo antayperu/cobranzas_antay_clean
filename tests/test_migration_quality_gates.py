@@ -101,9 +101,9 @@ def test_cloud_only_policy_blocks_when_supabase_unavailable(monkeypatch):
         def get_client(self):
             return None
 
-    monkeypatch.setattr(cycle_service.SupabaseClient, "get_instance", lambda: _Unavailable())
+    monkeypatch.setattr(cycle_service.dbm, "get_supabase_client", lambda: None)
     df_ctas, df_cartera, df_cobranza = _sample_frames()
     result = cycle_service.persist_cycle_to_supabase(df_ctas, df_cartera, df_cobranza)
 
     assert result["ok"] is False
-    assert "Supabase no disponible" in result["message"]
+    assert "Base de datos no disponible" in result["message"]

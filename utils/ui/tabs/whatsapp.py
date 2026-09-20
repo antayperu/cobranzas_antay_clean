@@ -1666,7 +1666,7 @@ def render_tab(df_filtered, config):
                         _wa_res_sesion['resultados_registrados'] = _resultados_guard
                         st.session_state['last_wa_send_results'] = _wa_res_sesion
                     if _guardados_tot:
-                        st.success(f"{_guardados_tot} resultado(s) guardados en Supabase.")
+                        st.success(f"{_guardados_tot} resultado(s) guardados en la base de datos.")
                     else:
                         st.info("No hay resultados nuevos para guardar.")
                     st.rerun()

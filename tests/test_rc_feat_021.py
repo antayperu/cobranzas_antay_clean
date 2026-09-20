@@ -51,7 +51,7 @@ class TestInsertAcuerdoPago:
                 ],
             )
         assert ok is False
-        assert "Supabase" in msg
+        assert "Base de datos" in msg
 
     def test_monto_cero_retorna_false(self):
         dbm = _import_dbm()
