@@ -32,7 +32,7 @@ def _render_sidebar_header() -> None:
                 <span class="antay-version">v2.2.0</span>
             </div>
             <h3>Cobranzas Antay</h3>
-            <p>Operacion principal con 2 archivos y cartera maestra en Supabase.</p>
+            <p>Operacion principal con 2 archivos y cartera maestra en la nube.</p>
             <small>Actualizado: {today_label}</small>
         </div>
         """,
@@ -66,7 +66,7 @@ def _render_health_badge() -> None:
     _count   = _h.get('clientes_count', 0)
     if _supa_ok and _count > 0:
         _badge_cls  = "ok"
-        _badge_text = f"Supabase · {_count} clientes listos"
+        _badge_text = f"BD · {_count} clientes listos"
     elif _supa_ok:
         _badge_cls  = "warn"
         _badge_text = "Conectado · Sin clientes registrados"

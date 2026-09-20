@@ -2543,7 +2543,7 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
         if cycle_id:
             q_acuerdo = q_acuerdo.eq("ciclo_id", str(cycle_id))
         resp_acuerdo = _safe_execute(q_acuerdo.limit(1))
-        con_acuerdo = resp_acuerdo.count if resp_acuerdo else 0
+        con_acuerdo = (resp_acuerdo.count or 0) if resp_acuerdo else 0
 
         # Recuperados = clientes únicos con resultado EXITOSO confirmado manualmente por el gestor.
         # Solo tipo_registro='GESTION' — los envíos automáticos (tipo_registro='ENVIO') no cuentan.

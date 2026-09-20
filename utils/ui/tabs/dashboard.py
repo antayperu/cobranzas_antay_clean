@@ -267,10 +267,10 @@ def _render_funnel(funnel: Dict[str, Any]) -> None:
     contacto_dir  = funnel.get("contacto_directo", 0)
     alcanzados    = funnel.get("alcanzados", notif_wa + notif_email)
     sin_contactar = funnel.get("sin_contactar", max(cartera - alcanzados, 0))
-    con_resultado = funnel.get("con_respuesta", 0)
-    pendientes    = funnel.get("pendientes_seg", max(alcanzados - con_resultado, 0))
-    comprometidos = funnel.get("recuperados", 0)
-    con_acuerdo   = funnel.get("con_acuerdo", 0)
+    con_resultado = funnel.get("con_respuesta") or 0
+    pendientes    = funnel.get("pendientes_seg") or max(alcanzados - con_resultado, 0)
+    comprometidos = funnel.get("recuperados") or 0
+    con_acuerdo   = funnel.get("con_acuerdo") or 0
 
     # Gestiones (filas de acción)
     con_gestion_wa           = funnel.get("con_gestion_wa", 0)
