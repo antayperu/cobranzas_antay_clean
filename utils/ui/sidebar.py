@@ -1,4 +1,5 @@
 import os
+import time
 
 import streamlit as st
 from datetime import date
@@ -20,6 +21,48 @@ def _render_env_banner() -> None:
             "Los datos aquí **no son reales** y no afectan producción.",
             icon=None,
         )
+
+
+def _render_scheduled_sends_banner() -> None:
+    """Alerta si hay envíos de email programados que ya cumplieron su hora."""
+    _last = st.session_state.get("_sched_check_ts", 0)
+    if time.time() - _last < 60:
+        pending = st.session_state.get("_pending_sends_cache", [])
+    else:
+        try:
+            import utils.db_manager as _dbm
+            pending = _dbm.get_pending_scheduled_sends()
+        except Exception:
+            pending = []
+        st.session_state["_pending_sends_cache"] = pending
+        st.session_state["_sched_check_ts"] = time.time()
+
+    if not pending:
+        return
+
+    for send in pending:
+        n       = len(send.get("clientes", []))
+        sched   = str(send.get("scheduled_at", ""))[:16].replace("T", " ")
+        cycle   = send.get("cycle_id", "")
+        send_id = str(send.get("id", ""))
+        st.warning(
+            f"⏰ **Envío programado listo**  \n"
+            f"Ciclo: `{cycle}` · {n} cliente(s)  \n"
+            f"Hora programada: {sched}  \n"
+            "Ve al tab **Notificaciones Email** para confirmar y enviar.",
+            icon=None,
+        )
+        if st.button("✕ Cancelar programación", key=f"sched_cancel_{send_id[:8]}",
+                     type="secondary", use_container_width=True):
+            try:
+                import utils.db_manager as _dbm
+                _dbm.cancel_scheduled_send(send_id)
+            except Exception:
+                pass
+            st.session_state["_pending_sends_cache"] = []
+            st.session_state["_sched_check_ts"] = 0
+            st.toast("Programación cancelada.")
+            st.rerun()
 
 
 def _render_sidebar_header() -> None:
@@ -88,6 +131,7 @@ def render_sidebar():
     """Sidebar con progressive disclosure — máximo 4 elementos por estado."""
     with st.sidebar:
         _render_env_banner()
+        _render_scheduled_sends_banner()
         _render_sidebar_header()
         st.markdown("---")
 

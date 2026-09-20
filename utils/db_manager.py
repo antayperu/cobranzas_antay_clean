@@ -3538,3 +3538,163 @@ def get_resumen_gestiones_ciclo(cycle_id: str, solo_notificable: bool = False) -
     except Exception as e:
         print(f"get_resumen_gestiones_ciclo Error: {e}")
         return {}
+
+
+# ── envios_programados ──────────────────────────────────────────────────────
+
+def _neon_execute_raw(sql: str, params=None) -> bool:
+    """Ejecuta SQL arbitrario (DDL/DML) directamente contra el pool de Neon."""
+    try:
+        from utils.neon_client import NeonClient
+        neon = NeonClient.get_instance()
+        if not neon or not neon.is_available():
+            return False
+        conn = neon._get_conn()
+        if not conn:
+            return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+            conn.commit()
+            return True
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            _set_last_error(str(e))
+            return False
+        finally:
+            neon._put_conn(conn)
+    except Exception as e:
+        _set_last_error(str(e))
+        return False
+
+
+_envios_table_ok = False
+
+
+def _ensure_envios_programados_table() -> bool:
+    """Crea la tabla envios_programados si no existe (lazy init)."""
+    global _envios_table_ok
+    if _envios_table_ok:
+        return True
+    ddl = """
+        CREATE TABLE IF NOT EXISTS public.envios_programados (
+            id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+            cycle_id      TEXT         NOT NULL,
+            clientes_json JSONB        NOT NULL,
+            scheduled_at  TIMESTAMPTZ  NOT NULL,
+            created_at    TIMESTAMPTZ  DEFAULT NOW(),
+            status        TEXT         DEFAULT 'PENDIENTE'
+                          CHECK (status IN ('PENDIENTE','EJECUTADO','CANCELADO')),
+            executed_at   TIMESTAMPTZ,
+            notes         TEXT
+        );
+    """
+    ok = _neon_execute_raw(ddl)
+    if ok:
+        _envios_table_ok = True
+    return ok
+
+
+def schedule_email_send(cycle_id: str, clientes: list, scheduled_at) -> Optional[str]:
+    """Guarda un envío programado. Retorna el UUID del registro o None si falla."""
+    _ensure_envios_programados_table()
+    client = get_supabase_client()
+    if not client:
+        return None
+    try:
+        iso_dt = (
+            scheduled_at.isoformat()
+            if hasattr(scheduled_at, "isoformat")
+            else str(scheduled_at)
+        )
+        payload = {
+            "cycle_id":      cycle_id,
+            "clientes_json": json.dumps(clientes, ensure_ascii=False),
+            "scheduled_at":  iso_dt,
+            "status":        "PENDIENTE",
+        }
+        res = _safe_execute(client.table("envios_programados").insert(payload))
+        if res and res.data:
+            return str(res.data[0].get("id") or "")
+        return None
+    except Exception as e:
+        _set_last_error(str(e))
+        return None
+
+
+def get_pending_scheduled_sends(cycle_id: Optional[str] = None) -> list:
+    """Devuelve envíos PENDIENTES cuyo scheduled_at ya pasó.
+
+    Si cycle_id es None devuelve todos (usado por el sidebar para alertas globales).
+    """
+    _ensure_envios_programados_table()
+    client = get_supabase_client()
+    if not client:
+        return []
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        q = (
+            client.table("envios_programados")
+            .select("*")
+            .eq("status", "PENDIENTE")
+            .lte("scheduled_at", now_iso)
+        )
+        if cycle_id:
+            q = q.eq("cycle_id", cycle_id)
+        res = _safe_execute(q.order("scheduled_at").limit(20))
+        rows = res.data if res else []
+        result = []
+        for r in rows:
+            cj = r.get("clientes_json")
+            if isinstance(cj, str):
+                try:
+                    r["clientes"] = json.loads(cj)
+                except Exception:
+                    r["clientes"] = []
+            elif isinstance(cj, list):
+                r["clientes"] = cj
+            else:
+                r["clientes"] = []
+            result.append(r)
+        return result
+    except Exception as e:
+        _set_last_error(str(e))
+        return []
+
+
+def mark_scheduled_send_executed(schedule_id: str) -> bool:
+    """Marca un envío programado como EJECUTADO."""
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        res = _safe_execute(
+            client.table("envios_programados")
+            .update({"status": "EJECUTADO", "executed_at": now_iso})
+            .eq("id", schedule_id)
+        )
+        return bool(res and not res.error)
+    except Exception as e:
+        _set_last_error(str(e))
+        return False
+
+
+def cancel_scheduled_send(schedule_id: str) -> bool:
+    """Cancela un envío programado."""
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        res = _safe_execute(
+            client.table("envios_programados")
+            .update({"status": "CANCELADO"})
+            .eq("id", schedule_id)
+        )
+        return bool(res and not res.error)
+    except Exception as e:
+        _set_last_error(str(e))
+        return False
