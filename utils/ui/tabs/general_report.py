@@ -40,7 +40,7 @@ def render_tab(df_final, config):
 
     # --- DISEÑO DE FILTROS V4.3 (Profesional Stacked) ---
     st.markdown("###### 🏢 Filtro Principal")
-    empresas = sorted(x for x in df_final['EMPRESA'].astype(str).unique() if x and x != 'nan')
+    empresas = sorted(str(x) for x in df_final['EMPRESA'].unique() if pd.notna(x))
     sel_empresa = st.multiselect(
         "Seleccione Empresa(s)",
         empresas,
@@ -52,11 +52,11 @@ def render_tab(df_final, config):
     col_f1, col_f2, col_f3 = st.columns(3)
 
     # Filtro Estado Detraccion
-    estados_dt = ["Todos"] + sorted(x for x in df_final['ESTADO DETRACCION'].astype(str).unique() if x and x != 'nan')
+    estados_dt = ["Todos"] + sorted(str(x) for x in df_final['ESTADO DETRACCION'].unique() if pd.notna(x))
     sel_estado = col_f1.selectbox("Estado Detracción", estados_dt)
 
     # Filtro Moneda
-    monedas = ["Todos"] + sorted(x for x in df_final['MONEDA'].astype(str).unique() if x and x != 'nan')
+    monedas = ["Todos"] + sorted(str(x) for x in df_final['MONEDA'].unique() if pd.notna(x))
     sel_moneda = col_f2.selectbox("Moneda", monedas)
     
     # Buscador Global
