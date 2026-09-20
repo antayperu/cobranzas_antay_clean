@@ -176,9 +176,9 @@ if wizard_action == "PROCESS_TRIGGERED":
                     def _fmt_codcli(v):
                         try:
                             return str(int(float(str(v).strip()))).zfill(6)
-                        except (ValueError, TypeError):
+                        except (ValueError, TypeError, OverflowError):
                             return None
-                    _cxc_codes = set(filter(None, df_ctas_raw['codcli'].apply(_fmt_codcli)))
+                    _cxc_codes = set(df_ctas_raw['codcli'].apply(_fmt_codcli).dropna())
                     _clientes_codes = set(
                         str(r['cliente_id']).strip()
                         for r in cartera_rows
