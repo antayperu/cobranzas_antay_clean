@@ -27,7 +27,7 @@
 | ID | Título | Prioridad | Estado | Asignado | Fecha Inicio | Fecha Cierre |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **RC-TECH-002** | Migrar a PostgreSQL local puro — eliminar Neon y Supabase del codebase | **P0** (Critico) | Done ✅ | Claude | 2026-09-20 | 2026-09-20 |
-| **RC-FEAT-094** | Panel de ayuda contextual en pantalla de inicio con FAQ y chat libre | **P2** (Medio) | Done ✅ | Claude | 2026-09-20 | 2026-09-20 |
+| **RC-FEAT-094 v2** | Panel de ayuda contextual en sidebar con FAQ y consulta libre | **P2** (Medio) | Done ✅ | Claude | 2026-09-20 | 2026-09-20 |
 | **RC-BUG-093** | PostgreSQL-only: eliminar refs Supabase/Neon en runtime + fix escritura ciclo | **P1** (Alto) | Done ✅ | Claude | 2026-09-19 | 2026-09-19 |
 | **RC-BUG-092** | PostgreSQL local en QA — timeout Neon + mensajes de error | **P1** (Alto) | Done ✅ | Claude | 2026-09-19 | 2026-09-19 |
 | **RC-BUG-091** | sorted() definitivo + diag NeonClient + texto "Base de datos" | **P1** (Alto) | Done ✅ | Claude | 2026-09-19 | 2026-09-19 |

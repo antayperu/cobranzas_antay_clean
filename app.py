@@ -112,61 +112,36 @@ def answer_help_question(question: str) -> str:
     )
 
 
-def render_help_center():
-    st.markdown(
-        """
-        <div class="antay-help-shell">
-            <div class="antay-help-header">
-                <h3 class="antay-help-title">❔ Asistente de ayuda</h3>
-                <span class="antay-help-pill">Contextual</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    quick_cols = st.columns(min(len(HELP_FAQ), 3))
+def render_help_center_sidebar():
+    """Panel de ayuda contextual en sidebar — siempre accesible, sin interferir con tabs."""
     for idx, item in enumerate(HELP_FAQ):
-        button = quick_cols[idx % len(quick_cols)]
-        if button.button(item, key=f"help_quick_{idx}", use_container_width=True):
+        if st.button(item, key=f"help_quick_{idx}", use_container_width=True):
             st.session_state["help_prompt"] = item
             st.session_state["help_answer"] = answer_help_question(item)
 
-    prompt = st.chat_input("Escribe tu duda sobre la app…", key="app_help_chat")
-    if prompt:
-        st.session_state["help_prompt"] = prompt
-        st.session_state["help_answer"] = answer_help_question(prompt)
+    pregunta = st.text_input(
+        "¿En qué te puedo ayudar?",
+        key="help_text_input",
+        placeholder="Escribe tu duda…",
+        label_visibility="collapsed",
+    )
+    if st.button("Consultar", key="help_submit_btn", use_container_width=True):
+        if pregunta.strip():
+            st.session_state["help_prompt"] = pregunta.strip()
+            st.session_state["help_answer"] = answer_help_question(pregunta.strip())
 
     if st.session_state.get("help_answer"):
-        st.markdown(
-            f"""
-            <div class="antay-help-answer">
-                <strong>Pregunta:</strong> {st.session_state.get('help_prompt', 'Consulta') }<br><br>
-                <strong>Respuesta:</strong> {st.session_state.get('help_answer')}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.caption("💡 Puedes consultar: inicio, conexión, clientes, configuración o cómo cargar un ciclo.")
-
-
-# --- PANTALLA DE INICIO: solo cuando no hay ciclo activo ---
-if st.session_state.get("help_panel_visible", True) and not st.session_state.get("data_ready", False):
-    render_help_center()
+        st.info(st.session_state.get("help_answer", ""))
+        if st.button("✕ Limpiar", key="help_clear_btn", use_container_width=True):
+            st.session_state.pop("help_prompt", None)
+            st.session_state.pop("help_answer", None)
+            st.rerun()
 
 # --- CLOUD-ONLY: remove stale local cache/session artifacts ---
 session_lib.enforce_cloud_only_policy()
 
-if "help_panel_visible" not in st.session_state:
-    st.session_state["help_panel_visible"] = True
-
 # Sidebar - Logo y Carga
 with st.sidebar:
-    if st.button("❔ Ayuda", use_container_width=True, key="toggle_help_panel"):
-        st.session_state["help_panel_visible"] = not st.session_state.get("help_panel_visible", True)
-        st.rerun()
-
     # Logo
     logo_path = storage_mgr.resolve_logo_path(CONFIG)
     if not logo_path:
@@ -185,6 +160,9 @@ with st.sidebar:
         st.image(logo_path, use_container_width=True)
     else:
         st.markdown(f"## {CONFIG['company_name']}")
+
+    with st.expander("❔ Ayuda", expanded=False):
+        render_help_center_sidebar()
 
     # Logo only — ciclos y recovery se gestionan en render_sidebar()
     

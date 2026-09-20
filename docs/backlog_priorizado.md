@@ -27,17 +27,16 @@ Informe Gerencial PDF: completado 2026-03-28. Email+PDF Premium: completado 2026
   - [x] 164/164 tests PASS
   - [x] Test exploratorio Playwright validado localmente
 
-### RC-FEAT-094: Panel de ayuda contextual en pantalla de inicio
-- Estado: Done ✅ · Deployado QA 2026-09-20
+### RC-FEAT-094 v2: Panel de ayuda contextual en sidebar
+- Estado: Done ✅ · Implementado 2026-09-20
 - Prioridad: P2 Medio
-- Descripcion: Panel "Asistente de ayuda" visible solo en la pantalla de inicio (sin ciclo activo). Incluye 5 preguntas frecuentes, respuestas contextuales y campo de consulta libre. Toggle "❔ Ayuda" en sidebar. El panel (y su chat_input) desaparece cuando data_ready=True para no interferir con tabs de negocio.
+- Descripcion: Expander "❔ Ayuda" en el sidebar, colapsado por defecto y siempre accesible con o sin ciclo activo. Incluye 5 preguntas frecuentes, respuestas contextuales y campo de consulta libre mediante componentes nativos de Streamlit.
 - Criterios de Aceptacion:
-  - [x] HELP_PANEL_CSS en styles.py (diseno Antay, gradiente teal/azul)
-  - [x] render_help_center() solo se ejecuta cuando not data_ready
+  - [x] Expander de ayuda en sidebar, colapsado por defecto
   - [x] 5 FAQ con respuestas contextuales
-  - [x] Chat input para consultas libres
-  - [x] Toggle en sidebar con persistencia en session_state
-  - [x] Sin widget flotante en tabs WhatsApp/Email/CRM
+  - [x] Campo de texto libre con `st.text_input` y botón Consultar
+  - [x] Respuesta con `st.info` y botón Limpiar
+  - [x] Sin `st.chat_input` ni widget flotante en el área principal
 
 ### RC-BUG-085 a RC-BUG-093: Estabilizacion PostgreSQL local (2026-08-17 a 2026-09-19)
 - Estado: Done ✅
