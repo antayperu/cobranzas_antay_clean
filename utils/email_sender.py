@@ -958,40 +958,6 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     
     # RC-UX-002: Return structured detail list for UI
     stats = {'success': 0, 'failed': 0, 'blocked': 0, 'log': [], 'details': []}
-
-    def _persist_notification(msg_data, recipient, status_code, detail_msg, reason=None):
-        """Persistencia funcional en tabla notificaciones sin interrumpir el flujo de envio."""
-        try:
-            cod_cliente = msg_data.get('cod_cliente')
-            documento_numero = msg_data.get('documento_numero')
-            documento_id = None
-            if cod_cliente and documento_numero:
-                documento_id = db_manager.get_documento_id_by_numero(cod_cliente, documento_numero)
-
-            ok = db_manager.persist_notification_event(
-                cliente_id=cod_cliente,
-                destinatario=recipient,
-                asunto=msg_data.get('subject', ''),
-                mensaje=detail_msg,
-                status_code=status_code,
-                run_id=run_id,
-                notification_key=msg_data.get('notification_key'),
-                match_keys=msg_data.get('match_keys', []),
-                documento_id=documento_id,
-                metadata_extra={
-                    "reason": reason,
-                    "client_name": msg_data.get('client_name'),
-                    "is_qa_mode": is_qa_mode,
-                },
-            )
-            if not ok:
-                stats['log'].append(
-                    f"⚠️ [RunID:{run_id}] No se pudo persistir notificacion ({status_code}) para {recipient}."
-                )
-        except Exception as e_notif:
-            stats['log'].append(
-                f"⚠️ [RunID:{run_id}] Warning persistiendo notificacion ({status_code}): {str(e_notif)[:120]}"
-            )
     
     # Pre-flight check
     if not messages:
@@ -1036,10 +1002,9 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
     print(f"DEBUG_FORENSIC: [RunID:{run_id}] CALLER STACK:\n{stack_dump}")
     stats['log'].append(f"🔍 [RunID:{run_id}] Stack Trace recorded.")
 
-    # 2. Initialize Ledger (Cloud-Only via db_manager)
+    # 2. Initialize Ledger (Hybrid Mode via db_manager)
     TTL_MINUTES = 10
-    if not db_manager.initialize_db():
-        raise RuntimeError(db_manager.get_last_error() or "Supabase unavailable during email flow.")
+    db_manager.initialize_db()
 
     # --- RC-DEBUG-v2: Enhanced Connection & Egress Check ---
     # NEW: First check if we should use API Bridge (Resend or SendGrid)
@@ -1184,32 +1149,9 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                                 'Detalle': f"TTL (<{TTL_MINUTES}min). Use 'Reenviar' para forzar.",
                                 'RunID': run_id
                             })
-                            _persist_notification(
-                                msg_data=msg_data,
-                                recipient=recipient_ledger,
-                                status_code='BLOCKED',
-                                detail_msg=f"Bloqueado por TTL (<{TTL_MINUTES} min).",
-                                reason='TTL_BLOCK',
-                            )
                             continue # SKIP SEND
                 except Exception as e_chk:
-                    stats['failed'] += 1
-                    stats['log'].append(f"❌ [RunID:{run_id}] Ledger Check Error (send blocked): {e_chk}")
-                    stats['details'].append({
-                        'Cliente': client_name,
-                        'Email': recipient_ledger,
-                        'Estado': '❌ Bloqueado',
-                        'Detalle': f"Supabase ledger no disponible: {str(e_chk)[:100]}",
-                        'RunID': run_id
-                    })
-                    _persist_notification(
-                        msg_data=msg_data,
-                        recipient=recipient_ledger,
-                        status_code='FAILED',
-                        detail_msg=f"Supabase ledger no disponible: {str(e_chk)[:100]}",
-                        reason='LEDGER_CHECK_ERROR',
-                    )
-                    continue
+                    stats['log'].append(f"⚠️ [RunID:{run_id}] Ledger Check Error: {e_chk}")
 
             try:
                 # Crear Mensaje
@@ -1457,13 +1399,6 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     'Detalle': f'Entregado SMTP {copies_log_info}',
                     'RunID': run_id
                 })
-                _persist_notification(
-                    msg_data=msg_data,
-                    recipient=recipient_ledger,
-                    status_code='SENT',
-                    detail_msg='Notificacion enviada correctamente.',
-                    reason=reason,
-                )
 
                 if progress_callback:
                     progress_callback(i+1, total, f"Enviando a {msg_data['client_name']}...")
@@ -1483,13 +1418,6 @@ def send_email_batch(smtp_config, messages, progress_callback=None, logo_path=No
                     'Detalle': str(e)[:100],
                     'RunID': run_id
                 })
-                _persist_notification(
-                    msg_data=msg_data,
-                    recipient=recipient_ledger,
-                    status_code='FAILED',
-                    detail_msg=str(e)[:200],
-                    reason='SEND_ERROR',
-                )
         
         if server:
             server.quit()
