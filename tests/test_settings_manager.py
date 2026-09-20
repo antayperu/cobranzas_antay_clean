@@ -69,8 +69,6 @@ def _clear_env(monkeypatch):
         "SMTP_PASSWORD",
         "RESEND_API_KEY",
         "SENDGRID_API_KEY",
-        "SUPABASE_URL",
-        "SUPABASE_KEY",
     ):
         monkeypatch.delenv(key, raising=False)
 

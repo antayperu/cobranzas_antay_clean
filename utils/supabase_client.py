@@ -1,9 +1,9 @@
 """
-Database Client - Singleton Pattern (PostgreSQL local / Cloud-Only)
+Database Client - Singleton Pattern (PostgreSQL local)
 Sistema de Cobranzas Antay
 
-Cliente unificado de base de datos. Usa psycopg2 via NeonClient para conectar
-al PostgreSQL local en la PC QA.
+Cliente unificado de base de datos. Usa psycopg2 via PGClient para conectar
+al PostgreSQL local en la PC QA (localhost:5432, cobranzas_db).
 """
 
 import os
@@ -16,8 +16,8 @@ load_dotenv()
 
 class SupabaseClient:
     """
-    Cliente Singleton para la BD (Neon PostgreSQL en modo cloud-only).
-    Mantiene la interfaz original de SupabaseClient para compatibilidad.
+    Cliente Singleton para la BD (PostgreSQL local).
+    Mantiene el nombre SupabaseClient para compatibilidad con el resto del código.
 
     Uso:
         client = SupabaseClient.get_instance()
@@ -42,19 +42,19 @@ class SupabaseClient:
 
     def _initialize_client(self):
         try:
-            neon_url = os.getenv("NEON_DATABASE_URL")
-            if not neon_url:
-                self._last_error = "NEON_DATABASE_URL no configurado."
+            db_url = os.getenv("DATABASE_URL")
+            if not db_url:
+                self._last_error = "DATABASE_URL no configurado."
                 self._client = None
                 return
             try:
-                from utils.neon_client import NeonClient
-                neon = NeonClient.get_instance()
-                if neon and neon.is_available():
-                    self._client = neon
+                from utils.pg_client import PGClient
+                pg = PGClient.get_instance()
+                if pg and pg.is_available():
+                    self._client = pg
                     self._last_error = None
                 else:
-                    err = neon.get_last_error() if neon else "No se pudo conectar a la BD"
+                    err = pg.get_last_error() if pg else "No se pudo conectar a la BD"
                     self._last_error = f"Error BD: {err}"
                     self._client = None
             except Exception as e:
@@ -98,7 +98,7 @@ class SupabaseClient:
 
     @staticmethod
     def is_cloud_mode() -> bool:
-        return bool(os.getenv("NEON_DATABASE_URL"))
+        return bool(os.getenv("DATABASE_URL"))
 
 
 def get_supabase_client():
@@ -113,6 +113,6 @@ def is_cloud_mode() -> bool:
 if __name__ == "__main__":
     client = SupabaseClient.get_instance()
     if client.is_available():
-        print("Database client available (Neon/cloud mode).")
+        print("Base de datos disponible.")
     else:
-        print(f"Database client not available: {client.get_last_error()}")
+        print(f"Base de datos no disponible: {client.get_last_error()}")

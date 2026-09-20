@@ -1,11 +1,11 @@
 """
-NeonClient — Capa de compatibilidad psycopg2 que imita la API de supabase-py.
+PGClient — Capa psycopg2 que imita la API de supabase-py.
 
-Permite cambiar toda la capa de base de datos de Supabase a Neon PostgreSQL
-sin reescribir db_manager.py. Solo cambia el "plomero", no la logica de negocio.
+Conecta al PostgreSQL local (PC QA, localhost:5432) sin dependencias de
+servicios externos. Solo cambia el "plomero", no la lógica de negocio.
 
 Interfaz compatible con supabase-py:
-    client = NeonClient.get_instance()
+    client = PGClient.get_instance()
     res = client.table("clientes").select("*").eq("estado", "ACTIVO").execute()
     rows = res.data     # list[dict]
     count = res.count   # int | None
@@ -26,7 +26,7 @@ import psycopg2.pool
 # Resultado compatible con supabase-py APIResponse
 # ─────────────────────────────────────────────────────────────────────────────
 
-class NeonResult:
+class PGResult:
     __slots__ = ("data", "count", "error")
 
     def __init__(self, data=None, count=None, error=None):
@@ -39,7 +39,7 @@ class NeonResult:
 # Query Builder — imita la API fluida de supabase-py
 # ─────────────────────────────────────────────────────────────────────────────
 
-class NeonQueryBuilder:
+class PGQueryBuilder:
     def __init__(self, conn_factory, table: str):
         self._conn_factory = conn_factory
         self._table = table
@@ -57,70 +57,70 @@ class NeonQueryBuilder:
 
     # ── select / write operations ────────────────────────────────────────────
 
-    def select(self, cols: str = "*", count: Optional[str] = None) -> "NeonQueryBuilder":
+    def select(self, cols: str = "*", count: Optional[str] = None) -> "PGQueryBuilder":
         self._operation = "select"
         self._select_cols = cols
         self._count_mode = count
         return self
 
-    def insert(self, data) -> "NeonQueryBuilder":
+    def insert(self, data) -> "PGQueryBuilder":
         self._operation = "insert"
         self._payload = data
         return self
 
-    def upsert(self, data, on_conflict: Optional[str] = None) -> "NeonQueryBuilder":
+    def upsert(self, data, on_conflict: Optional[str] = None) -> "PGQueryBuilder":
         self._operation = "upsert"
         self._payload = data
         self._on_conflict = on_conflict
         return self
 
-    def update(self, data) -> "NeonQueryBuilder":
+    def update(self, data) -> "PGQueryBuilder":
         self._operation = "update"
         self._payload = data
         return self
 
-    def delete(self) -> "NeonQueryBuilder":
+    def delete(self) -> "PGQueryBuilder":
         self._operation = "delete"
         return self
 
     # ── filters ──────────────────────────────────────────────────────────────
 
-    def eq(self, col: str, val) -> "NeonQueryBuilder":
+    def eq(self, col: str, val) -> "PGQueryBuilder":
         self._filters.append(("=", col, val))
         return self
 
-    def neq(self, col: str, val) -> "NeonQueryBuilder":
+    def neq(self, col: str, val) -> "PGQueryBuilder":
         self._filters.append(("!=", col, val))
         return self
 
-    def gt(self, col: str, val) -> "NeonQueryBuilder":
+    def gt(self, col: str, val) -> "PGQueryBuilder":
         self._filters.append((">", col, val))
         return self
 
-    def gte(self, col: str, val) -> "NeonQueryBuilder":
+    def gte(self, col: str, val) -> "PGQueryBuilder":
         self._filters.append((">=", col, val))
         return self
 
-    def lt(self, col: str, val) -> "NeonQueryBuilder":
+    def lt(self, col: str, val) -> "PGQueryBuilder":
         self._filters.append(("<", col, val))
         return self
 
-    def lte(self, col: str, val) -> "NeonQueryBuilder":
+    def lte(self, col: str, val) -> "PGQueryBuilder":
         self._filters.append(("<=", col, val))
         return self
 
-    def in_(self, col: str, vals: list) -> "NeonQueryBuilder":
+    def in_(self, col: str, vals: list) -> "PGQueryBuilder":
         self._filters.append(("IN", col, vals))
         return self
 
-    def not_(self, col: str, op: str, val) -> "NeonQueryBuilder":
+    def not_(self, col: str, op: str, val) -> "PGQueryBuilder":
         if op.lower() == "is" and val is None:
             self._filters.append(("IS NOT NULL", col, None))
         else:
             self._filters.append((f"NOT_{op.upper()}", col, val))
         return self
 
-    def is_(self, col: str, val) -> "NeonQueryBuilder":
+    def is_(self, col: str, val) -> "PGQueryBuilder":
         if val is None:
             self._filters.append(("IS NULL", col, None))
         else:
@@ -129,16 +129,16 @@ class NeonQueryBuilder:
 
     # ── ordering / pagination ────────────────────────────────────────────────
 
-    def order(self, col: str, desc: bool = False) -> "NeonQueryBuilder":
+    def order(self, col: str, desc: bool = False) -> "PGQueryBuilder":
         self._order_col = col
         self._order_desc = desc
         return self
 
-    def limit(self, n: int) -> "NeonQueryBuilder":
+    def limit(self, n: int) -> "PGQueryBuilder":
         self._limit_n = n
         return self
 
-    def range(self, start: int, end: int) -> "NeonQueryBuilder":
+    def range(self, start: int, end: int) -> "PGQueryBuilder":
         self._range_start = start
         self._range_end = end
         return self
@@ -173,10 +173,10 @@ class NeonQueryBuilder:
 
     # ── execute ──────────────────────────────────────────────────────────────
 
-    def execute(self) -> NeonResult:
+    def execute(self) -> PGResult:
         conn = self._conn_factory()
         if conn is None:
-            return NeonResult(error="No database connection available")
+            return PGResult(error="No database connection available")
         try:
             return self._run(conn)
         except Exception as exc:
@@ -184,9 +184,9 @@ class NeonQueryBuilder:
                 conn.rollback()
             except Exception:
                 pass
-            return NeonResult(error=str(exc))
+            return PGResult(error=str(exc))
 
-    def _run(self, conn) -> NeonResult:
+    def _run(self, conn) -> PGResult:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("SET statement_timeout = 60000")
             tbl = f'public."{self._table}"'
@@ -207,9 +207,9 @@ class NeonQueryBuilder:
             if self._operation == "delete":
                 return self._run_delete(cur, tbl, params, conn)
 
-        return NeonResult(error=f"Unknown operation: {self._operation}")
+        return PGResult(error=f"Unknown operation: {self._operation}")
 
-    def _run_select(self, cur, tbl: str, params: list, conn) -> NeonResult:
+    def _run_select(self, cur, tbl: str, params: list, conn) -> PGResult:
         where = self._build_where(params)
         where_clause = f" WHERE {where}" if where else ""
 
@@ -217,7 +217,7 @@ class NeonQueryBuilder:
             count_sql = f"SELECT COUNT(*) AS cnt FROM {tbl}{where_clause}"
             cur.execute(count_sql, params)
             row = cur.fetchone()
-            return NeonResult(data=[], count=int(row["cnt"]))
+            return PGResult(data=[], count=int(row["cnt"]))
 
         cols = self._select_cols if self._select_cols != "*" else "*"
         sql = f"SELECT {cols} FROM {tbl}{where_clause}"
@@ -234,9 +234,9 @@ class NeonQueryBuilder:
 
         cur.execute(sql, params)
         rows = [dict(r) for r in cur.fetchall()]
-        return NeonResult(data=rows, count=len(rows))
+        return PGResult(data=rows, count=len(rows))
 
-    def _run_insert(self, cur, tbl: str, conn) -> NeonResult:
+    def _run_insert(self, cur, tbl: str, conn) -> PGResult:
         payload = self._payload
         if isinstance(payload, dict):
             payload = [payload]
@@ -252,9 +252,9 @@ class NeonQueryBuilder:
             if fetched:
                 results.append(dict(fetched))
         conn.commit()
-        return NeonResult(data=results)
+        return PGResult(data=results)
 
-    def _run_upsert(self, cur, tbl: str, conn) -> NeonResult:
+    def _run_upsert(self, cur, tbl: str, conn) -> PGResult:
         payload = self._payload
         if isinstance(payload, dict):
             payload = [payload]
@@ -281,9 +281,9 @@ class NeonQueryBuilder:
             if fetched:
                 results.append(dict(fetched))
         conn.commit()
-        return NeonResult(data=results)
+        return PGResult(data=results)
 
-    def _run_update(self, cur, tbl: str, params: list, conn) -> NeonResult:
+    def _run_update(self, cur, tbl: str, params: list, conn) -> PGResult:
         data = self._payload or {}
         set_parts = []
         set_vals = []
@@ -296,26 +296,26 @@ class NeonQueryBuilder:
         cur.execute(sql, set_vals + params)
         rows = [dict(r) for r in cur.fetchall()]
         conn.commit()
-        return NeonResult(data=rows)
+        return PGResult(data=rows)
 
-    def _run_delete(self, cur, tbl: str, params: list, conn) -> NeonResult:
+    def _run_delete(self, cur, tbl: str, params: list, conn) -> PGResult:
         where = self._build_where(params)
         where_clause = f" WHERE {where}" if where else ""
         if not where_clause:
-            return NeonResult(error="DELETE sin WHERE rechazado por seguridad")
+            return PGResult(error="DELETE sin WHERE rechazado por seguridad")
         sql = f"DELETE FROM {tbl}{where_clause} RETURNING id"
         cur.execute(sql, params)
         rows = [dict(r) for r in cur.fetchall()]
         conn.commit()
-        return NeonResult(data=rows)
+        return PGResult(data=rows)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cliente principal — Singleton thread-safe con pool de conexiones
 # ─────────────────────────────────────────────────────────────────────────────
 
-class NeonClient:
-    _instance: Optional["NeonClient"] = None
+class PGClient:
+    _instance: Optional["PGClient"] = None
     _lock = threading.Lock()
 
     def __init__(self, database_url: str):
@@ -326,9 +326,6 @@ class NeonClient:
 
     def _connect(self):
         try:
-            # connect_timeout: TCP handshake limit (seconds).
-            # statement_timeout: server-side query limit (ms) — prevents cold-start hangs on Neon free tier.
-            # keepalives_*: OS-level TCP probes to detect dead connections without waiting forever.
             dsn = self._url
             if "connect_timeout" not in dsn:
                 sep = "&" if "?" in dsn else "?"
@@ -349,18 +346,18 @@ class NeonClient:
             self._error = str(exc)
 
     @classmethod
-    def get_instance(cls) -> Optional["NeonClient"]:
+    def get_instance(cls) -> Optional["PGClient"]:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    url = os.getenv("NEON_DATABASE_URL")
+                    url = os.getenv("DATABASE_URL")
                     if not url:
                         return None
                     cls._instance = cls(url)
         return cls._instance
 
     @classmethod
-    def reset(cls) -> Optional["NeonClient"]:
+    def reset(cls) -> Optional["PGClient"]:
         with cls._lock:
             if cls._instance and cls._instance._pool:
                 try:
@@ -395,13 +392,13 @@ class NeonClient:
     def _conn_factory(self):
         return self._get_conn()
 
-    def table(self, table_name: str) -> NeonQueryBuilder:
+    def table(self, table_name: str) -> PGQueryBuilder:
         conn = self._get_conn()
 
-        class _PooledQueryBuilder(NeonQueryBuilder):
-            def execute(inner_self) -> NeonResult:
+        class _PooledQueryBuilder(PGQueryBuilder):
+            def execute(inner_self) -> PGResult:
                 if conn is None:
-                    return NeonResult(error="No database connection available")
+                    return PGResult(error="No database connection available")
                 try:
                     result = inner_self._run(conn)
                     return result
@@ -410,18 +407,18 @@ class NeonClient:
                         conn.rollback()
                     except Exception:
                         pass
-                    return NeonResult(error=str(exc))
+                    return PGResult(error=str(exc))
                 finally:
                     self._put_conn(conn)
 
         return _PooledQueryBuilder(lambda: conn, table_name)
 
 
-def get_neon_client() -> Optional[NeonClient]:
-    """Punto de entrada principal. Retorna el cliente Neon singleton."""
-    return NeonClient.get_instance()
+def get_pg_client() -> Optional[PGClient]:
+    """Punto de entrada principal. Retorna el cliente PostgreSQL singleton."""
+    return PGClient.get_instance()
 
 
-def is_neon_available() -> bool:
-    client = NeonClient.get_instance()
+def is_pg_available() -> bool:
+    client = PGClient.get_instance()
     return client is not None and client.is_available()

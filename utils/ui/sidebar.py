@@ -8,9 +8,7 @@ import utils.state_manager as _state_mgr
 from utils.session import restore_session_by_id
 
 # ── Ambiente detection ────────────────────────────────────────────────────────
-_STAGING_URL = "hrnqngndnohkkegtzgjg.supabase.co"
-_SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-IS_STAGING = _STAGING_URL in _SUPABASE_URL
+IS_STAGING = os.getenv("IS_STAGING", "").lower() in ("1", "true", "yes")
 
 
 def _render_env_banner() -> None:

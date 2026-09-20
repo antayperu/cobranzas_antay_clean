@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-NEON_URL = os.getenv("NEON_DATABASE_URL")
+NEON_URL = os.getenv("DATABASE_URL")
 if not NEON_URL:
-    print("ERROR: NEON_DATABASE_URL no encontrada en .env")
+    print("ERROR: DATABASE_URL no encontrada en .env")
     sys.exit(1)
 
 SCHEMA_SQL = """

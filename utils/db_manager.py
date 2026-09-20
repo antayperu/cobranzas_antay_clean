@@ -12,10 +12,7 @@ load_dotenv()
 
 
 DB_NAME = "email_ledger.db"
-NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL")
-# Mantenemos estas vars para compatibilidad con código que las lee directamente
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 _client = None
 _last_error: Optional[str] = None
@@ -79,23 +76,23 @@ def get_system_health() -> dict:
 
 
 def get_supabase_client():
-    """Retorna cliente de BD (PostgreSQL local via NeonClient).
+    """Retorna cliente de BD (PostgreSQL local via PGClient).
 
-    Siempre sincroniza con el singleton actual de NeonClient para evitar
+    Siempre sincroniza con el singleton actual de PGClient para evitar
     devolver un cliente con pool cerrado tras un reset.
     """
     global _client
-    if not NEON_DATABASE_URL:
-        _set_last_error("Base de datos no configurada (NEON_DATABASE_URL faltante)")
+    if not DATABASE_URL:
+        _set_last_error("Base de datos no configurada (DATABASE_URL faltante)")
         return None
     try:
-        from utils.neon_client import NeonClient
-        neon = NeonClient.get_instance()
-        if neon and neon.is_available():
-            _client = neon  # Siempre sincronizar con el singleton actual
+        from utils.pg_client import PGClient
+        pg = PGClient.get_instance()
+        if pg and pg.is_available():
+            _client = pg
             _set_last_error(None)
             return _client
-        err = neon.get_last_error() if neon else "No se pudo inicializar cliente de BD"
+        err = pg.get_last_error() if pg else "No se pudo inicializar cliente de BD"
         _set_last_error(f"Error BD: {err}")
         _client = None
         print(f"Error BD: {err}")
@@ -107,7 +104,7 @@ def get_supabase_client():
 
 
 def is_cloud_mode() -> bool:
-    return bool(NEON_DATABASE_URL)
+    return bool(DATABASE_URL)
 
 
 def initialize_db() -> bool:
@@ -3539,10 +3536,10 @@ def get_resumen_gestiones_ciclo(cycle_id: str, solo_notificable: bool = False) -
 # ── envios_programados ──────────────────────────────────────────────────────
 
 def _neon_execute_raw(sql: str, params=None) -> bool:
-    """Ejecuta SQL arbitrario (DDL/DML) directamente contra el pool de Neon."""
+    """Ejecuta SQL arbitrario (DDL/DML) directamente contra el pool de BD."""
     try:
-        from utils.neon_client import NeonClient
-        neon = NeonClient.get_instance()
+        from utils.pg_client import PGClient
+        neon = PGClient.get_instance()
         if not neon or not neon.is_available():
             return False
         conn = neon._get_conn()
