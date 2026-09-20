@@ -341,6 +341,11 @@ class PGClient:
                 keepalives_count=5,
             )
             self._error = None
+        except UnicodeDecodeError:
+            # Ocurre en Windows cuando el mensaje de error de libpq viene en
+            # codificación del sistema (cp1252) y psycopg2 intenta decodificarlo como UTF-8.
+            self._pool = None
+            self._error = "No se pudo conectar a PostgreSQL (host no disponible o credenciales incorrectas)"
         except Exception as exc:
             self._pool = None
             self._error = str(exc)

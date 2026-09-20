@@ -32,7 +32,7 @@ if (-not (Test-Path -Path $EnvFile)) {
 
 Set-EnvFromFile -Path $EnvFile
 
-$requiredVars = @("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+$requiredVars = @("DATABASE_URL")
 $missing = @($requiredVars | Where-Object {
     $currentValue = (Get-Item -Path ("env:" + $_) -ErrorAction SilentlyContinue).Value
     [string]::IsNullOrWhiteSpace($currentValue)
@@ -46,7 +46,7 @@ if ([string]::IsNullOrWhiteSpace($env:NOTION_TOKEN)) {
 }
 
 Write-Host "Ambiente: STAGING" -ForegroundColor Yellow
-Write-Host "SUPABASE_URL: $($env:SUPABASE_URL)"
+Write-Host "DATABASE_URL: $($env:DATABASE_URL)"
 Write-Host "Puerto Streamlit: $Port"
 
 $Python = "C:\Users\corte\AppData\Local\Programs\Python\Python312\python.exe"
