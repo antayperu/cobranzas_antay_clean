@@ -187,6 +187,7 @@ class NeonQueryBuilder:
 
     def _run(self, conn) -> NeonResult:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SET statement_timeout = 60000")
             tbl = f'public."{self._table}"'
             params: list = []
 
@@ -324,11 +325,22 @@ class NeonClient:
 
     def _connect(self):
         try:
+            # connect_timeout: TCP handshake limit (seconds).
+            # statement_timeout: server-side query limit (ms) — prevents cold-start hangs on Neon free tier.
+            # keepalives_*: OS-level TCP probes to detect dead connections without waiting forever.
+            dsn = self._url
+            if "connect_timeout" not in dsn:
+                sep = "&" if "?" in dsn else "?"
+                dsn = f"{dsn}{sep}connect_timeout=15"
             self._pool = psycopg2.pool.ThreadedConnectionPool(
                 minconn=1,
                 maxconn=5,
-                dsn=self._url,
-                options="-c search_path=public",
+                dsn=dsn,
+                options="-c search_path=public -c statement_timeout=60000",
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=5,
+                keepalives_count=5,
             )
             self._error = None
         except Exception as exc:

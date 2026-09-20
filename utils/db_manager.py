@@ -69,7 +69,6 @@ def get_system_health() -> dict:
     try:
         res = client.table("clientes").select("cliente_id", count="exact").limit(0).execute()
         if res.error:
-            print(f"[DIAG get_system_health] res.error={res.error!r}")
             _set_last_error(str(res.error))
             return {"supabase_ok": False, "clientes_count": 0, "error": str(res.error)}
         count = res.count if res.count is not None else 0
@@ -1027,7 +1026,6 @@ def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
                 client.table("clientes").select(_COLS).order("cliente_id").range(offset, end)
             )
             if res.error:
-                print(f"[DIAG get_clientes_master] offset={offset} res.error={res.error!r}")
                 break
             batch = list(res.data or [])
             all_rows.extend(batch)

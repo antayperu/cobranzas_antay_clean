@@ -139,13 +139,14 @@ if wizard_action == "PROCESS_TRIGGERED":
                 df_ctas_raw = pd.read_excel(file_ctas)
                 df_cobranza_raw = pd.read_excel(file_cobranza)
 
-                st.write("☁️ Descargando cartera maestra desde Supabase...")
+                st.write("☁️ Descargando cartera maestra desde la base de datos...")
                 cartera_rows = dbm.get_clientes_master(limit=50000)
                 if not cartera_rows:
                     _detail = dbm.get_last_error()
                     error = (
-                        "No hay cartera maestra en Supabase. "
-                        "Gestiona o migra clientes en la TAB Clientes Premium y vuelve a procesar."
+                        "No se pudo descargar la cartera maestra. "
+                        "La base de datos puede estar iniciando — espera 30 segundos y vuelve a intentarlo. "
+                        "Si el problema persiste, ve a la pestaña Clientes Premium para verificar que haya clientes registrados."
                     )
                     if _detail:
                         error += f" — Detalle: {_detail}"
