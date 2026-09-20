@@ -1,13 +1,47 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-08-16
-Version actual: v2.2.3 (RELEASED — RC-OPS-008 Bat QA auto-reparable + venv recovery + deploy procedure seguro)
+Ultima actualizacion: 2026-09-20
+Version actual: v2.3.0 (DEV — RC-TECH-002 PostgreSQL local puro + RC-FEAT-094 Panel ayuda contextual · 164/164 tests · 2026-09-20)
+Version anterior: v2.2.3 (RELEASED — RC-OPS-008 Bat QA auto-reparable + venv recovery + deploy procedure seguro · 2026-08-16)
 Version anterior: v2.2.2 (RC-BUG-084 Eliminar persistencia cobranzas · de 70 a 8 HTTP calls · ciclo de 45-60s a 5-10s · 2026-08-15)
 Version anterior: v2.2.1 (RC-BUG-083 Performance ciclo nuevo · batch 100 · sleep 0.1s · reconcile background · 2026-08-15)
 Version anterior: v2.2.0 (RC-FEAT-042 Kardex + Sección G + Meta Cobro · 162/162 tests · 2026-04-04)
-Estado migracion Supabase: Completada. Todas las fases MIG-000 a MIG-009 + SUPABASE-002 + CONFIG-001 cerradas.
+Arquitectura BD: PostgreSQL 17 local en PC QA (localhost:5432/cobranzas_db). Neon y Supabase eliminados completamente (RC-TECH-002 · 2026-09-20).
 Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). TIER 2 completado 2026-03-16. TIER 3 pendiente.
 Informe Gerencial PDF: completado 2026-03-28. Email+PDF Premium: completado 2026-03-28. Tag v2.0.0 en main.
+
+---
+
+## Sprint 2026-09 — Arquitectura PostgreSQL Local + UX ✅ COMPLETADO (2026-09-20)
+
+### RC-TECH-002: Migración completa a PostgreSQL local — eliminar Neon y Supabase
+- Estado: Done ✅ · Deployado QA 2026-09-20
+- Prioridad: P0 Critico
+- Descripcion: Reemplazar neon_client.py por pg_client.py (clase PGClient), cambiar NEON_DATABASE_URL por DATABASE_URL, eliminar SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY de todo el codebase. Actualizar start_prod.ps1, start_staging.ps1, .env.example. IS_STAGING ahora se controla con var de entorno propia.
+- Criterios de Aceptacion:
+  - [x] neon_client.py eliminado, reemplazado por pg_client.py
+  - [x] Env var DATABASE_URL en uso en todo el codigo
+  - [x] Sin referencias a Neon ni Supabase en codigo runtime
+  - [x] UnicodeDecodeError de Windows manejado con mensaje limpio
+  - [x] start_prod.ps1 y start_staging.ps1 actualizados
+  - [x] 164/164 tests PASS
+  - [x] Test exploratorio Playwright validado localmente
+
+### RC-FEAT-094: Panel de ayuda contextual en pantalla de inicio
+- Estado: Done ✅ · Deployado QA 2026-09-20
+- Prioridad: P2 Medio
+- Descripcion: Panel "Asistente de ayuda" visible solo en la pantalla de inicio (sin ciclo activo). Incluye 5 preguntas frecuentes, respuestas contextuales y campo de consulta libre. Toggle "❔ Ayuda" en sidebar. El panel (y su chat_input) desaparece cuando data_ready=True para no interferir con tabs de negocio.
+- Criterios de Aceptacion:
+  - [x] HELP_PANEL_CSS en styles.py (diseno Antay, gradiente teal/azul)
+  - [x] render_help_center() solo se ejecuta cuando not data_ready
+  - [x] 5 FAQ con respuestas contextuales
+  - [x] Chat input para consultas libres
+  - [x] Toggle en sidebar con persistencia en session_state
+  - [x] Sin widget flotante en tabs WhatsApp/Email/CRM
+
+### RC-BUG-085 a RC-BUG-093: Estabilizacion PostgreSQL local (2026-08-17 a 2026-09-19)
+- Estado: Done ✅
+- Incluye: reduccion batch IO (085), cache agresivo db_manager (086), sorted() fix (091), texto Supabase → Base de datos (091 R3), dropna fix (091 R2), PostgreSQL local + timeout (092), eliminacion refs Supabase/Neon en runtime (093)
 
 ---
 

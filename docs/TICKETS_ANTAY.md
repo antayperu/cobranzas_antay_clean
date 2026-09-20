@@ -7,12 +7,12 @@
 
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
-| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 043 |
-| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 084 |
+| **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 094 |
+| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 093 |
 | **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 004 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
-| **RC-TECH** | Deuda técnica | Estandarización de esquema, nomenclatura, contratos internos. | 001 |
+| **RC-TECH** | Deuda técnica | Estandarización de esquema, nomenclatura, contratos internos. | 002 |
 | **RC-SEC** | Seguridad | Manejo de datos sensibles, credenciales. | 000 |
 | **RC-QA** | Calidad | Pruebas, validaciones, checklists. | 002 |
 | **RC-DOC** | Documentación | Guías, manuales, actualización de estados. | 001 |
@@ -26,6 +26,13 @@
 
 | ID | Título | Prioridad | Estado | Asignado | Fecha Inicio | Fecha Cierre |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **RC-TECH-002** | Migrar a PostgreSQL local puro — eliminar Neon y Supabase del codebase | **P0** (Critico) | Done ✅ | Claude | 2026-09-20 | 2026-09-20 |
+| **RC-FEAT-094** | Panel de ayuda contextual en pantalla de inicio con FAQ y chat libre | **P2** (Medio) | Done ✅ | Claude | 2026-09-20 | 2026-09-20 |
+| **RC-BUG-093** | PostgreSQL-only: eliminar refs Supabase/Neon en runtime + fix escritura ciclo | **P1** (Alto) | Done ✅ | Claude | 2026-09-19 | 2026-09-19 |
+| **RC-BUG-092** | PostgreSQL local en QA — timeout Neon + mensajes de error | **P1** (Alto) | Done ✅ | Claude | 2026-09-19 | 2026-09-19 |
+| **RC-BUG-091** | sorted() definitivo + diag NeonClient + texto "Base de datos" | **P1** (Alto) | Done ✅ | Claude | 2026-09-19 | 2026-09-19 |
+| **RC-BUG-086** | Cache agresivo en db_manager para reducir CPU Supabase | **P2** (Medio) | Done ✅ | Claude | 2026-08-17 | 2026-08-17 |
+| **RC-BUG-085** | Reducir batch IO para evitar timeouts en Supabase Free | **P1** (Alto) | Done ✅ | Claude | 2026-08-17 | 2026-08-17 |
 | **RC-OPS-008** | Reparar venv QA + bat inicio auto-reparable + deploy procedure seguro | **P1** (Alto) | Done ✅ | Claude | 2026-08-16 | 2026-08-16 |
 | **RC-BUG-084** | Eliminar persistencia cobranzas en ciclo nuevo — de 70 a 8 llamadas HTTP | **P1** (Alto) | Done ✅ | Claude | 2026-08-15 | 2026-08-15 |
 | **RC-BUG-083** | Performance generacion ciclo nuevo — batch 100, sleep 0.1s, reconcile en background | **P2** (Medio) | Done ✅ | Claude | 2026-08-15 | 2026-08-15 |
