@@ -56,6 +56,22 @@ devReporteCobranzas/
 *_old.py
 *.bak
 
+# Gmail API OAuth (NUNCA commitear — contienen secretos)
+gmail_oauth_credentials.json
+gmail_token.json
+token.json
+
+# Playwright MCP (capturas de automatización)
+.playwright-mcp/
+playwright_screenshots/
+playwright_test/
+
+# Virtual environment alternativo
+.venv/
+
+# Screenshots de sesiones de trabajo (no son parte del código)
+*.png
+
 # Archivos temporales
 *.tmp
 *.tmp.*
