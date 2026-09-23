@@ -8,7 +8,7 @@
 | Código | Tipo | Descripción | Último ID |
 | :--- | :--- | :--- | :--- |
 | **RC-FEAT** | Funcionalidad | Nueva característica visible para el usuario. | 094 |
-| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 093 |
+| **RC-BUG** | Corrección | Error reportado o encontrado en QA. | 094 |
 | **RC-UX** | UI/UX | Mejoras visuales, flujos, feedback. | 004 |
 | **RC-PERF** | Performance | Optimización de tiempo, memoria o recursos. | 001 |
 | **RC-ARCH** | Arquitectura | Refactor de código, estructura o deuda técnica. | 001 |
@@ -26,6 +26,7 @@
 
 | ID | Título | Prioridad | Estado | Asignado | Fecha Inicio | Fecha Cierre |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **RC-BUG-094** | Fix contador "Enviados Hoy" = 0 — constraint notificaciones + DEBUG removal + spinners email | **P1** (Alto) | Done ✅ | Claude | 2026-09-22 | 2026-09-22 |
 | **RC-TECH-002** | Migrar a PostgreSQL local puro — eliminar Neon y Supabase del codebase | **P0** (Critico) | Done ✅ | Claude | 2026-09-20 | 2026-09-20 |
 | **RC-FEAT-094 v2** | Panel de ayuda contextual en sidebar con FAQ y consulta libre | **P2** (Medio) | Done ✅ | Claude | 2026-09-20 | 2026-09-20 |
 | **RC-BUG-093** | PostgreSQL-only: eliminar refs Supabase/Neon en runtime + fix escritura ciclo | **P1** (Alto) | Done ✅ | Claude | 2026-09-19 | 2026-09-19 |

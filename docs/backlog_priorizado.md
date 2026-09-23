@@ -1,7 +1,8 @@
 # Backlog Priorizado - ReporteCobranzas Antay
 
-Ultima actualizacion: 2026-09-20
-Version actual: v2.3.0 (DEV — RC-TECH-002 PostgreSQL local puro + RC-FEAT-094 Panel ayuda contextual · 164/164 tests · 2026-09-20)
+Ultima actualizacion: 2026-09-22
+Version actual: v2.3.1 (DEV — RC-BUG-094 Fix contador Enviados Hoy + SMTP spinner + constraint notificaciones · 164/164 tests · 2026-09-22)
+Version anterior: v2.3.0 (DEV — RC-TECH-002 PostgreSQL local puro + RC-FEAT-094 Panel ayuda contextual · 164/164 tests · 2026-09-20)
 Version anterior: v2.2.3 (RELEASED — RC-OPS-008 Bat QA auto-reparable + venv recovery + deploy procedure seguro · 2026-08-16)
 Version anterior: v2.2.2 (RC-BUG-084 Eliminar persistencia cobranzas · de 70 a 8 HTTP calls · ciclo de 45-60s a 5-10s · 2026-08-15)
 Version anterior: v2.2.1 (RC-BUG-083 Performance ciclo nuevo · batch 100 · sleep 0.1s · reconcile background · 2026-08-15)
@@ -9,6 +10,22 @@ Version anterior: v2.2.0 (RC-FEAT-042 Kardex + Sección G + Meta Cobro · 162/16
 Arquitectura BD: PostgreSQL 17 local en PC QA (localhost:5432/cobranzas_db). Neon y Supabase eliminados completamente (RC-TECH-002 · 2026-09-20).
 Iniciativa CRM WhatsApp: TIER 1 completado 2026-03-13 (141/141 tests). TIER 2 completado 2026-03-16. TIER 3 pendiente.
 Informe Gerencial PDF: completado 2026-03-28. Email+PDF Premium: completado 2026-03-28. Tag v2.0.0 en main.
+
+---
+
+## Sprint 2026-09 (continuación) — Fix Email + Notificaciones ✅ COMPLETADO (2026-09-22)
+
+### RC-BUG-094: Contador "Enviados Hoy" siempre en 0 — constraint notificaciones
+- Estado: Done ✅ · Deployado QA 2026-09-22
+- Prioridad: P1 Alto
+- Descripcion: El contador "Enviados Hoy" nunca se incrementaba aunque el correo se enviaba correctamente. Causa raíz: la tabla `notificaciones` tenía un CHECK constraint que solo aceptaba valores históricos (`VENCIMIENTO`, `PAGO_RECIBIDO`, `GESTION_FALLIDA`, `ALERTA`, `INFO`) pero el código insertaba `EMAIL`. El insert fallaba silenciosamente sin informar al usuario. Además se eliminó mensaje de DEBUG visible en producción y se agregaron spinners de feedback durante generación de PDF y envío SMTP.
+- Criterios de Aceptacion:
+  - [x] Migration `98_migrate_tipo_notificacion_canal.sql` aplicada en PostgreSQL QA
+  - [x] Constraint actualizado: acepta `EMAIL`, `WHATSAPP`, `SMS`, `INFO`, `ALERTA`, `GESTION_FALLIDA`
+  - [x] Mensaje DEBUG `👷 DEBUG: Iniciando envío...` eliminado del código de producción
+  - [x] Spinner "Preparando N Estado(s) de Cuenta en PDF..." durante generación de PDFs
+  - [x] Spinner "Enviando N correo(s) vía Gmail..." durante envío SMTP
+  - [x] Contador "Enviados Hoy" se incrementa correctamente tras envío exitoso
 
 ---
 

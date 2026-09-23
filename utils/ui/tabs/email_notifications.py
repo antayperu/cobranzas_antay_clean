@@ -433,8 +433,6 @@ def render_tab(df_final, df_filtered, config):
                 if is_processed:
                     st.stop()
 
-                st.write(f"👷 DEBUG: Iniciando envío... Hash: {current_batch_id} | ForceResend: {force_resend_ttl}")
-
                 smtp_cfg       = config.get('smtp_config', {})
                 email_user     = smtp_cfg.get('user', '')
                 email_pass     = smtp_cfg.get('password', '')
@@ -462,84 +460,86 @@ def render_tab(df_final, df_filtered, config):
                     seen_emails_batch = set()
                     current_cycle_id  = st.session_state.get('cycle_id', 'default_cycle')
                     batch_logo_path   = _resolve_runtime_logo(config)
+                    fecha_corte       = st.session_state.get('config_fecha_corte', date.today())
+                    n_sel             = len(sel_emails)
 
-                    for lbl in sel_emails:
-                        info       = email_map[lbl]
-                        email_norm = str(info['email']).strip().lower()
-                        d_cli      = df_filtered[df_filtered['COD CLIENTE'] == info['cod']]
+                    with st.spinner(f"Preparando {n_sel} Estado(s) de Cuenta en PDF..."):
+                        for lbl in sel_emails:
+                            info       = email_map[lbl]
+                            email_norm = str(info['email']).strip().lower()
+                            d_cli      = df_filtered[df_filtered['COD CLIENTE'] == info['cod']]
 
-                        if 'MATCH_KEY' in d_cli.columns:
-                            doc_ids = sorted(d_cli['MATCH_KEY'].astype(str).unique())
-                            doc_str = "|".join(doc_ids)
-                        else:
-                            doc_ids = sorted(d_cli['COMPROBANTE'].astype(str).unique()) if 'COMPROBANTE' in d_cli.columns else []
-                            doc_str = "|".join(doc_ids)
+                            if 'MATCH_KEY' in d_cli.columns:
+                                doc_ids = sorted(d_cli['MATCH_KEY'].astype(str).unique())
+                                doc_str = "|".join(doc_ids)
+                            else:
+                                doc_ids = sorted(d_cli['COMPROBANTE'].astype(str).unique()) if 'COMPROBANTE' in d_cli.columns else []
+                                doc_str = "|".join(doc_ids)
 
-                        doc_set_fingerprint = hashlib.md5(doc_str.encode()).hexdigest()[:8]
-                        tipo_notificacion   = "Email_EstadoCuenta"
-                        fecha_corte         = st.session_state.get('config_fecha_corte', date.today())
-                        notif_key           = f"{config.get('company_name','Antay')}|{email_norm}|{fecha_corte}|{tipo_notificacion}|{doc_set_fingerprint}"
+                            doc_set_fingerprint = hashlib.md5(doc_str.encode()).hexdigest()[:8]
+                            tipo_notificacion   = "Email_EstadoCuenta"
+                            notif_key           = f"{config.get('company_name','Antay')}|{email_norm}|{fecha_corte}|{tipo_notificacion}|{doc_set_fingerprint}"
 
-                        mask_soles = d_cli['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
-                        t_s  = d_cli[mask_soles]['SALDO REAL'].sum()
-                        t_d  = d_cli[~mask_soles]['SALDO REAL'].sum()
-                        str_s = f"S/ {t_s:,.2f}" if t_s > 0 else ""
-                        str_d = f"$ {t_d:,.2f}" if t_d > 0 else ""
+                            mask_soles = d_cli['MONEDA'].astype(str).str.strip().str.upper().str.startswith('S', na=False)
+                            t_s  = d_cli[mask_soles]['SALDO REAL'].sum()
+                            t_d  = d_cli[~mask_soles]['SALDO REAL'].sum()
+                            str_s = f"S/ {t_s:,.2f}" if t_s > 0 else ""
+                            str_d = f"$ {t_d:,.2f}" if t_d > 0 else ""
 
-                        try:
-                            pdf_bytes_client = EstadoCuentaCliente(
-                                empresa=info['empresa'],
-                                cod_cliente=info['cod'],
-                                cycle_id=current_cycle_id,
-                                docs_df=d_cli,
-                                settings=config,
-                                logo_path=batch_logo_path,
-                            ).generate()
-                        except Exception as e_pdf_gen:
-                            st.error(f"❌ No se pudo generar PDF para {info['empresa']}: {e_pdf_gen}. Cliente omitido del envío.")
-                            _errs = st.session_state.get('_pdf_gen_errors', [])
-                            _errs.append(info['empresa'])
-                            st.session_state['_pdf_gen_errors'] = _errs
-                            continue
+                            try:
+                                pdf_bytes_client = EstadoCuentaCliente(
+                                    empresa=info['empresa'],
+                                    cod_cliente=info['cod'],
+                                    cycle_id=current_cycle_id,
+                                    docs_df=d_cli,
+                                    settings=config,
+                                    logo_path=batch_logo_path,
+                                ).generate()
+                            except Exception as e_pdf_gen:
+                                st.error(f"❌ No se pudo generar PDF para {info['empresa']}: {e_pdf_gen}. Cliente omitido del envío.")
+                                _errs = st.session_state.get('_pdf_gen_errors', [])
+                                _errs.append(info['empresa'])
+                                st.session_state['_pdf_gen_errors'] = _errs
+                                continue
 
-                        empresa_slug  = "".join(c for c in info['empresa'][:20] if c.isalnum() or c in (" ", "-", "_")).strip().replace(" ", "_")
-                        pdf_filename  = f"EstadoCuenta_{empresa_slug}_{current_cycle_id}.pdf"
-                        body          = es.generate_cover_email_html(info['empresa'], d_cli, current_cycle_id, config)
-                        plain_body    = es.generate_plain_text_body(info['empresa'], d_cli, str_s, str_d, config)
-                        company_sender = config.get('company_name', 'DACTA S.A.C.')
-                        subject_line   = f"Estado de Cuenta {company_sender} | Cliente: {info['empresa']}"
+                            empresa_slug  = "".join(c for c in info['empresa'][:20] if c.isalnum() or c in (" ", "-", "_")).strip().replace(" ", "_")
+                            pdf_filename  = f"EstadoCuenta_{empresa_slug}_{current_cycle_id}.pdf"
+                            body          = es.generate_cover_email_html(info['empresa'], d_cli, current_cycle_id, config)
+                            plain_body    = es.generate_plain_text_body(info['empresa'], d_cli, str_s, str_d, config)
+                            company_sender = config.get('company_name', 'DACTA S.A.C.')
+                            subject_line   = f"Estado de Cuenta {company_sender} | Cliente: {info['empresa']}"
 
-                        match_keys_for_client = d_cli['MATCH_KEY'].tolist() if 'MATCH_KEY' in d_cli.columns else []
+                            match_keys_for_client = d_cli['MATCH_KEY'].tolist() if 'MATCH_KEY' in d_cli.columns else []
 
-                        if 'COMPROBANTE' in d_cli.columns:
-                            docs_unicos = sorted(d_cli['COMPROBANTE'].astype(str).dropna().unique().tolist())
-                        else:
-                            docs_unicos = []
-                        single_documento_numero = docs_unicos[0] if len(docs_unicos) == 1 else None
+                            if 'COMPROBANTE' in d_cli.columns:
+                                docs_unicos = sorted(d_cli['COMPROBANTE'].astype(str).dropna().unique().tolist())
+                            else:
+                                docs_unicos = []
+                            single_documento_numero = docs_unicos[0] if len(docs_unicos) == 1 else None
 
-                        import uuid
-                        msg_unique_id = str(uuid.uuid4())[:8]
+                            import uuid
+                            msg_unique_id = str(uuid.uuid4())[:8]
 
-                        messages_to_send.append({
-                            'msg_id':           msg_unique_id,
-                            'email':            info['email'],
-                            'client_name':      info['empresa'],
-                            'cod_cliente':      info['cod'],
-                            'match_keys':       match_keys_for_client,
-                            'subject':          subject_line,
-                            'html_body':        body,
-                            'plain_body':       plain_body,
-                            'pdf_bytes':        pdf_bytes_client,
-                            'pdf_filename':     pdf_filename,
-                            'notification_key': notif_key,
-                            'original_email':   info['email'],
-                            'documento_numero': single_documento_numero,
-                        })
+                            messages_to_send.append({
+                                'msg_id':           msg_unique_id,
+                                'email':            info['email'],
+                                'client_name':      info['empresa'],
+                                'cod_cliente':      info['cod'],
+                                'match_keys':       match_keys_for_client,
+                                'subject':          subject_line,
+                                'html_body':        body,
+                                'plain_body':       plain_body,
+                                'pdf_bytes':        pdf_bytes_client,
+                                'pdf_filename':     pdf_filename,
+                                'notification_key': notif_key,
+                                'original_email':   info['email'],
+                                'documento_numero': single_documento_numero,
+                            })
 
                     selected_cod_clientes = [email_map[lbl]['cod'] for lbl in sel_emails]
                     st.session_state['last_send_selected_cod'] = selected_cod_clientes
 
-                    with st.spinner(f"Enviando con Business Lock (Fecha: {fecha_corte})..."):
+                    with st.spinner(f"Enviando {len(messages_to_send)} correo(s) vía Gmail..."):
                         results = es.send_email_batch(
                             smtp_cfg,
                             messages_to_send,
@@ -680,7 +680,7 @@ def render_tab(df_final, df_filtered, config):
                             st.session_state['tracking_dirty']     = True
                             st.session_state['last_send_results']  = results
                             st.session_state['last_send_timestamp'] = now_timestamp.strftime('%Y-%m-%d %H:%M:%S')
-                            st.rerun()
+                            st.rerun()  # siempre recargar para que "Enviados Hoy" refleje el envío
 
                     st.divider()
                     st.subheader("📊 Resumen del Proceso")
