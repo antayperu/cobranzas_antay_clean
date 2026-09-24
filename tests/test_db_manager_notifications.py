@@ -51,7 +51,7 @@ class _FakeClient:
 
 def test_persist_notification_event_sent_maps_to_enviado(monkeypatch):
     inserts = []
-    monkeypatch.setattr(dbm, "get_supabase_client", lambda: _FakeClient(inserts))
+    monkeypatch.setattr(dbm, "get_db_client", lambda: _FakeClient(inserts))
 
     ok = dbm.persist_notification_event(
         cliente_id="000001",
@@ -81,7 +81,7 @@ def test_persist_notification_event_sent_maps_to_enviado(monkeypatch):
 
 def test_persist_notification_event_failed_maps_to_gestion_fallida(monkeypatch):
     inserts = []
-    monkeypatch.setattr(dbm, "get_supabase_client", lambda: _FakeClient(inserts))
+    monkeypatch.setattr(dbm, "get_db_client", lambda: _FakeClient(inserts))
 
     ok = dbm.persist_notification_event(
         cliente_id="000002",
@@ -101,7 +101,7 @@ def test_persist_notification_event_failed_maps_to_gestion_fallida(monkeypatch):
 def test_get_documento_id_by_numero_returns_first_match(monkeypatch):
     inserts = []
     select_rows = [{"documento_id": "DOC-123"}]
-    monkeypatch.setattr(dbm, "get_supabase_client", lambda: _FakeClient(inserts, select_rows))
+    monkeypatch.setattr(dbm, "get_db_client", lambda: _FakeClient(inserts, select_rows))
 
     doc_id = dbm.get_documento_id_by_numero("000001", "F001-00000001")
     assert doc_id == "DOC-123"
@@ -117,7 +117,7 @@ def test_get_notifications_history_returns_rows(monkeypatch):
             "asunto": "Estado de Cuenta",
         }
     ]
-    monkeypatch.setattr(dbm, "get_supabase_client", lambda: _FakeClient(inserts, sample_rows))
+    monkeypatch.setattr(dbm, "get_db_client", lambda: _FakeClient(inserts, sample_rows))
 
     rows = dbm.get_notifications_history(["000001"], limit=50)
     assert len(rows) == 1
@@ -146,7 +146,7 @@ def test_get_notifications_report_filters_estado_and_canal(monkeypatch):
             "metadata": {"channel": "WHATSAPP", "status_code": "BLOCKED"},
         },
     ]
-    monkeypatch.setattr(dbm, "get_supabase_client", lambda: _FakeClient(inserts, sample_rows))
+    monkeypatch.setattr(dbm, "get_db_client", lambda: _FakeClient(inserts, sample_rows))
 
     rows = dbm.get_notifications_report(
         date_from="2026-02-17",

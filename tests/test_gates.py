@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch, ANY
+from datetime import datetime
 import sys
 import os
 import shutil
@@ -49,16 +50,27 @@ class TestEmailGates(unittest.TestCase):
             'html_body': '<h1>Hola</h1>',
             'plain_body': 'Hola'
         }
-        
-        with patch("utils.db_manager.is_cloud_mode", return_value=False), \
+
+        ledger_state = {}
+
+        def fake_get_last_sent_info(ledger_key):
+            return ledger_state.get(ledger_key)
+
+        def fake_log_attempt(recipient, status, run_id, ledger_key, reason=""):
+            if status == 'SENT':
+                ledger_state[ledger_key] = {'last_sent_at': datetime.now().isoformat()}
+
+        with patch("utils.email_sender.db_manager.get_last_sent_info", side_effect=fake_get_last_sent_info), \
+             patch("utils.email_sender.db_manager.log_attempt", side_effect=fake_log_attempt), \
+             patch("utils.email_sender.db_manager.initialize_db"), \
              patch("smtplib.SMTP") as mock_smtp:
             instance = mock_smtp.return_value
-            
+
             # First Send
             stats1 = send_email_batch(self.smtp_config, [msg])
             self.assertEqual(stats1['success'], 1)
-            
-            # Second Send (Immediate)
+
+            # Second Send (Immediate) — debe quedar bloqueado por TTL
             stats2 = send_email_batch(self.smtp_config, [msg])
             self.assertEqual(stats2['success'], 0)
             self.assertEqual(stats2['blocked'], 1)

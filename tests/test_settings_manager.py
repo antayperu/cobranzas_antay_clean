@@ -75,7 +75,7 @@ def _clear_env(monkeypatch):
 
 def test_load_settings_reads_remote_payload(monkeypatch):
     state = {"select_rows": [{"payload": {"company_name": "ACME CLOUD"}}], "upserts": []}
-    monkeypatch.setattr(sm.SupabaseClient, "get_instance", lambda: _FakeWrapper(state, available=True))
+    monkeypatch.setattr(sm.DBClient, "get_instance", lambda: _FakeWrapper(state, available=True))
     _clear_env(monkeypatch)
 
     settings = sm.load_settings()
@@ -89,7 +89,7 @@ def test_load_settings_bootstraps_remote_from_legacy_file(monkeypatch, tmp_path)
     cfg.write_text('{"company_name": "LEGACY LOCAL"}', encoding="utf-8")
     state = {"select_rows": [], "upserts": []}
 
-    monkeypatch.setattr(sm.SupabaseClient, "get_instance", lambda: _FakeWrapper(state, available=True))
+    monkeypatch.setattr(sm.DBClient, "get_instance", lambda: _FakeWrapper(state, available=True))
     monkeypatch.setattr(sm, "CONFIG_FILE", str(cfg))
     _clear_env(monkeypatch)
 
@@ -101,9 +101,9 @@ def test_load_settings_bootstraps_remote_from_legacy_file(monkeypatch, tmp_path)
     assert state["upserts"][0]["on_conflict"] == "config_key"
 
 
-def test_save_settings_persists_to_supabase(monkeypatch):
+def test_save_settings_persists_to_db(monkeypatch):
     state = {"select_rows": [], "upserts": []}
-    monkeypatch.setattr(sm.SupabaseClient, "get_instance", lambda: _FakeWrapper(state, available=True))
+    monkeypatch.setattr(sm.DBClient, "get_instance", lambda: _FakeWrapper(state, available=True))
     _clear_env(monkeypatch)
 
     ok = sm.save_settings({"company_name": "SAVE TEST"})

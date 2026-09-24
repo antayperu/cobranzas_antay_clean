@@ -364,7 +364,7 @@ def _render_import_wizard():
             st.error(f"No se pudo leer: {e}")
             df_preview = None
 
-        if st.button("Migrar a Supabase", type="primary", disabled=df_preview is None, key="cp_migrate_btn"):
+        if st.button("Migrar a BD", type="primary", disabled=df_preview is None, key="cp_migrate_btn"):
             try:
                 df_cartera = pd.read_excel(io.BytesIO(file_bytes))
                 result = dbm.migrate_clientes_from_cartera_df(df_cartera)

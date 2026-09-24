@@ -94,7 +94,7 @@ def has_valid_session():
 # ---------------------------------------------------------------------------
 # Mapeo de columnas: df_final <-> documentos_ciclo
 # ---------------------------------------------------------------------------
-# Clave: nombre exacto en df_final  →  Valor: nombre de columna en Supabase
+# Clave: nombre exacto en df_final  →  Valor: nombre de columna en la BD
 _DF_TO_DB: Dict[str, str] = {
     "COD CLIENTE":        "cod_cliente",
     "EMPRESA":            "empresa",
@@ -187,13 +187,13 @@ def _docs_to_df(rows: list) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Cloud (Supabase) session persistence  --------------------------------------
+# Persistencia de sesión en BD  ----------------------------------------------
 # ---------------------------------------------------------------------------
 
-def _get_supabase():
-    """Get Supabase client via db_manager (avoids circular import at module level)."""
+def _get_db_client():
+    """Obtiene el cliente de BD via db_manager (evita circular import a nivel de módulo)."""
     import utils.db_manager as dbm
-    return dbm.get_supabase_client()
+    return dbm.get_db_client()
 
 
 def save_session_cloud(
@@ -206,7 +206,7 @@ def save_session_cloud(
     - UPSERT en ciclos_procesamiento (solo metadatos)
     - DELETE + INSERT en documentos_ciclo (una fila por documento del Excel)
     """
-    client = _get_supabase()
+    client = _get_db_client()
     if not client:
         return False, "Base de datos no disponible para guardar sesion."
 
@@ -263,7 +263,7 @@ def save_session_cloud(
 
 def load_session_cloud() -> Tuple[Optional[pd.DataFrame], Optional[Dict], Optional[datetime.datetime]]:
     """Carga el ciclo más reciente desde la BD local usando documentos_ciclo."""
-    client = _get_supabase()
+    client = _get_db_client()
     if not client:
         return None, None, None
 
@@ -319,7 +319,7 @@ def load_session_cloud() -> Tuple[Optional[pd.DataFrame], Optional[Dict], Option
 
 def has_valid_session_cloud() -> Tuple[bool, Optional[datetime.datetime], Optional[Dict]]:
     """Lightweight check: returns True if at least one cloud session exists."""
-    client = _get_supabase()
+    client = _get_db_client()
     if not client:
         return False, None, None
 
@@ -355,10 +355,10 @@ def has_valid_session_cloud() -> Tuple[bool, Optional[datetime.datetime], Option
 
 def list_sessions_cloud(limit: int = 20) -> list:
     """
-    Lista todos los ciclos disponibles en Supabase ordenados del mas reciente al mas antiguo.
+    Lista todos los ciclos disponibles en la BD ordenados del mas reciente al mas antiguo.
     Retorna lista de dicts con: cycle_id, created_at, row_count, file_ctas, file_cobranza, fecha_corte.
     """
-    client = _get_supabase()
+    client = _get_db_client()
     if not client:
         return []
     try:
@@ -400,7 +400,7 @@ def list_sessions_cloud(limit: int = 20) -> list:
 
 def load_session_by_id(cycle_id: str) -> Tuple[Optional["pd.DataFrame"], Optional[Dict], Optional[datetime.datetime]]:
     """Carga un ciclo especifico por su cycle_id usando documentos_ciclo."""
-    client = _get_supabase()
+    client = _get_db_client()
     if not client:
         return None, None, None
     try:
@@ -447,11 +447,11 @@ def load_session_by_id(cycle_id: str) -> Tuple[Optional["pd.DataFrame"], Optiona
 
 def clear_session_cloud() -> bool:
     """
-    Elimina TODOS los ciclos de Supabase.
+    Elimina TODOS los ciclos de la BD.
     documentos_ciclo se limpia automaticamente via CASCADE FK.
     ATENCION: Solo usar en reset total de datos. No llamar en flujo normal de nuevo ciclo.
     """
-    client = _get_supabase()
+    client = _get_db_client()
     if not client:
         return False
     try:

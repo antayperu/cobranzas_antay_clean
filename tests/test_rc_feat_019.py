@@ -27,7 +27,7 @@ _RESULTADO_MAP = {
 class TestRC019ResultadoPostEnvio(unittest.TestCase):
 
     # ------------------------------------------------------------------
-    # 1. Mapeo de opciones a valores Supabase (estándar industria)
+    # 1. Mapeo de opciones a valores BD (estándar industria)
     # ------------------------------------------------------------------
     def test_mapeo_acordo_pagar(self):
         self.assertEqual(_RESULTADO_MAP["✅ Acordó pagar"], "EXITOSO")
@@ -50,7 +50,7 @@ class TestRC019ResultadoPostEnvio(unittest.TestCase):
     def test_mapeo_disputa(self):
         self.assertEqual(_RESULTADO_MAP["❓ Disputó la deuda"], "DISPUTA")
 
-    def test_todos_los_valores_son_validos_en_supabase(self):
+    def test_todos_los_valores_son_validos_en_bd(self):
         """Los valores mapeados deben estar en el catálogo de resultados válidos."""
         validos = dbm._get_resultados_validos_set()
         for opcion, valor in _RESULTADO_MAP.items():
@@ -63,7 +63,7 @@ class TestRC019ResultadoPostEnvio(unittest.TestCase):
     # ------------------------------------------------------------------
     # 2. insert_gestion se llama con los parámetros correctos
     # ------------------------------------------------------------------
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     def test_insert_gestion_resultado_wa(self, mock_client):
         mock_sb = MagicMock()
         mock_insert = MagicMock()
@@ -86,7 +86,7 @@ class TestRC019ResultadoPostEnvio(unittest.TestCase):
         self.assertTrue(ok, f"insert_gestion falló: {msg}")
         mock_sb.table.assert_called_with("gestiones")
 
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     def test_insert_gestion_sin_respuesta(self, mock_client):
         mock_sb = MagicMock()
         mock_insert = MagicMock()
@@ -106,7 +106,7 @@ class TestRC019ResultadoPostEnvio(unittest.TestCase):
     # ------------------------------------------------------------------
     # 3. Resultado inválido debe ser normalizado a PENDIENTE
     # ------------------------------------------------------------------
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     def test_resultado_invalido_normalizado(self, mock_client):
         mock_sb = MagicMock()
         mock_insert = MagicMock()
@@ -126,10 +126,10 @@ class TestRC019ResultadoPostEnvio(unittest.TestCase):
         self.assertEqual(call_args['resultado'], 'PENDIENTE')
 
     # ------------------------------------------------------------------
-    # 4. Sin Supabase disponible, retorna False con mensaje claro
+    # 4. Sin BD disponible, retorna False con mensaje claro
     # ------------------------------------------------------------------
-    @patch('utils.db_manager.get_supabase_client', return_value=None)
-    def test_sin_supabase_retorna_false(self, _):
+    @patch('utils.db_manager.get_db_client', return_value=None)
+    def test_sin_bd_retorna_false(self, _):
         ok, msg = dbm.insert_gestion(
             cliente_id='CLI-001',
             tipo_gestion='WHATSAPP',

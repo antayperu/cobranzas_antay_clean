@@ -13,14 +13,14 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-if not SUPABASE_URL:
-    print("❌ SUPABASE_URL no encontrado en .env")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if not DATABASE_URL:
+    print("❌ DATABASE_URL no encontrado en .env")
     sys.exit(1)
 
 import pandas as pd
 import utils.db_manager as dbm
-import utils.supabase_cycle_service as scs
+import utils.cycle_service as scs
 from utils.processing import process_data
 import utils.state_manager as state_mgr
 
@@ -41,14 +41,14 @@ def err(msg):
 
 print("\n" + SEP)
 print("   PRUEBA DE PERFORMANCE - GENERACION DE CICLO NUEVO")
-print(f"   Supabase: {SUPABASE_URL[:50]}...")
+print(f"   BD: {DATABASE_URL[:50]}...")
 print(SEP)
 
 timings = {}
 t_total = time.perf_counter()
 
 # ── 1. Conexión ─────────────────────────────────────────────────────────────
-hdr(1, "Inicializando conexión Supabase")
+hdr(1, "Inicializando conexión PostgreSQL")
 t = time.perf_counter()
 if not dbm.initialize_db():
     err(dbm.get_last_error())
@@ -64,8 +64,8 @@ df_cobranza_raw = pd.read_excel(PATH_COB)
 timings["2_excel"] = time.perf_counter() - t
 ok(timings["2_excel"], f"CxC={len(df_ctas_raw)} filas | Cobranza={len(df_cobranza_raw)} filas")
 
-# ── 3. Cartera maestra desde Supabase ───────────────────────────────────────
-hdr(3, "Descargando cartera maestra desde Supabase")
+# ── 3. Cartera maestra desde la BD ────────────────────────────────────────
+hdr(3, "Descargando cartera maestra desde la BD")
 t = time.perf_counter()
 cartera_rows = dbm.get_clientes_master(limit=50000)
 timings["3_cartera"] = time.perf_counter() - t
@@ -100,10 +100,10 @@ ok_ledger = dbm.clear_all_ledger()
 timings["5_ledger"] = time.perf_counter() - t
 ok(timings["5_ledger"]) if ok_ledger else err("Fallo clear_all_ledger")  # noqa
 
-# ── 6. persist_cycle_to_supabase ────────────────────────────────────────────
+# ── 6. persist_cycle ────────────────────────────────────────────────────────
 hdr(6, "Persistiendo ciclo (clientes + documentos + cobranzas)")
 t = time.perf_counter()
-result = scs.persist_cycle_to_supabase(
+result = scs.persist_cycle(
     df_ctas=df_ctas_raw,
     df_cartera=df_cartera_raw,
     df_cobranza=df_cobranza_raw,
@@ -144,9 +144,9 @@ print(SEP)
 
 
 labels = [
-    ("1_conexion", "Conexión Supabase"),
+    ("1_conexion", "Conexión PostgreSQL"),
     ("2_excel",    "Lectura Excel (2 archivos)"),
-    ("3_cartera",  "Cartera maestra (Supabase)"),
+    ("3_cartera",  "Cartera maestra (BD)"),
     ("4_process",  "process_data — cruce y cálculo"),
     ("5_ledger",   "Limpiar ledger TTL"),
     ("6_persist",  "persist_cycle (clientes+docs+cob)"),

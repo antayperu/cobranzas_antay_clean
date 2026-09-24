@@ -18,12 +18,12 @@ import utils.db_manager as dbm
 
 class TestGetFunnelCobranza(unittest.TestCase):
 
-    @patch('utils.db_manager.get_supabase_client', return_value=None)
-    def test_sin_supabase_retorna_vacio(self, _):
+    @patch('utils.db_manager.get_db_client', return_value=None)
+    def test_sin_bd_retorna_vacio(self, _):
         result = dbm.get_funnel_cobranza()
         self.assertEqual(result, {})
 
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     def test_estructura_claves_retornadas(self, mock_client):
         mock_sb = MagicMock()
         # Configurar respuestas para cada query (count=exact)
@@ -39,7 +39,7 @@ class TestGetFunnelCobranza(unittest.TestCase):
         # pero no debe lanzar excepción)
         self.assertIsInstance(result, dict)
 
-    @patch('utils.db_manager.get_supabase_client', return_value=None)
+    @patch('utils.db_manager.get_db_client', return_value=None)
     def test_sin_cycle_id_acepta_none(self, _):
         result = dbm.get_funnel_cobranza(cycle_id=None)
         self.assertEqual(result, {})
@@ -51,12 +51,12 @@ class TestGetFunnelCobranza(unittest.TestCase):
 
 class TestGetEfectividadPorPlantilla(unittest.TestCase):
 
-    @patch('utils.db_manager.get_supabase_client', return_value=None)
-    def test_sin_supabase_retorna_lista_vacia(self, _):
+    @patch('utils.db_manager.get_db_client', return_value=None)
+    def test_sin_bd_retorna_lista_vacia(self, _):
         result = dbm.get_efectividad_por_plantilla()
         self.assertEqual(result, [])
 
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     def test_estructura_filas_retornadas(self, mock_client):
         mock_sb = MagicMock()
 
@@ -92,7 +92,7 @@ class TestGetEfectividadPorPlantilla(unittest.TestCase):
             self.assertIn("exitosos", fila)
             self.assertIn("tasa_pct", fila)
 
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     def test_metadata_string_json_parseado(self, mock_client):
         """metadata como string JSON debe parsearse sin error."""
         import json
@@ -121,12 +121,12 @@ class TestGetEfectividadPorPlantilla(unittest.TestCase):
 
 class TestGetTopClientesCriticos(unittest.TestCase):
 
-    @patch('utils.db_manager.get_supabase_client', return_value=None)
-    def test_sin_supabase_retorna_lista_vacia(self, _):
+    @patch('utils.db_manager.get_db_client', return_value=None)
+    def test_sin_bd_retorna_lista_vacia(self, _):
         result = dbm.get_top_clientes_criticos(n=5)
         self.assertEqual(result, [])
 
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     def test_respeta_limite_n(self, mock_client):
         mock_sb = MagicMock()
         # 20 documentos para 10 clientes distintos
@@ -149,7 +149,7 @@ class TestGetTopClientesCriticos(unittest.TestCase):
         self.assertIsInstance(result, list)
         self.assertLessEqual(len(result), 5)
 
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     def test_estructura_campos_retornados(self, mock_client):
         mock_sb = MagicMock()
         docs_data = [
@@ -179,12 +179,12 @@ class TestGetTopClientesCriticos(unittest.TestCase):
 
 class TestGetKpisPeriodo(unittest.TestCase):
 
-    @patch('utils.db_manager.get_supabase_client', return_value=None)
-    def test_sin_supabase_retorna_vacio(self, _):
+    @patch('utils.db_manager.get_db_client', return_value=None)
+    def test_sin_bd_retorna_vacio(self, _):
         result = dbm.get_kpis_periodo("2026-03-01", "2026-03-17")
         self.assertEqual(result, {})
 
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     @patch('utils.db_manager._safe_execute')
     def test_estructura_claves_esperadas(self, mock_safe_exec, mock_client):
         mock_client.return_value = MagicMock()  # cliente disponible
@@ -222,7 +222,7 @@ class TestGetKpisPeriodo(unittest.TestCase):
         for clave in claves_esperadas:
             self.assertIn(clave, result, f"Clave '{clave}' faltante en get_kpis_periodo")
 
-    @patch('utils.db_manager.get_supabase_client')
+    @patch('utils.db_manager.get_db_client')
     def test_tasa_exito_calculada_correctamente(self, mock_client):
         mock_sb = MagicMock()
         # 2 EXITOSO sobre 4 gestiones → tasa 50%
@@ -300,7 +300,7 @@ class TestFunnelRC060(unittest.TestCase):
         mock_rec = MagicMock(); mock_rec.data = rec_data or []
 
         import utils.db_manager as _dbm
-        with patch('utils.db_manager.get_supabase_client') as mock_client, \
+        with patch('utils.db_manager.get_db_client') as mock_client, \
              patch('utils.db_manager._safe_execute') as mock_exec:
             mock_client.return_value = MagicMock()
             mock_exec.side_effect = [mock_docs, mock_wa, mock_email, mock_resp, mock_acuerdo, mock_rec]

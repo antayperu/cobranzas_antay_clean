@@ -7,7 +7,7 @@ from scripts.migrate_excel_to_supabase import (
     build_cobranzas,
     build_documentos,
 )
-import utils.supabase_cycle_service as cycle_service
+import utils.cycle_service as cycle_service
 
 
 def _sample_frames():
@@ -93,7 +93,7 @@ def test_integridad_fk_rows_cobranzas_vs_documentos():
     assert all(x["documento_id"] in documento_ids for x in cobranzas_rows)
 
 
-def test_cloud_only_policy_blocks_when_supabase_unavailable(monkeypatch):
+def test_cloud_only_policy_blocks_when_db_unavailable(monkeypatch):
     class _Unavailable:
         def is_available(self):
             return False
@@ -101,7 +101,7 @@ def test_cloud_only_policy_blocks_when_supabase_unavailable(monkeypatch):
         def get_client(self):
             return None
 
-    monkeypatch.setattr(cycle_service.dbm, "get_supabase_client", lambda: None)
+    monkeypatch.setattr(cycle_service.dbm, "get_db_client", lambda: None)
     df_ctas, df_cartera, df_cobranza = _sample_frames()
     result = cycle_service.persist_cycle_to_supabase(df_ctas, df_cartera, df_cobranza)
 

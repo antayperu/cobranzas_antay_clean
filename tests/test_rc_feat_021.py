@@ -10,8 +10,8 @@ from datetime import date
 # ──────────────────────────────────────────────
 # Helpers de import
 # ──────────────────────────────────────────────
-def _stub_supabase():
-    """Devuelve un stub de supabase con .table().select().eq()... encadenables."""
+def _stub_db_client():
+    """Devuelve un stub de DB client con .table().select().eq()... encadenables."""
     stub = MagicMock()
     # Simular respuesta exitosa con un UUID de acuerdo
     resp_acuerdo = MagicMock()
@@ -24,8 +24,8 @@ def _stub_supabase():
 
 
 def _import_dbm():
-    """Importar db_manager con supabase stubbed."""
-    # Ensure supabase stub
+    """Importar db_manager con DB client stubbed."""
+    # Ensure DB client stub
     for mod in ("supabase", "postgrest", "gotrue", "httpx"):
         sys.modules.setdefault(mod, types.ModuleType(mod))
     import importlib
@@ -38,9 +38,9 @@ def _import_dbm():
 # ──────────────────────────────────────────────
 class TestInsertAcuerdoPago:
 
-    def test_sin_supabase_retorna_false(self):
+    def test_sin_bd_retorna_false(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=None):
+        with patch.object(dbm, "get_db_client", return_value=None):
             ok, msg = dbm.insert_acuerdo_pago(
                 cliente_id="C001", monto_total=3000, numero_cuotas=3,
                 fecha_acuerdo="2025-01-15",
@@ -64,7 +64,7 @@ class TestInsertAcuerdoPago:
 
     def test_cuotas_mismatch_retorna_false(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             ok, msg = dbm.insert_acuerdo_pago(
                 cliente_id="C001", monto_total=2000, numero_cuotas=2,
                 fecha_acuerdo="2025-01-15",
@@ -85,8 +85,8 @@ class TestInsertAcuerdoPago:
     def test_payload_tiene_estado_activo(self):
         """El payload insertado en acuerdos_pago debe tener estado='ACTIVO'."""
         dbm = _import_dbm()
-        _sb = _stub_supabase()
-        with patch.object(dbm, "get_supabase_client", return_value=_sb):
+        _sb = _stub_db_client()
+        with patch.object(dbm, "get_db_client", return_value=_sb):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 resp_mock = MagicMock()
                 resp_mock.data = [{"id": "uuid-test-0001"}]
@@ -111,15 +111,15 @@ class TestInsertAcuerdoPago:
 # ──────────────────────────────────────────────
 class TestGetAcuerdosByCliente:
 
-    def test_sin_supabase_retorna_lista_vacia(self):
+    def test_sin_bd_retorna_lista_vacia(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=None):
+        with patch.object(dbm, "get_db_client", return_value=None):
             result = dbm.get_acuerdos_by_cliente("C001")
         assert result == []
 
     def test_retorna_lista(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 mock_exec.return_value = MagicMock(data=[
                     {"id": "uuid-1", "cliente_id": "C001", "monto_total": 3000, "cuotas": []}
@@ -130,7 +130,7 @@ class TestGetAcuerdosByCliente:
     def test_acuerdo_incluye_clave_cuotas(self):
         """Cada acuerdo devuelto debe tener la clave 'cuotas'."""
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 # Primera llamada: acuerdos; segunda llamada: cuotas del acuerdo
                 resp_acuerdos = MagicMock(data=[{"id": "uuid-1", "cliente_id": "C001", "monto_total": 1000}])
@@ -147,15 +147,15 @@ class TestGetAcuerdosByCliente:
 # ──────────────────────────────────────────────
 class TestUpdateCuotaEstado:
 
-    def test_sin_supabase_retorna_false(self):
+    def test_sin_bd_retorna_false(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=None):
+        with patch.object(dbm, "get_db_client", return_value=None):
             ok, msg = dbm.update_cuota_estado("cuota-1", "PAGADO")
         assert ok is False
 
     def test_estado_invalido_retorna_false(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             ok, msg = dbm.update_cuota_estado("cuota-1", "INEXISTENTE")
         assert ok is False
         assert "inv" in msg.lower()  # invalido / inválido
@@ -163,14 +163,14 @@ class TestUpdateCuotaEstado:
     def test_estados_validos_aceptados(self):
         dbm = _import_dbm()
         for estado in ("PENDIENTE", "PAGADO", "VENCIDO", "REPACTADO"):
-            with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+            with patch.object(dbm, "get_db_client", return_value=MagicMock()):
                 with patch.object(dbm, "_safe_execute", return_value=MagicMock()):
                     ok, _ = dbm.update_cuota_estado("cuota-1", estado)
             assert ok is True, f"Estado {estado} debería ser aceptado"
 
     def test_pagado_con_fecha_pago(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 mock_exec.return_value = MagicMock()
                 ok, msg = dbm.update_cuota_estado(

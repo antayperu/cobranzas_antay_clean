@@ -103,12 +103,12 @@ def _render_stepper(step: int) -> None:
 def _render_health_badge() -> None:
     """Badge compacto de estado del sistema — visible en todos los estados."""
     _h = st.session_state.get('_system_health', {})
-    _supa_ok = _h.get('supabase_ok', True)
-    _count   = _h.get('clientes_count', 0)
-    if _supa_ok and _count > 0:
+    _db_ok = _h.get('db_ok', _h.get('supabase_ok', True))
+    _count = _h.get('clientes_count', 0)
+    if _db_ok and _count > 0:
         _badge_cls  = "ok"
         _badge_text = f"BD · {_count} clientes listos"
-    elif _supa_ok:
+    elif _db_ok:
         _badge_cls  = "warn"
         _badge_text = "Conectado · Sin clientes registrados"
     else:

@@ -29,16 +29,16 @@ class TestReconcileCicloRecovery:
         result = dbm.reconcile_ciclo_recovery("CICLO-001", "")
         assert result["ok"] is False
 
-    def test_sin_supabase_retorna_false(self):
+    def test_sin_bd_retorna_false(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=None):
+        with patch.object(dbm, "get_db_client", return_value=None):
             result = dbm.reconcile_ciclo_recovery("CICLO-001", "CICLO-002")
         assert result["ok"] is False
         assert "Base de datos" in result["mensaje"]
 
     def test_resultado_tiene_claves_ok_mensaje_stats(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_get_docs_simple_by_cycle", return_value=[]):
                 with patch.object(dbm, "get_gestiones_list", return_value=[]):
                     with patch.object(dbm, "_safe_execute", return_value=MagicMock(data=[], count=0)):
@@ -49,7 +49,7 @@ class TestReconcileCicloRecovery:
 
     def test_tasa_recuperacion_cero_si_sin_docs_anterior(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             # anterior: vacío, nuevo: vacío → tasa 0
             with patch.object(dbm, "_get_docs_simple_by_cycle", return_value=[]):
                 with patch.object(dbm, "get_gestiones_list", return_value=[]):
@@ -76,7 +76,7 @@ class TestReconcileCicloRecovery:
             call_count[0] += 1
             return docs_anterior if "001" in cycle_id else docs_nuevo
 
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_get_docs_simple_by_cycle", side_effect=_mock_get_docs):
                 with patch.object(dbm, "get_gestiones_list", return_value=[]):
                     with patch.object(dbm, "_safe_execute", return_value=MagicMock(data=[], count=0)):
@@ -102,7 +102,7 @@ class TestReconcileCicloRecovery:
         def _mock_get(cycle_id):
             return docs_anterior if "ANT" in cycle_id else docs_nuevo
 
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_get_docs_simple_by_cycle", side_effect=_mock_get):
                 with patch.object(dbm, "get_gestiones_list", return_value=[]):
                     with patch.object(dbm, "_safe_execute", return_value=MagicMock(data=[], count=0)):
@@ -130,7 +130,7 @@ class TestReconcileCicloRecovery:
     def test_funcion_retorna_dict_completo_en_exito(self):
         dbm = _import_dbm()
         docs = [{"match_key": "MK-001", "cliente_id": "C001", "saldo_real": 500, "saldo_original": 500}]
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_get_docs_simple_by_cycle", return_value=docs):
                 with patch.object(dbm, "get_gestiones_list", return_value=[]):
                     with patch.object(dbm, "_safe_execute", return_value=MagicMock(data=[], count=0)):

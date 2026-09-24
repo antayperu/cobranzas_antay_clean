@@ -37,7 +37,7 @@ def _cache_set(key: Any, value: Any) -> Any:
 
 
 def clear_io_cache() -> None:
-    """Invalidate short-lived Supabase read caches after writes."""
+    """Invalidate short-lived BD read caches after writes."""
     _io_cache.clear()
 
 
@@ -51,11 +51,12 @@ def get_last_error() -> Optional[str]:
 
 
 def get_system_health() -> dict:
-    """Lightweight check: Neon connectivity + client count."""
-    client = get_supabase_client()
+    """Lightweight check: conectividad PostgreSQL + conteo de clientes."""
+    client = get_db_client()
     if not client:
         return {
-            "supabase_ok": False,
+            "db_ok": False,
+            "supabase_ok": False,  # alias retrocompatibilidad UI
             "clientes_count": 0,
             "error": get_last_error() or "No se pudo inicializar el cliente de base de datos",
         }
@@ -67,15 +68,16 @@ def get_system_health() -> dict:
         res = client.table("clientes").select("cliente_id", count="exact").limit(0).execute()
         if res.error:
             _set_last_error(str(res.error))
-            return {"supabase_ok": False, "clientes_count": 0, "error": str(res.error)}
+            return {"db_ok": False, "supabase_ok": False, "clientes_count": 0, "error": str(res.error)}
         count = res.count if res.count is not None else 0
-        return _cache_set(cache_key, {"supabase_ok": True, "clientes_count": count, "error": None})
+        result = {"db_ok": True, "supabase_ok": True, "clientes_count": count, "error": None}
+        return _cache_set(cache_key, result)
     except Exception as e:
         _set_last_error(str(e))
-        return {"supabase_ok": False, "clientes_count": 0, "error": str(e)}
+        return {"db_ok": False, "supabase_ok": False, "clientes_count": 0, "error": str(e)}
 
 
-def get_supabase_client():
+def get_db_client():
     """Retorna cliente de BD (PostgreSQL local via PGClient).
 
     Siempre sincroniza con el singleton actual de PGClient para evitar
@@ -103,58 +105,37 @@ def get_supabase_client():
     return None
 
 
-def is_cloud_mode() -> bool:
+# Alias de compatibilidad — los tests y código anterior usan get_supabase_client
+def get_supabase_client():
+    return get_db_client()
+
+
+def is_db_available() -> bool:
     return bool(DATABASE_URL)
+
+
+# Alias de compatibilidad
+def is_cloud_mode() -> bool:
+    return is_db_available()
 
 
 def initialize_db() -> bool:
     """
-    Cloud mode: require Supabase connectivity.
-    Local/testing mode: ensure SQLite tables exist.
+    Verifica conectividad con PostgreSQL. La BD es el único modo soportado.
+    El fallback SQLite local fue eliminado — la app requiere DATABASE_URL.
     """
-    if is_cloud_mode():
-        client = get_supabase_client()
+    if is_db_available():
+        client = get_db_client()
         if client is None:
             if not get_last_error():
-                _set_last_error("No se pudo inicializar cliente Supabase.")
+                _set_last_error("No se pudo inicializar el cliente de base de datos.")
             return False
         _set_last_error(None)
         return True
 
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-        c.execute(
-            """
-            CREATE TABLE IF NOT EXISTS ledger_last_send (
-                ledger_key TEXT PRIMARY KEY,
-                last_sent_at TIMESTAMP,
-                last_msg_id TEXT,
-                send_count INTEGER
-            )
-            """
-        )
-        c.execute(
-            """
-            CREATE TABLE IF NOT EXISTS send_attempts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ledger_key TEXT,
-                recipient TEXT,
-                status TEXT,
-                reason TEXT,
-                timestamp TIMESTAMP,
-                run_id TEXT
-            )
-            """
-        )
-        conn.commit()
-        conn.close()
-        _set_last_error(None)
-        return True
-    except Exception as e:
-        _set_last_error(f"DB Init Error: {e}")
-        print(f"DB Init Error: {e}")
-        return False
+    # Sin DATABASE_URL configurado
+    _set_last_error("Base de datos no configurada (DATABASE_URL faltante).")
+    return False
 
 
 def _safe_execute(table_op):
@@ -173,133 +154,82 @@ def _now_str() -> str:
 
 
 def log_attempt(recipient, status, run_id, ledger_key, reason=""):
-    """Log send attempt to active engine."""
+    """Registra intento de envío en la BD."""
     ts = _now_str()
 
-    if is_cloud_mode():
-        client = get_supabase_client()
-        if client:
-            try:
-                _safe_execute(
-                    client.table("send_attempts").insert(
-                        {
-                            "recipient": recipient,
-                            "status": status,
-                            "run_id": run_id,
-                            "ledger_key": ledger_key,
-                            "reason": reason,
-                            "timestamp": ts,
-                        }
-                    )
+    client = get_db_client()
+    if client:
+        try:
+            _safe_execute(
+                client.table("send_attempts").insert(
+                    {
+                        "recipient": recipient,
+                        "status": status,
+                        "run_id": run_id,
+                        "ledger_key": ledger_key,
+                        "reason": reason,
+                        "timestamp": ts,
+                    }
                 )
-                _safe_execute(
-                    client.table("ledger_last_send").upsert(
-                        {
-                            "ledger_key": ledger_key,
-                            "last_sent_at": ts,
-                            "send_count": 1,
-                        }
-                    )
+            )
+            _safe_execute(
+                client.table("ledger_last_send").upsert(
+                    {
+                        "ledger_key": ledger_key,
+                        "last_sent_at": ts,
+                        "send_count": 1,
+                    }
                 )
-                clear_io_cache()
-                return True
-            except Exception as e:
-                print(f"Error de BD (log): {e}")
-                return False
+            )
+            clear_io_cache()
+            return True
+        except Exception as e:
+            print(f"Error de BD (log): {e}")
+            return False
 
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO send_attempts (id, ledger_key, recipient, status, reason, timestamp, run_id) VALUES (NULL, ?, ?, ?, ?, ?, ?)",
-            (ledger_key, recipient, status, reason, ts, run_id),
-        )
-        c.execute(
-            "INSERT OR REPLACE INTO ledger_last_send (ledger_key, last_sent_at, send_count) VALUES (?, ?, COALESCE((SELECT send_count FROM ledger_last_send WHERE ledger_key = ?), 0) + 1)",
-            (ledger_key, ts, ledger_key),
-        )
-        conn.commit()
-        conn.close()
-        _set_last_error(None)
-        clear_io_cache()
-        return True
-    except Exception as e:
-        _set_last_error(str(e))
-        print(f"SQLite Logging Error: {e}")
-        return False
+    return False
 
 
 def get_status_map(email_list, target_date_str=None, min_timestamp=None):
-    """Get status map for recipient list."""
+    """Retorna mapa de estado de envíos para la lista de destinatarios."""
     if not email_list:
         return {}
 
-    if is_cloud_mode():
-        client = get_supabase_client()
-        if client:
-            cache_key = (
-                "status_map",
-                id(client),
-                tuple(sorted(str(email).lower() for email in email_list)),
-                str(target_date_str),
-                str(min_timestamp),
+    client = get_db_client()
+    if client:
+        cache_key = (
+            "status_map",
+            id(client),
+            tuple(sorted(str(email).lower() for email in email_list)),
+            str(target_date_str),
+            str(min_timestamp),
+        )
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            query = client.table("send_attempts").select("recipient, status, timestamp").in_(
+                "recipient", email_list
             )
-            cached = _cache_get(cache_key)
-            if cached is not None:
-                return cached
-            try:
-                query = client.table("send_attempts").select("recipient, status, timestamp").in_(
-                    "recipient", email_list
-                )
 
-                if min_timestamp:
-                    query = query.gte("timestamp", str(min_timestamp))
-                else:
-                    if not target_date_str:
-                        target_date_str = datetime.now().strftime("%Y-%m-%d")
-                    day_start = datetime.strptime(str(target_date_str), "%Y-%m-%d")
-                    day_end = day_start.replace(hour=23, minute=59, second=59)
-                    query = query.gte("timestamp", day_start.strftime("%Y-%m-%d %H:%M:%S"))
-                    query = query.lte("timestamp", day_end.strftime("%Y-%m-%d %H:%M:%S"))
+            if min_timestamp:
+                query = query.gte("timestamp", str(min_timestamp))
+            else:
+                if not target_date_str:
+                    target_date_str = datetime.now().strftime("%Y-%m-%d")
+                day_start = datetime.strptime(str(target_date_str), "%Y-%m-%d")
+                day_end = day_start.replace(hour=23, minute=59, second=59)
+                query = query.gte("timestamp", day_start.strftime("%Y-%m-%d %H:%M:%S"))
+                query = query.lte("timestamp", day_end.strftime("%Y-%m-%d %H:%M:%S"))
 
-                res = _safe_execute(query.order("timestamp", desc=False))
-                cloud_rows = res.data or []
-                if cloud_rows or DB_NAME == "email_ledger.db":
-                    return _cache_set(cache_key, _process_rows_into_map(cloud_rows))
-                # In tests with custom DB file, fallback to local if cloud is empty.
-            except Exception as e:
-                print(f"Error de BD (query): {e}")
-                if DB_NAME == "email_ledger.db":
-                    return {}
+            res = _safe_execute(query.order("timestamp", desc=False))
+            rows = res.data or []
+            return _cache_set(cache_key, _process_rows_into_map(rows))
+        except Exception as e:
+            print(f"Error de BD (query): {e}")
+            return {}
 
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        params = list(email_list)
-        date_filter = ""
-        if min_timestamp:
-            date_filter = "AND timestamp >= ?"
-            params.append(str(min_timestamp))
-        else:
-            if not target_date_str:
-                target_date_str = datetime.now().strftime("%Y-%m-%d")
-            date_filter = "AND timestamp LIKE ?"
-            params.append(f"{target_date_str}%")
-
-        query = f"""
-            SELECT recipient, status, timestamp
-            FROM send_attempts
-            WHERE recipient IN ({",".join(["?"] * len(email_list))})
-            {date_filter}
-            ORDER BY timestamp ASC
-        """
-        df = pd.read_sql_query(query, conn, params=params)
-        conn.close()
-        _set_last_error(None)
-        return _process_rows_into_map(df.to_dict("records"))
-    except Exception as e:
-        _set_last_error(str(e))
-        print(f"SQLite Query Error: {e}")
-        return {}
+    return {}
 
 
 def _process_rows_into_map(rows):
@@ -328,102 +258,63 @@ def _process_rows_into_map(rows):
 
 
 def get_today_stats():
-    if is_cloud_mode():
-        client = get_supabase_client()
-        if client:
-            cache_key = ("today_stats", id(client), datetime.now().strftime("%Y-%m-%d"))
-            cached = _cache_get(cache_key)
-            if cached is not None:
-                return cached
-            try:
-                today_start = datetime.now().strftime("%Y-%m-%d 00:00:00")
-                res = _safe_execute(
-                    client.table("send_attempts").select("status").gte("timestamp", today_start)
-                )
-                df = pd.DataFrame(res.data or [])
-                if df.empty:
-                    return _cache_set(cache_key, {"SENT": 0, "FAILED": 0, "BLOCKED": 0})
-                counts = df["status"].value_counts().to_dict()
-                return _cache_set(cache_key, {s: counts.get(s, 0) for s in ["SENT", "FAILED", "BLOCKED"]})
-            except Exception:
-                return {"SENT": 0, "FAILED": 0, "BLOCKED": 0}
+    """Retorna conteo de envíos del día (SENT / FAILED / BLOCKED)."""
+    client = get_db_client()
+    if client:
+        cache_key = ("today_stats", id(client), datetime.now().strftime("%Y-%m-%d"))
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            today_start = datetime.now().strftime("%Y-%m-%d 00:00:00")
+            res = _safe_execute(
+                client.table("send_attempts").select("status").gte("timestamp", today_start)
+            )
+            df = pd.DataFrame(res.data or [])
+            if df.empty:
+                return _cache_set(cache_key, {"SENT": 0, "FAILED": 0, "BLOCKED": 0})
+            counts = df["status"].value_counts().to_dict()
+            return _cache_set(cache_key, {s: counts.get(s, 0) for s in ["SENT", "FAILED", "BLOCKED"]})
+        except Exception:
+            return {"SENT": 0, "FAILED": 0, "BLOCKED": 0}
 
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        today_start = datetime.now().strftime("%Y-%m-%d 00:00:00")
-        df = pd.read_sql_query(
-            "SELECT status, COUNT(*) as count FROM send_attempts WHERE timestamp >= ? GROUP BY status",
-            conn,
-            params=(today_start,),
-        )
-        conn.close()
-        _set_last_error(None)
-        stats = {s: df[df["status"] == s]["count"].sum() for s in ["SENT", "FAILED", "BLOCKED"]}
-        return stats
-    except Exception:
-        return {"SENT": 0, "FAILED": 0, "BLOCKED": 0}
+    return {"SENT": 0, "FAILED": 0, "BLOCKED": 0}
 
 
 def get_last_sent_info(ledger_key):
-    if is_cloud_mode():
-        client = get_supabase_client()
-        if client:
-            try:
-                res = _safe_execute(
-                    client.table("ledger_last_send").select("*").eq("ledger_key", ledger_key)
-                )
-                return res.data[0] if res.data else None
-            except Exception:
-                return None
+    """Retorna el último registro de envío para una clave del ledger."""
+    client = get_db_client()
+    if client:
+        try:
+            res = _safe_execute(
+                client.table("ledger_last_send").select("*").eq("ledger_key", ledger_key)
+            )
+            return res.data[0] if res.data else None
+        except Exception:
+            return None
 
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-        c.execute("SELECT * FROM ledger_last_send WHERE ledger_key = ?", (ledger_key,))
-        row = c.fetchone()
-        conn.close()
-        if row:
-            return {
-                "ledger_key": row[0],
-                "last_sent_at": row[1],
-                "last_msg_id": row[2],
-                "send_count": row[3],
-            }
-    except Exception:
-        return None
     return None
 
 
 def reset_today_stats():
+    """Reinicia el rate-limit del día borrando las entradas de hoy del ledger."""
     now = datetime.now()
-    today_pattern = f"{now.strftime('%Y-%m-%d')}%"
-    if is_cloud_mode():
-        client = get_supabase_client()
-        if client:
-            try:
-                day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                day_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-                _safe_execute(
-                    client.table("ledger_last_send")
-                    .delete()
-                    .gte("last_sent_at", day_start.strftime("%Y-%m-%d %H:%M:%S"))
-                    .lte("last_sent_at", day_end.strftime("%Y-%m-%d %H:%M:%S"))
-                )
-                return True, "Rate-limit reiniciado en Cloud. Historial preservado."
-            except Exception as e:
-                return False, str(e)
+    client = get_db_client()
+    if client:
+        try:
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+            _safe_execute(
+                client.table("ledger_last_send")
+                .delete()
+                .gte("last_sent_at", day_start.strftime("%Y-%m-%d %H:%M:%S"))
+                .lte("last_sent_at", day_end.strftime("%Y-%m-%d %H:%M:%S"))
+            )
+            return True, "Rate-limit reiniciado. Historial preservado."
+        except Exception as e:
+            return False, str(e)
 
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        c = conn.cursor()
-        c.execute("DELETE FROM ledger_last_send WHERE last_sent_at LIKE ?", (today_pattern,))
-        conn.commit()
-        conn.close()
-        _set_last_error(None)
-        return True, "Rate-limit reiniciado en Local. Historial preservado."
-    except Exception as e:
-        _set_last_error(str(e))
-        return False, str(e)
+    return False, "Base de datos no disponible."
 
 
 def clear_all_ledger():
@@ -461,7 +352,7 @@ def persist_notification_event(
     metadata_extra: Optional[Dict[str, Any]] = None,
     cycle_id: Optional[str] = None,
 ) -> bool:
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para persistir notificaciones.")
         return False
@@ -506,7 +397,7 @@ def get_notifications_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
     """Devuelve todas las notificaciones de un ciclo para reconciliar tracking."""
     if not cycle_id:
         return []
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     cache_key = ("notifications_by_cycle", id(client), str(cycle_id).strip())
@@ -530,7 +421,7 @@ def get_wa_gestiones_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
     """Devuelve gestiones WHATSAPP de un ciclo para reconciliar tracking WA."""
     if not cycle_id:
         return []
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     cache_key = ("wa_gestiones_by_cycle", id(client), str(cycle_id).strip())
@@ -611,7 +502,7 @@ def update_estados_email_in_cycle(cycle_id: str, match_keys: list, fecha: str) -
     """UPDATE documentos_ciclo.estado_email = ENVIADO para los match_keys del ciclo."""
     if not cycle_id or not match_keys:
         return False
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return False
     try:
@@ -632,7 +523,7 @@ def update_estado_whatsapp_in_cycle(cycle_id: str, cliente_ids: list, fecha: str
     """UPDATE documentos_ciclo.estado_whatsapp = ENVIADO para los cliente_ids del ciclo."""
     if not cycle_id or not cliente_ids:
         return False
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return False
     try:
@@ -650,7 +541,7 @@ def update_estado_whatsapp_in_cycle(cycle_id: str, cliente_ids: list, fecha: str
 
 
 def get_documento_id_by_numero(cliente_id: str, numero_documento: str) -> Optional[str]:
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para consultar documentos.")
         return None
@@ -674,7 +565,7 @@ def get_documento_id_by_numero(cliente_id: str, numero_documento: str) -> Option
 def get_notifications_history(cliente_ids: List[str], limit: int = 200) -> List[Dict[str, Any]]:
     if not cliente_ids:
         return []
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para consultar historial.")
         return []
@@ -709,7 +600,7 @@ def get_notifications_report(
     canal: Optional[str] = None,
     limit: int = 3000,
 ) -> List[Dict[str, Any]]:
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para reporte de notificaciones.")
         return []
@@ -934,7 +825,7 @@ def list_clientes_for_admin(search: str = "", limit: int = 200) -> List[Dict[str
 
 
 def list_clientes_full(search: str = "", estado: str = "", limit: int = 1000) -> List[Dict[str, Any]]:
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para listar clientes.")
         return []
@@ -992,7 +883,7 @@ def get_clientes_master(limit: int = 50000) -> List[Dict[str, Any]]:
     Retorna cartera maestra de clientes desde la base de datos.
     Usa paginación de 200 filas por request para evitar statement_timeout en producción.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para obtener cartera maestra.")
         return []
@@ -1102,7 +993,7 @@ def update_cliente_fields(
 
     payload["updated_at"] = _now_str()
 
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para actualizar cliente.")
         return False, _last_error or "Base de datos no disponible"
@@ -1120,7 +1011,7 @@ def upsert_clientes_rows(rows: List[Dict[str, Any]], batch_size: int = 200) -> T
     if not rows:
         return False, "No hay registros para guardar."
 
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para guardar clientes.")
         return False, _last_error or "Base de datos no disponible"
@@ -1204,7 +1095,7 @@ def delete_clientes_by_ids(cliente_ids: Iterable[str]) -> Tuple[bool, str]:
     if not ids_norm:
         return False, "No hay cliente_id validos para eliminar."
 
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para eliminar clientes.")
         return False, _last_error or "Base de datos no disponible"
@@ -1255,7 +1146,7 @@ def migrate_clientes_from_cartera_df(df_cartera: pd.DataFrame, batch_size: int =
 
 GESTION_TIPOS_VALIDOS = {"EMAIL", "WHATSAPP", "LLAMADA", "VISITA", "NOTA", "OTRO"}
 
-# Fallback estático — solo se usa si Supabase no está disponible o la tabla
+# Fallback estático — solo se usa si la BD no está disponible o la tabla
 # catalogo_resultados aún no existe. La fuente de verdad es la BD.
 _RESULTADOS_FALLBACK = [
     {"codigo": "EXITOSO",        "etiqueta": "Acordó pagar",            "icono": "✅", "color_scheme": "success", "es_legado": False, "orden": 1},
@@ -1277,10 +1168,10 @@ _CATALOGO_TTL_SECONDS = 300  # 5 minutos
 
 
 def get_catalogo_resultados(*, include_legado: bool = True) -> List[Dict[str, Any]]:
-    """Devuelve el catálogo de resultados desde Supabase con caché de 5 minutos.
+    """Devuelve el catálogo de resultados desde la BD con caché de 5 minutos.
 
     Cada elemento tiene: codigo, etiqueta, icono, color_scheme, es_legado, orden.
-    Si la tabla no existe o Supabase no está disponible, usa el fallback estático.
+    Si la tabla no existe o la BD no está disponible, usa el fallback estático.
 
     Args:
         include_legado: Si False, excluye valores legado (para nuevas gestiones).
@@ -1290,7 +1181,7 @@ def get_catalogo_resultados(*, include_legado: bool = True) -> List[Dict[str, An
 
     now = time.monotonic()
     if _catalogo_cache is None or (now - _catalogo_cache_ts) > _CATALOGO_TTL_SECONDS:
-        client = get_supabase_client()
+        client = get_db_client()
         if client:
             try:
                 resp = _safe_execute(
@@ -1347,7 +1238,7 @@ def insert_gestion(
       'GESTION' — Acción manual del gestor (seguimiento, notas, resultado).
                   El Dashboard lo cuenta en "Gestiones totales" y KPIs de éxito.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para registrar gestion.")
         return False, _last_error or "Base de datos no disponible"
@@ -1395,7 +1286,7 @@ def get_gestiones_list(
     limit: int = 500,
 ) -> List[Dict[str, Any]]:
     """Fetch gestiones with optional filters."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         _set_last_error("Base de datos no disponible para consultar gestiones.")
         return []
@@ -1445,7 +1336,7 @@ def get_gestiones_by_client(cliente_id: str, limit: int = 100) -> List[Dict[str,
 
 def get_clientes_nombres_map() -> Dict[str, str]:
     """Retorna {cliente_id: nombre} desde la tabla maestra clientes. Ligero, sin JOINs."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return {}
     cache_key = ("clientes_nombres_map", id(client))
@@ -1470,7 +1361,7 @@ def get_clientes_nombres_map() -> Dict[str, str]:
 
 def get_gestiones_stats() -> Dict[str, Any]:
     """Aggregate stats for gestiones: counts by tipo and resultado."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return {}
 
@@ -1514,7 +1405,7 @@ def get_gestiones_stats() -> Dict[str, Any]:
 
 def get_crm_dashboard_stats() -> Dict[str, Any]:
     """Combined stats from notificaciones + gestiones for CRM dashboard KPIs."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return {}
 
@@ -1610,7 +1501,7 @@ def insert_acuerdo_pago(
         cuotas: list of dicts with keys:
             numero_cuota (int), monto_cuota (float), fecha_vencimiento (str 'YYYY-MM-DD')
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return False, "Base de datos no disponible."
 
@@ -1630,7 +1521,7 @@ def insert_acuerdo_pago(
             "notas": str(notas).strip() if notas else None,
             "estado": "ACTIVO",
         }
-        # insert() sin .select() para compatibilidad con supabase-py < 2.x
+        # insert() sin .select() — patrón estándar de PGClient
         _safe_execute(client.table("acuerdos_pago").insert(acuerdo_payload))
         # Recuperar el id recién insertado por cliente_id + fecha_acuerdo
         fetch_resp = _safe_execute(
@@ -1665,7 +1556,7 @@ def insert_acuerdo_pago(
 
 def get_acuerdos_by_cliente(cliente_id: str) -> List[Dict[str, Any]]:
     """Return acuerdos_pago for a client, each with a 'cuotas' list."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     try:
@@ -1699,7 +1590,7 @@ def update_cuota_estado(
     notas: Optional[str] = None,
 ) -> Tuple[bool, str]:
     """Update the estado of a cuota_acuerdo row."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return False, "Base de datos no disponible."
 
@@ -1732,7 +1623,7 @@ def update_cuota_estado(
 
 def _get_docs_simple_by_cycle(cycle_id: str) -> List[Dict[str, Any]]:
     """Fetch match_key, cod_cliente, saldo from documentos_ciclo for a cycle."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     try:
@@ -1765,7 +1656,7 @@ def reconcile_ciclo_recovery(
     if not cycle_id_anterior or not cycle_id_nuevo:
         return {"ok": False, "mensaje": "cycle_id_anterior y cycle_id_nuevo son requeridos.", "stats": {}}
 
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return {"ok": False, "mensaje": "Base de datos no disponible.", "stats": {}}
 
@@ -2058,7 +1949,7 @@ def get_recovery_stats(cycle_id: str, solo_notificable: bool = False) -> Dict[st
     anterior disponible, ejecuta la reconciliación automáticamente y retorna
     los datos recién calculados. Transparente para el usuario.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return _recovery_zero()
 
@@ -2182,7 +2073,7 @@ def get_docs_recuperados_detalle(
             saldo_anterior, saldo_actual, monto_recuperado
         Retorna [] si no hay ciclo anterior o no hay datos.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
 
@@ -2283,7 +2174,7 @@ def get_docs_recuperados_detalle(
 
 def get_cuotas_pendientes_hoy(limit: int = 200) -> List[Dict[str, Any]]:
     """Return cuotas_acuerdo with estado=PENDIENTE and fecha_vencimiento <= today."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     try:
@@ -2305,7 +2196,7 @@ def get_cuotas_pendientes_hoy(limit: int = 200) -> List[Dict[str, Any]]:
 
 def get_clientes_email_enviados_hoy(cycle_id: str, fecha_hoy: str) -> set:
     """Devuelve set de cliente_id con notificación EMAIL enviada hoy para el ciclo dado."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return set()
     try:
@@ -2328,7 +2219,7 @@ def get_clientes_email_enviados_hoy(cycle_id: str, fecha_hoy: str) -> set:
 
 def get_clientes_sin_gestion_ciclo(cycle_id: str, limit: int = 200) -> List[str]:
     """Return cliente_ids in cycle_id that have zero gestiones registered."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     try:
@@ -2367,7 +2258,7 @@ def get_funnel_cobranza(cycle_id: Optional[str] = None) -> Dict[str, int]:
     Returns dict with keys: cartera, notificados_wa, notificados_email,
     con_respuesta, con_acuerdo, recuperados.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return {}
     cache_key = ("funnel_cobranza", id(client), str(cycle_id or ""))
@@ -2589,7 +2480,7 @@ def get_efectividad_por_plantilla(cycle_id: Optional[str] = None) -> List[Dict[s
     Each row: {plantilla, total_enviados, exitosos, tasa_pct}
     Derived from notificaciones.metadata (campo 'template') + gestiones.resultado.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     cache_key = ("efectividad_por_plantilla", id(client), str(cycle_id or ""))
@@ -2667,7 +2558,7 @@ def get_top_clientes_criticos(n: int = 10, cycle_id: Optional[str] = None, solo_
         solo_notificable: Si True, filtra solo clientes con enviar_email='SI'
                           (Cartera Activa). Si False, incluye toda la cartera.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     cache_key = ("top_clientes_criticos", id(client), int(n), str(cycle_id or ""), bool(solo_notificable))
@@ -2780,7 +2671,7 @@ def get_kpis_periodo(date_from: str, date_to: str) -> Dict[str, Any]:
     tasa_exito_pct, notificaciones_wa, notificaciones_email,
     tasa_notif_exitosa_pct, acuerdos_activos}
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return {}
     cache_key = ("kpis_periodo", id(client), str(date_from), str(date_to))
@@ -2865,7 +2756,7 @@ def get_kpis_periodo(date_from: str, date_to: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# RC-FEAT-023 — get_prev_cycle_id: ciclo anterior desde Supabase (no session_state)
+# RC-FEAT-023 — get_prev_cycle_id: ciclo anterior desde la BD (no session_state)
 # ---------------------------------------------------------------------------
 
 def get_prev_cycle_id(cycle_id_actual: str) -> Optional[str]:
@@ -2875,7 +2766,7 @@ def get_prev_cycle_id(cycle_id_actual: str) -> Optional[str]:
     Reemplaza el patrón session_state["prev_cycle_id"] que fallaba cuando
     la app se reiniciaba entre cargas de ciclos consecutivos.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client or not cycle_id_actual:
         return None
     try:
@@ -2905,7 +2796,7 @@ def get_ciclos_para_informe(limit: int = 12) -> List[Dict[str, Any]]:
     Retorna lista de dicts con: cycle_id, label (texto para selectbox),
     fecha_corte, file_ctas.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     try:
@@ -2958,7 +2849,7 @@ def get_resumen_tendencia(
     """
     if not cycle_ids:
         return []
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     try:
@@ -3023,7 +2914,7 @@ def get_resumen_tendencia(
 
 def get_kardex_entry(cycle_id: str) -> Dict[str, Any]:
     """Lee una fila de kardex_cartera para el ciclo dado. Retorna {} si no existe."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client or not cycle_id:
         return {}
     try:
@@ -3052,7 +2943,7 @@ def upsert_kardex_entry(
 
     Fórmula garantizada: saldo_inicial + cartera_nueva − cobrado = saldo_final
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client or not cycle_id_nuevo:
         return
     try:
@@ -3145,7 +3036,7 @@ def get_kardex_tendencia(
     """
     if not cycle_ids:
         return []
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     try:
@@ -3209,7 +3100,7 @@ def backfill_kardex_from_resumen(cycle_ids: List[str]) -> int:
     """
     if not cycle_ids:
         return 0
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return 0
     try:
@@ -3354,7 +3245,7 @@ def get_aging_distribution(cycle_id: str, solo_notificable: bool = False) -> Lis
         solo_notificable: Si True, filtra solo clientes con enviar_email='SI'
                           (Cartera Activa). Si False, incluye toda la cartera.
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     cache_key = ("aging_distribution", id(client), str(cycle_id), bool(solo_notificable))
@@ -3439,7 +3330,7 @@ def get_resumen_gestiones_ciclo(cycle_id: str, solo_notificable: bool = False) -
     en documentos_ciclo (Cartera Activa). Si False, incluye toda la cartera
     (Cartera General).
     """
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return {}
     cache_key = ("resumen_gestiones_ciclo", id(client), str(cycle_id), bool(solo_notificable))
@@ -3594,7 +3485,7 @@ def _ensure_envios_programados_table() -> bool:
 def schedule_email_send(cycle_id: str, clientes: list, scheduled_at) -> Optional[str]:
     """Guarda un envío programado. Retorna el UUID del registro o None si falla."""
     _ensure_envios_programados_table()
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return None
     try:
@@ -3624,7 +3515,7 @@ def get_pending_scheduled_sends(cycle_id: Optional[str] = None) -> list:
     Si cycle_id es None devuelve todos (usado por el sidebar para alertas globales).
     """
     _ensure_envios_programados_table()
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return []
     try:
@@ -3660,7 +3551,7 @@ def get_pending_scheduled_sends(cycle_id: Optional[str] = None) -> list:
 
 def mark_scheduled_send_executed(schedule_id: str) -> bool:
     """Marca un envío programado como EJECUTADO."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return False
     try:
@@ -3678,7 +3569,7 @@ def mark_scheduled_send_executed(schedule_id: str) -> bool:
 
 def cancel_scheduled_send(schedule_id: str) -> bool:
     """Cancela un envío programado."""
-    client = get_supabase_client()
+    client = get_db_client()
     if not client:
         return False
     try:

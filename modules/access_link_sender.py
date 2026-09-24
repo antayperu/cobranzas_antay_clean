@@ -52,7 +52,7 @@ def _load_runtime_email_config():
         or sender_email
     )
 
-    # Fallback final: si Supabase no tiene credenciales SMTP, leer desde email_secrets.json
+    # Fallback final: si la BD no tiene credenciales SMTP, leer desde email_secrets.json
     if not sender_email or not sender_password:
         secrets = _load_secrets_file()
         if secrets.get("sender_email") and secrets.get("sender_password"):

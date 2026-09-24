@@ -14,7 +14,7 @@ def enforce_cloud_only_policy() -> None:
 
 def attempt_auto_restore() -> bool:
     """
-    Try to restore the last processing session from Supabase.
+    Try to restore the last processing session from the BD.
     Returns True if session was restored successfully.
     """
     if st.session_state.get("data_ready", False):

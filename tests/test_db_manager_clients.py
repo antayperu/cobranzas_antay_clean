@@ -115,7 +115,7 @@ def test_list_clientes_for_admin_filters_by_search(monkeypatch):
     )
     monkeypatch.setattr(
         dbm,
-        "get_supabase_client",
+        "get_db_client",
         lambda: _FakeClient(state["rows"], state["sinks"]),
     )
 
@@ -134,7 +134,7 @@ def test_update_cliente_fields_accepts_full_payload(monkeypatch):
     state = _make_state([])
     monkeypatch.setattr(
         dbm,
-        "get_supabase_client",
+        "get_db_client",
         lambda: _FakeClient(state["rows"], state["sinks"]),
     )
 
@@ -171,7 +171,7 @@ def test_get_clientes_master_returns_rows(monkeypatch):
     )
     monkeypatch.setattr(
         dbm,
-        "get_supabase_client",
+        "get_db_client",
         lambda: _FakeClient(state["rows"], state["sinks"]),
     )
 
@@ -192,7 +192,7 @@ def test_list_clientes_full_reads_enviar_email_from_legacy_notas(monkeypatch):
     )
     monkeypatch.setattr(
         dbm,
-        "get_supabase_client",
+        "get_db_client",
         lambda: _FakeClient(state["rows"], state["sinks"]),
     )
 
@@ -207,7 +207,7 @@ def test_upsert_clientes_rows_normalizes_email_and_estado(monkeypatch):
     state = _make_state([])
     monkeypatch.setattr(
         dbm,
-        "get_supabase_client",
+        "get_db_client",
         lambda: _FakeClient(state["rows"], state["sinks"]),
     )
 
@@ -235,7 +235,7 @@ def test_upsert_clientes_rows_retries_when_schema_is_legacy(monkeypatch):
     state = _make_state([])
     monkeypatch.setattr(
         dbm,
-        "get_supabase_client",
+        "get_db_client",
         lambda: _FakeLegacyMissingColumnsClient(state["rows"], state["sinks"]),
     )
 
@@ -264,7 +264,7 @@ def test_delete_clientes_by_ids_uses_in_filter(monkeypatch):
     state = _make_state([])
     monkeypatch.setattr(
         dbm,
-        "get_supabase_client",
+        "get_db_client",
         lambda: _FakeClient(state["rows"], state["sinks"]),
     )
 
@@ -280,7 +280,7 @@ def test_migrate_clientes_from_cartera_df_calls_upsert(monkeypatch):
     state = _make_state([])
     monkeypatch.setattr(
         dbm,
-        "get_supabase_client",
+        "get_db_client",
         lambda: _FakeClient(state["rows"], state["sinks"]),
     )
 

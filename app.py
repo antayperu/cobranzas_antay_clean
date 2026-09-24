@@ -40,7 +40,7 @@ import utils.ui.tabs.clientes_premium as tab_clientes_premium # Premium Clients 
 import utils.ui.tabs.crm_gestiones as tab_crm  # CRM & Gestiones Tab Module
 import utils.ui.tabs.config_tab as tab_config # Configuration Tab Module
 import utils.ui.tabs.dashboard as tab_dashboard  # RC-FEAT-038 Dashboard de Efectividad
-import utils.supabase_cycle_service as supabase_cycle_service
+import utils.cycle_service as cycle_service
 import utils.storage_manager as storage_mgr
 import utils.state_manager as state_mgr
 import streamlit.components.v1 as components
@@ -314,7 +314,7 @@ if wizard_action == "PROCESS_TRIGGERED":
 
                     # --- PERSISTENCIA DEL CICLO EN BD LOCAL (UI -> DB) ---
                     st.write("💾 Guardando clientes, documentos y cobranzas...")
-                    persist_result = supabase_cycle_service.persist_cycle_to_supabase(
+                    persist_result = cycle_service.persist_cycle(
                         df_ctas=df_ctas_raw,
                         df_cartera=df_cartera_raw,
                         df_cobranza=df_cobranza_raw,
@@ -491,14 +491,14 @@ else:
 
     with base_tabs[0]:
         _h = st.session_state.get('_system_health', {})
-        _supa_ok = _h.get('supabase_ok', True)
-        _count   = _h.get('clientes_count', 0)
-        _err     = _h.get('error')
+        _db_ok = _h.get('db_ok', _h.get('supabase_ok', True))
+        _count = _h.get('clientes_count', 0)
+        _err   = _h.get('error')
 
         if wizard_action == "PROCESS_TRIGGERED":
             # Hubo un error durante la generación — orientar al usuario
             st.info("Revisa el mensaje de error de arriba y vuelve a intentarlo desde el panel lateral.")
-        elif _supa_ok and _count > 0:
+        elif _db_ok and _count > 0:
             _cls, _icon = "ok", "🟢"
             _title = "Sistema listo para operar"
             _rows  = [
@@ -508,7 +508,7 @@ else:
             ]
             _icons = ["✅", "👥", "👈"]
             _note  = None
-        elif _supa_ok and _count == 0:
+        elif _db_ok and _count == 0:
             _cls, _icon = "warn", "🟡"
             _title = "Base de datos conectada — sin clientes registrados"
             _rows  = [

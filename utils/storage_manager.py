@@ -14,9 +14,9 @@ from typing import Any, Dict, Optional, Set
 import utils.helpers as helpers
 
 
-LOGOS_BUCKET = os.getenv("SUPABASE_STORAGE_LOGOS_BUCKET", "logos")
-EXPORTS_BUCKET = os.getenv("SUPABASE_STORAGE_EXPORTS_BUCKET", "exports")
-WHATSAPP_IMAGES_BUCKET = os.getenv("SUPABASE_STORAGE_WHATSAPP_BUCKET", "whatsapp-images")
+LOGOS_BUCKET = os.getenv("STORAGE_LOGOS_BUCKET", os.getenv("SUPABASE_STORAGE_LOGOS_BUCKET", "logos"))
+EXPORTS_BUCKET = os.getenv("STORAGE_EXPORTS_BUCKET", os.getenv("SUPABASE_STORAGE_EXPORTS_BUCKET", "exports"))
+WHATSAPP_IMAGES_BUCKET = os.getenv("STORAGE_WHATSAPP_BUCKET", os.getenv("SUPABASE_STORAGE_WHATSAPP_BUCKET", "whatsapp-images"))
 
 DEFAULT_BUCKETS = (
     (LOGOS_BUCKET, False),

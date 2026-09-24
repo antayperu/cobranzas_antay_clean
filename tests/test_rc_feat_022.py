@@ -19,15 +19,15 @@ def _import_dbm():
 # ──────────────────────────────────────────────
 class TestGetCuotasPendientesHoy:
 
-    def test_sin_supabase_retorna_lista_vacia(self):
+    def test_sin_bd_retorna_lista_vacia(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=None):
+        with patch.object(dbm, "get_db_client", return_value=None):
             result = dbm.get_cuotas_pendientes_hoy()
         assert result == []
 
     def test_retorna_lista(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 mock_exec.return_value = MagicMock(data=[
                     {"id": "c-1", "estado": "PENDIENTE", "fecha_vencimiento": "2025-06-01",
@@ -38,7 +38,7 @@ class TestGetCuotasPendientesHoy:
 
     def test_resultado_tiene_cuotas_pendientes(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 mock_exec.return_value = MagicMock(data=[
                     {"id": "c-1", "estado": "PENDIENTE", "fecha_vencimiento": "2025-01-01",
@@ -51,7 +51,7 @@ class TestGetCuotasPendientesHoy:
 
     def test_retorna_vacio_si_no_hay_cuotas(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 mock_exec.return_value = MagicMock(data=[])
                 result = dbm.get_cuotas_pendientes_hoy()
@@ -68,15 +68,15 @@ class TestGetCuotasPendientesHoy:
 # ──────────────────────────────────────────────
 class TestGetClientesSinGestionCiclo:
 
-    def test_sin_supabase_retorna_lista_vacia(self):
+    def test_sin_bd_retorna_lista_vacia(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=None):
+        with patch.object(dbm, "get_db_client", return_value=None):
             result = dbm.get_clientes_sin_gestion_ciclo("CICLO-001")
         assert result == []
 
     def test_sin_cycle_id_vacio_retorna_vacio_o_lista(self):
         dbm = _import_dbm()
-        with patch.object(dbm, "get_supabase_client", return_value=None):
+        with patch.object(dbm, "get_db_client", return_value=None):
             result = dbm.get_clientes_sin_gestion_ciclo("")
         assert isinstance(result, list)
 
@@ -91,7 +91,7 @@ class TestGetClientesSinGestionCiclo:
         gestiones_data = [
             {"cliente_id": "C002"},  # Solo C002 tiene gestión
         ]
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 resp_docs = MagicMock(data=docs_data)
                 resp_gest = MagicMock(data=gestiones_data)
@@ -106,7 +106,7 @@ class TestGetClientesSinGestionCiclo:
         dbm = _import_dbm()
         docs_data = [{"cliente_id": "C001"}, {"cliente_id": "C002"}]
         gestiones_data = [{"cliente_id": "C001"}, {"cliente_id": "C002"}]
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 mock_exec.side_effect = [
                     MagicMock(data=docs_data),
@@ -119,7 +119,7 @@ class TestGetClientesSinGestionCiclo:
         dbm = _import_dbm()
         docs_data = [{"cliente_id": "C003"}, {"cliente_id": "C001"}, {"cliente_id": "C002"}]
         gestiones_data = []
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 mock_exec.side_effect = [
                     MagicMock(data=docs_data),
@@ -137,7 +137,7 @@ class TestGetClientesSinGestionCiclo:
         dbm = _import_dbm()
         docs_data = [{"cliente_id": f"C{i:03d}"} for i in range(50)]
         gestiones_data = []
-        with patch.object(dbm, "get_supabase_client", return_value=MagicMock()):
+        with patch.object(dbm, "get_db_client", return_value=MagicMock()):
             with patch.object(dbm, "_safe_execute") as mock_exec:
                 mock_exec.side_effect = [
                     MagicMock(data=docs_data),

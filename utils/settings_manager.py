@@ -3,11 +3,11 @@ import json
 import os
 from typing import Any, Dict, Optional
 
-from utils.supabase_client import SupabaseClient
+from utils.db_client import DBClient
 
 CONFIG_FILE = "config.json"  # Legacy bootstrap source only.
-CONFIG_TABLE = os.getenv("SUPABASE_CONFIG_TABLE", "app_config")
-CONFIG_KEY = os.getenv("SUPABASE_CONFIG_KEY", "global")
+CONFIG_TABLE = os.getenv("CONFIG_TABLE", os.getenv("SUPABASE_CONFIG_TABLE", "app_config"))
+CONFIG_KEY = os.getenv("CONFIG_KEY", os.getenv("SUPABASE_CONFIG_KEY", "global"))
 
 DEFAULT_SETTINGS = {
     "company_name": "DACTA SOCIEDAD ANONIMA CERRADA - DACTA S.A.C.",
@@ -160,8 +160,8 @@ def _read_legacy_config_file() -> Optional[Dict[str, Any]]:
     return None
 
 
-def _get_supabase():
-    wrapper = SupabaseClient.get_instance()
+def _get_db_client():
+    wrapper = DBClient.get_instance()
     if not wrapper.is_available():
         return None
     return wrapper.get_client()
@@ -198,7 +198,7 @@ def _save_remote_payload(client, payload: Dict[str, Any]) -> bool:
         return False
 
 
-# Credential fields that must NEVER be persisted to Supabase app_config.
+# Credential fields that must NEVER be persisted to the BD app_config table.
 # They are injected at runtime exclusively via environment variables (12-factor).
 _CREDENTIAL_FIELDS: Dict[str, tuple] = {
     "SMTP_SERVER": ("smtp_config", "server"),
@@ -213,13 +213,14 @@ _CREDENTIAL_FIELDS: Dict[str, tuple] = {
 def _strip_credentials(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Devuelve copia limpia del payload sin rutas de máquina ni config de infra.
 
-    Las credenciales SMTP se persisten en Supabase para que el usuario no deba
+    Las credenciales SMTP se persisten en la BD para que el usuario no deba
     re-ingresarlas en cada refresco (app monousuario privada). Si están seteados
     los env vars SMTP_USER / SMTP_PASSWORD, estos siguen teniendo prioridad
     (útil para el servidor QA con variables de entorno configuradas).
     """
     p = copy.deepcopy(payload)
-    p.pop("supabase_config", None)  # infra config never belongs in app_config
+    p.pop("db_config", None)     # infra config never belongs in app_config
+    p.pop("supabase_config", None)  # legacy key — purgar si existe
     p.pop("logo_path", None)        # machine-local paths must not reach the cloud
     return p
 
@@ -227,7 +228,7 @@ def _strip_credentials(payload: Dict[str, Any]) -> Dict[str, Any]:
 def _apply_env_overrides(settings: Dict[str, Any]) -> Dict[str, Any]:
     """Environment variables are the authoritative source for all credentials
     (12-factor app principle). They unconditionally override any value that
-    may have been loaded from Supabase or config.json, providing strict
+    may have been loaded from the BD or config.json, providing strict
     per-environment isolation without touching the shared config store.
     """
     for env_name, (section, key) in _CREDENTIAL_FIELDS.items():
@@ -242,20 +243,20 @@ def _apply_env_overrides(settings: Dict[str, Any]) -> Dict[str, Any]:
 
 def load_settings() -> Dict[str, Any]:
     """
-    Cloud-first settings load:
-    1) Supabase app_config.
-    2) One-time bootstrap from legacy config.json when remote row does not exist.
-    3) Defaults.
+    Carga configuración desde la BD (PostgreSQL):
+    1) Tabla app_config en la BD.
+    2) Bootstrap único desde config.json legacy si la fila no existe.
+    3) Defaults del código.
     """
     settings = _defaults_copy()
-    client = _get_supabase()
+    client = _get_db_client()
 
     if client:
         remote_payload = _load_remote_payload(client)
         if remote_payload:
             settings = _deep_merge(settings, remote_payload)
         else:
-            # First-run bootstrap: seed Supabase from local config.json.
+            # First-run bootstrap: seed BD desde config.json local.
             # Credentials are stripped before persisting — they must come
             # from environment variables, never from the config store.
             legacy_payload = _read_legacy_config_file()
@@ -263,7 +264,7 @@ def load_settings() -> Dict[str, Any]:
                 settings = _deep_merge(settings, legacy_payload)
             _save_remote_payload(client, _strip_credentials(settings))
     else:
-        # Dev/test fallback when Supabase is unavailable.
+        # Fallback cuando la BD no está disponible.
         legacy_payload = _read_legacy_config_file()
         if legacy_payload:
             settings = _deep_merge(settings, legacy_payload)
@@ -272,12 +273,12 @@ def load_settings() -> Dict[str, Any]:
 
 
 def save_settings(settings: Dict[str, Any]) -> bool:
-    """Persist settings in Supabase app_config (cloud-only target).
+    """Persiste la configuración en la tabla app_config de la BD.
 
-    Credentials are stripped before writing to ensure secrets never reach
-    the config store — they are sourced exclusively from environment variables.
+    Las credenciales se eliminan antes de escribir para garantizar que
+    los secretos nunca lleguen al almacén de config — se leen desde variables de entorno.
     """
-    client = _get_supabase()
+    client = _get_db_client()
     if not client:
         print("Error saving config: base de datos no disponible.")
         return False

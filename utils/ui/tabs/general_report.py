@@ -214,7 +214,7 @@ def render_tab(df_final, config):
                     if status == 'SENT':
                         if 'ESTADO_EMAIL' in df_final.columns: df_final.loc[mask, 'ESTADO_EMAIL'] = "ENVIADO"
                         if 'ESTADO_ENVIO_TEXTO' in df_final.columns: df_final.loc[mask, 'ESTADO_ENVIO_TEXTO'] = f"ENVIADO ({time_str})"
-                        if 'FECHA_ULTIMO_ENVIO' in df_final.columns: df_final.loc[mask, 'FECHA_ULTIMO_ENVIO'] = ts_raw
+                        if 'FECHA_ULTIMO_ENVIO' in df_final.columns: df_final.loc[mask, 'FECHA_ULTIMO_ENVIO'] = str(ts_raw) if ts_raw else ''
                     elif status == 'FAILED':
                         if 'ESTADO_EMAIL' in df_final.columns: df_final.loc[mask, 'ESTADO_EMAIL'] = "FALLIDO"
                         if 'ESTADO_ENVIO_TEXTO' in df_final.columns: df_final.loc[mask, 'ESTADO_ENVIO_TEXTO'] = "FALLIDO"

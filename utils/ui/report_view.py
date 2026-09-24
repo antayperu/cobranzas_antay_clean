@@ -157,7 +157,7 @@ def render_report(df_filtered):
     """
     Renders the Main Report Table with Customizable Enterprise UX.
     - User can configure visible columns and their order.
-    - Settings are preserved in Supabase app_config.
+    - Settings are preserved in BD app_config.
     """
     # 0. Cargar configuración de vistas
     settings = sm.load_settings()

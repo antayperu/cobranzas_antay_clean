@@ -32,7 +32,7 @@ TIPO_ICONS = {
 
 
 def _build_resultado_maps():
-    """Construye los mapas de resultados desde el catálogo de BD (con caché de Supabase)."""
+    """Construye los mapas de resultados desde el catálogo de BD."""
     catalogo = dbm.get_catalogo_resultados(include_legado=True)
     codigos = [r["codigo"] for r in catalogo]
     labels = {r["codigo"]: f"{r['icono']} {r['etiqueta']}" for r in catalogo}
@@ -239,7 +239,7 @@ def _render_timeline():
     tipo_filter = fc3.selectbox("Tipo", ["TODOS"] + TIPOS_GESTION, key="crm_tipo_filter")
     source_filter = fc4.selectbox("Fuente", ["TODAS", "Notificaciones", "Gestiones"], key="crm_source_filter")
 
-    # Mapa cliente_id → empresa: Nivel 1 = tabla clientes Supabase, Nivel 2 = ciclo activo
+    # Mapa cliente_id → empresa: Nivel 1 = tabla clientes BD, Nivel 2 = ciclo activo
     _nombre_map_tl: Dict[str, str] = dbm.get_clientes_nombres_map()
     _df_ciclo_tl = (_v if (_v := st.session_state.get("df_final")) is not None else pd.DataFrame())
     if not _df_ciclo_tl.empty and "COD CLIENTE" in _df_ciclo_tl.columns and "EMPRESA" in _df_ciclo_tl.columns:
@@ -380,7 +380,7 @@ def _render_client_drilldown():
                 _v = _grp["ESTADO DEUDA"].dropna()
                 deuda_map[_c] = str(_v.iloc[0]).strip() if len(_v) > 0 else ""
 
-    # ── Mapa nombre: Supabase clientes → ciclo activo ─────────────────────
+    # ── Mapa nombre: BD clientes → ciclo activo ─────────────────────
     nombre_map: Dict[str, str] = dbm.get_clientes_nombres_map()
     if not df_ciclo.empty and "COD CLIENTE" in df_ciclo.columns and "EMPRESA" in df_ciclo.columns:
         for _, _r in df_ciclo[["COD CLIENTE", "EMPRESA"]].drop_duplicates().iterrows():
@@ -708,7 +708,7 @@ def _render_register_gestion():
     if st.session_state.pop("crm_reg_success", None):
         st.success("✓ Gestión registrada correctamente.")
 
-    # ── Cargar todos los clientes: Supabase + ciclo activo ──────────────────
+    # ── Cargar todos los clientes: BD + ciclo activo ──────────────────
     nombre_map_reg: Dict[str, str] = dbm.get_clientes_nombres_map()
     df_ciclo_reg = (_v if (_v := st.session_state.get("df_final")) is not None else pd.DataFrame())
     if not df_ciclo_reg.empty and "COD CLIENTE" in df_ciclo_reg.columns and "EMPRESA" in df_ciclo_reg.columns:
